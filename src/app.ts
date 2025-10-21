@@ -4,6 +4,7 @@ import express, { Application } from "express";
 import cors from "cors";
 import helmet from "helmet";
 import routes from "./routes";
+import adminRoute from "./routes/admin/"
 import { AppError, errorHandler } from "./middlewares/errorHandler";
 import { rateLimiter } from "./middlewares/rateLimiter";
 import { devLogger } from "./middlewares/requestLogger";
@@ -28,7 +29,8 @@ if (process.env.NODE_ENV !== "production") {
 }
 
 // API routes
-app.use("/api/v1", routes);
+app.use("/api/v1", adminRoute);
+
 
 app.use((req, res, next) => {
   const error = new AppError(

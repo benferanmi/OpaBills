@@ -2,6 +2,7 @@ import { connectDatabase } from "./config/database";
 import { connectRedis } from "./config/redis";
 import app from "./app";
 import logger from "./logger";
+import { createAdmin } from "./scripts";
 
 const PORT = process.env.PORT || 5000;
 
@@ -10,6 +11,8 @@ const startServer = async () => {
     logger.info("Starting server...");
     await connectDatabase();
     await connectRedis();
+    // console.log("admin creation started")
+    //await createAdmin();
 
     // Start Express server
     const server = app.listen(PORT, () => {
