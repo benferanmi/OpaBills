@@ -1,18 +1,22 @@
 import { WalletRepository } from '@/repositories/WalletRepository';
 import { LedgerRepository } from '@/repositories/LedgerRepository';
 import { NotificationRepository } from '@/repositories/NotificationRepository';
-import { CacheService } from './CacheService';
+import { CacheService } from '../CacheService';
 import { AppError } from '@/middlewares/errorHandler';
 import { HTTP_STATUS, ERROR_CODES, CACHE_KEYS, WALLET_TYPES, LEDGER_TYPE } from '@/utils/constants';
 import { Types } from 'mongoose';
 
 export class WalletService {
-  constructor(
-    private walletRepository: WalletRepository,
-    private ledgerRepository: LedgerRepository,
-    private cacheService: CacheService,
+      private walletRepository: WalletRepository
+    private ledgerRepository: LedgerRepository
+    private cacheService: CacheService
     private notificationRepository?: NotificationRepository
-  ) {}
+  constructor() {
+    this.walletRepository = new WalletRepository();
+    this.ledgerRepository = new LedgerRepository();
+    this.cacheService = new CacheService();
+    this.notificationRepository = new NotificationRepository();
+  }
 
   async getWallet(userId: string, type: 'main' | 'bonus' | 'commission' = 'main'): Promise<any> {
     const wallet = await this.walletRepository.findByUserId(userId, type);
@@ -25,7 +29,7 @@ export class WalletService {
       userId: wallet.userId,
       type: wallet.type,
       balance: wallet.balance,
-      createdAt: wallet.createdAt,
+      // createdAt: wallet.createdAt,
     };
   }
 
@@ -53,14 +57,14 @@ export class WalletService {
     const newBalance = oldBalance + amount;
 
     // Update wallet balance
-    await this.walletRepository.updateBalance(wallet._id.toString(), newBalance);
+    await this.walletRepository.updateBalance(wallet.id.toString(), newBalance);
 
     // Create ledger entry
     await this.ledgerRepository.create({
       ledgerableType: 'Wallet',
-      ledgerableId: wallet._id,
+      ledgerableId: wallet._id as Types.ObjectId,
       source: 'system',
-      destination: wallet._id.toString(),
+      destination: wallet.id.toString(),
       oldBalance,
       newBalance,
       type: LEDGER_TYPE.CREDIT,
@@ -77,7 +81,7 @@ export class WalletService {
       await this.notificationRepository.create({
         type: 'wallet_credit',
         notifiableType: 'User',
-        notifiableId: userId.toString(),
+        notifiableId: userId as Types.ObjectId,
         data: {
           amount,
           balance: newBalance,
@@ -114,13 +118,13 @@ export class WalletService {
     const newBalance = oldBalance - amount;
 
     // Update wallet balance
-    await this.walletRepository.updateBalance(wallet._id.toString(), newBalance);
+    await this.walletRepository.updateBalance(wallet.id.toString(), newBalance);
 
     // Create ledger entry
     await this.ledgerRepository.create({
       ledgerableType: 'Wallet',
-      ledgerableId: wallet._id,
-      source: wallet._id.toString(),
+      ledgerableId: wallet._id as Types.ObjectId,
+      source: wallet.id.toString(),
       destination: 'system',
       oldBalance,
       newBalance,
@@ -138,7 +142,7 @@ export class WalletService {
       await this.notificationRepository.create({
         type: 'wallet_debit',
         notifiableType: 'User',
-        notifiableId: userId.toString(),
+        notifiableId: userId as Types.ObjectId,
         data: {
           amount,
           balance: newBalance,

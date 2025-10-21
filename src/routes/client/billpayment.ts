@@ -1,13 +1,13 @@
 import { Router } from 'express';
-import { BillPaymentController } from '@/controllers/BillPaymentController';
-import { BillPaymentService } from '@/services/BillPaymentService';
+import { BillPaymentController } from '@/controllers/client/BillPaymentController';
+import { BillPaymentService } from '@/services/client/BillPaymentService';
 import { TransactionRepository } from '@/repositories/TransactionRepository';
 import { NotificationRepository } from '@/repositories/NotificationRepository';
-import { WalletService } from '@/services/WalletService';
+import { WalletService } from '@/services/client/WalletService';
 import { WalletRepository } from '@/repositories/WalletRepository';
 import { LedgerRepository } from '@/repositories/LedgerRepository';
 import { ProductRepository } from '@/repositories/ProductRepository';
-import { ProviderService } from '@/services/ProviderService';
+import { ProviderService } from '@/services/client/ProviderService';
 import { CacheService } from '@/services/CacheService';
 import { authenticate } from '@/middlewares/auth';
 import { validateRequest, validateQuery } from '@/middlewares/validation';
@@ -17,7 +17,7 @@ import {
   cableTvSchema,
   electricitySchema,
   transactionQuerySchema,
-} from '@/validations/billpaymentValidation';
+} from '@/validations/client/billpaymentValidation';
 
 const router = Router();
 

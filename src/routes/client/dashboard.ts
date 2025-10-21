@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import { DashboardController } from '@/controllers/DashboardController';
-import { DashboardService } from '@/services/DashboardService';
+import { DashboardController } from '@/controllers/client/DashboardController';
+import { DashboardService } from '@/services/client/DashboardService';
 import { UserRepository } from '@/repositories/UserRepository';
 import { WalletRepository } from '@/repositories/WalletRepository';
 import { TransactionRepository } from '@/repositories/TransactionRepository';

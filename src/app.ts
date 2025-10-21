@@ -3,8 +3,7 @@ config();
 import express, { Application } from "express";
 import cors from "cors";
 import helmet from "helmet";
-import routes from "./routes";
-import adminRoute from "./routes/admin/"
+import routes from "./routes/client";
 import { AppError, errorHandler } from "./middlewares/errorHandler";
 import { rateLimiter } from "./middlewares/rateLimiter";
 import { devLogger } from "./middlewares/requestLogger";

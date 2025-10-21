@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { AuthController } from "@/controllers/AuthController";
+import { AuthController } from "@/controllers/client/AuthController";
 
 import { authenticate } from "@/middlewares/auth";
 import { validateRequest } from "@/middlewares/validation";
@@ -16,7 +16,7 @@ import {
   phoneNumberVerificationSchema,
   setPinSchema,
   toggle2FASchema,
-} from "@/validations/authValidation";
+} from "@/validations/client/authValidation";
 
 const router = Router();
 

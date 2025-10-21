@@ -1,6 +1,6 @@
 import { Response, NextFunction } from 'express';
 import { AuthRequest } from '@/middlewares/auth';
-import { BankAccountService } from '@/services/BankAccountService';
+import { BankAccountService } from '@/services/client/BankAccountService';
 import { sendSuccessResponse } from '@/utils/helpers';
 import { HTTP_STATUS } from '@/utils/constants';
 

@@ -1,6 +1,6 @@
 import { Response, NextFunction } from 'express';
 import { AuthRequest } from '@/middlewares/auth';
-import { BillPaymentService } from '@/services/BillPaymentService';
+import { BillPaymentService } from '@/services/client/BillPaymentService';
 import { sendSuccessResponse, sendPaginatedResponse } from '@/utils/helpers';
 import { HTTP_STATUS } from '@/utils/constants';
 

@@ -1,11 +1,11 @@
 import { Router } from 'express';
-import { NotificationController } from '@/controllers/NotificationController';
-import { NotificationService } from '@/services/NotificationService';
+import { NotificationController } from '@/controllers/client/NotificationController';
+import { NotificationService } from '@/services/client/NotificationService';
 import { NotificationRepository } from '@/repositories/NotificationRepository';
 import { UserRepository } from '@/repositories/UserRepository';
 import { authenticate } from '@/middlewares/auth';
 import { validateQuery } from '@/middlewares/validation';
-import { paginationSchema } from '@/validations/transactionValidation';
+import { paginationSchema } from '@/validations/client/transactionValidation';
 
 const router = Router();
 

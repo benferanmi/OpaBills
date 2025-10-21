@@ -1,5 +1,5 @@
 import { UserRepository } from "@/repositories/UserRepository";
-import { CacheService } from "./CacheService";
+import { CacheService } from "../CacheService";
 import { AppError } from "@/middlewares/errorHandler";
 import { HTTP_STATUS, ERROR_CODES, CACHE_KEYS } from "@/utils/constants";
 import { IUser, IUserResponse } from "@/models/core/User";

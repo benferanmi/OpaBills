@@ -1,7 +1,6 @@
 import { UserRepository } from "@/repositories/UserRepository";
-import { OTPService } from "./OTPService";
-import { EmailService } from "./EmailService";
-import { SMSService } from "./SMSService";
+import { EmailService } from "../EmailService";
+import { SMSService } from "../SMSService";
 import { hashPassword, comparePassword } from "@/utils/cryptography";
 import {
   generateAccessToken,
@@ -19,7 +18,8 @@ import {
 import { IUser, IUserResponse, User } from "@/models/core/User";
 import { Types } from "mongoose";
 import { WalletRepository } from "@/repositories/WalletRepository";
-import { CacheService } from "./CacheService";
+import { CacheService } from "../CacheService";
+import { OTPService } from "../OTPService";
 
 export interface RegisterDTO {
   firstname: string;

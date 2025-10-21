@@ -1,10 +1,10 @@
 import { Router } from 'express';
-import { BankAccountController } from '@/controllers/BankAccountController';
-import { BankAccountService } from '@/services/BankAccountService';
+import { BankAccountController } from '@/controllers/client/BankAccountController';
+import { BankAccountService } from '@/services/client/BankAccountService';
 import { BankAccountRepository } from '@/repositories/BankAccountRepository';
 import { authenticate } from '@/middlewares/auth';
 import { validateRequest } from '@/middlewares/validation';
-import { createBankAccountSchema } from '@/validations/bankaccountValidation';
+import { createBankAccountSchema } from '@/validations/client/bankaccountValidation';
 
 const router = Router();
 
