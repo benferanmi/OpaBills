@@ -74,7 +74,6 @@ const refreshTokenSchema = new Schema<IRefreshToken>({
 refreshTokenSchema.index({ userId: 1, isActive: 1 });
 refreshTokenSchema.index({ userId: 1, userType: 1, isActive: 1 });
 refreshTokenSchema.index({ tokenId: 1, isActive: 1 });
-refreshTokenSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 // Method to deactivate token
 refreshTokenSchema.methods.deactivate = async function (this: IRefreshToken): Promise<void> {

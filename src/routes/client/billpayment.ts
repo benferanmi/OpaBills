@@ -24,12 +24,9 @@ const router = Router();
 // Initialize dependencies
 const transactionRepository = new TransactionRepository();
 const notificationRepository = new NotificationRepository();
-const walletRepository = new WalletRepository();
-const ledgerRepository = new LedgerRepository();
 const productRepository = new ProductRepository();
-const cacheService = new CacheService();
 const providerService = new ProviderService();
-const walletService = new WalletService(walletRepository, ledgerRepository, cacheService, notificationRepository);
+const walletService = new WalletService();
 const billPaymentService = new BillPaymentService(
   transactionRepository,
   walletService,

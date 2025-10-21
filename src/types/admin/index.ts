@@ -5,8 +5,12 @@ export interface AdminJWTPayload {
     adminId: string;
     email: string;
     adminLevel: string;
-    permissions: string[];
+    permissions?: string[];
     department?: string;
+    tokenId?: string;
+    generation?: string | number;
+    family?: string;
+    deviceId?: string;
     iat?: number;
     exp?: number;
     iss?: string;
@@ -52,6 +56,8 @@ export interface IAdmin extends Document {
     status: "active" | "pending_verification" | "suspended" | "deactivated";
     adminLevel: string;
     permissions: string[];
+    twoFactorEnabled: boolean;
+    activeTokenId?: string | null;
     department?: string;
     loginAttempts: number;
     lockUntil?: Date;

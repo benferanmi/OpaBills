@@ -3,12 +3,11 @@ config();
 import express, { Application } from "express";
 import cors from "cors";
 import helmet from "helmet";
-import routes from "./routes/client";
+import routes from "./routes";
 import { AppError, errorHandler } from "./middlewares/errorHandler";
 import { rateLimiter } from "./middlewares/rateLimiter";
 import { devLogger } from "./middlewares/requestLogger";
 import { ERROR_CODES, HTTP_STATUS } from "./utils/constants";
-
 
 const app: Application = express();
 
@@ -28,8 +27,7 @@ if (process.env.NODE_ENV !== "production") {
 }
 
 // API routes
-app.use("/api/v1", adminRoute);
-
+app.use("/api/v1", routes);
 
 app.use((req, res, next) => {
   const error = new AppError(

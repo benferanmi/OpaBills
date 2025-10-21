@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { ReferenceDataController } from '@/controllers/client/ReferenceDataController';
-import { ReferenceDataService } from '@/services/ReferenceDataService';
+import { ReferenceDataService } from '@/services/client/ReferenceDataService';
 import { CountryRepository } from '@/repositories/CountryRepository';
 import { StateRepository } from '@/repositories/StateRepository';
 import { CityRepository } from '@/repositories/CityRepository';

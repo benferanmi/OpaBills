@@ -1,6 +1,6 @@
 import { Response, NextFunction } from "express";
 import { AuthRequest } from "@/middlewares/auth";
-import { TransactionService } from "@/services/TransactionService";
+import { TransactionService } from "@/services/client/TransactionService";
 import { sendSuccessResponse, sendPaginatedResponse } from "@/utils/helpers";
 import { HTTP_STATUS } from "@/utils/constants";
 

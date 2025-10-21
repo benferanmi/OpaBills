@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { ReferenceDataService } from '@/services/ReferenceDataService';
+import { ReferenceDataService } from '@/services/client/ReferenceDataService';
 import { sendSuccessResponse, sendPaginatedResponse } from '@/utils/helpers';
 
 export class ReferenceDataController {

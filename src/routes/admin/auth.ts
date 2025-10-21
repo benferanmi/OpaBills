@@ -6,8 +6,8 @@ import {
     refreshTokenSchema,
     resetPasswordSchema
 }
-    from "@/validations/authValidation";
-import { AuthController } from "@/controllers/AuthController";
+    from "@/validations/admin/authValidation";
+import { AuthController } from "@/controllers/admin/AuthController";
 AuthController
 const router = Router();
 const authController = new AuthController();
