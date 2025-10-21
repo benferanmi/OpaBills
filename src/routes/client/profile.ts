@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { ProfileController } from "@/controllers/ProfileController";
-import { ProfileService } from "@/services/ProfileService";
+import { ProfileController } from "@/controllers/client/ProfileController";
+import { ProfileService } from "@/services/client/ProfileService";
 import { UserRepository } from "@/repositories/UserRepository";
 import { CacheService } from "@/services/CacheService";
 import { authenticate } from "@/middlewares/auth";
@@ -8,7 +8,7 @@ import { validateQuery, validateRequest } from "@/middlewares/validation";
 import {
   updateProfileSchema,
   toogleBiometricSchema,
-} from "@/validations/profileValidation";
+} from "@/validations/client/profileValidation";
 
 const router = Router();
 

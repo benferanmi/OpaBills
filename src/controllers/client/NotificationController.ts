@@ -1,6 +1,6 @@
 import { Response, NextFunction } from 'express';
 import { AuthRequest } from '@/middlewares/auth';
-import { NotificationService } from '@/services/NotificationService';
+import { NotificationService } from '@/services/client/NotificationService';
 import { sendSuccessResponse, sendPaginatedResponse } from '@/utils/helpers';
 
 export class NotificationController {

@@ -1,7 +1,7 @@
 import Joi from 'joi';
 
 export const walletTypeSchema = Joi.object({
-  type: Joi.string().valid('main', 'bonus', 'commission').optional(),
+  type: Joi.string().valid('main', 'bonus', 'commission').optional().default('main'),
 });
 
 export const creditWalletSchema = Joi.object({

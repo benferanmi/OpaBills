@@ -1,6 +1,6 @@
 import { Response, NextFunction } from 'express';
 import { AuthRequest } from '@/middlewares/auth';
-import { DashboardService } from '@/services/DashboardService';
+import { DashboardService } from '@/services/client/DashboardService';
 import { sendSuccessResponse } from '@/utils/helpers';
 
 export class DashboardController {

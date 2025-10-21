@@ -1,6 +1,6 @@
 import { Response, NextFunction } from 'express';
 import { AuthRequest } from '@/middlewares/auth';
-import { GiftCardService } from '@/services/GiftCardService';
+import { GiftCardService } from '@/services/client/GiftCardService';
 import { sendSuccessResponse, sendPaginatedResponse } from '@/utils/helpers';
 import { HTTP_STATUS } from '@/utils/constants';
 

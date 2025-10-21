@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-import { AuthService } from "@/services/AuthService";
+import { AuthService } from "@/services/client/AuthService";
 import { AuthRequest } from "@/middlewares/auth";
 import { sendSuccessResponse } from "@/utils/helpers";
 import { HTTP_STATUS } from "@/utils/constants";

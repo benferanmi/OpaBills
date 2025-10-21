@@ -1,7 +1,7 @@
 import { NotificationRepository } from '@/repositories/NotificationRepository';
 import { UserRepository } from '@/repositories/UserRepository';
-import { EmailService } from './EmailService';
-import { SMSService } from './SMSService';
+import { EmailService } from '../EmailService';
+import { SMSService } from '../SMSService';
 import { AppError } from '@/middlewares/errorHandler';
 import { HTTP_STATUS, ERROR_CODES } from '@/utils/constants';
 
