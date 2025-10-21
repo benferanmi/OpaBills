@@ -28,7 +28,8 @@ if (process.env.NODE_ENV !== "production") {
 }
 
 // API routes
-app.use("/api/v1", routes);
+app.use("/api/v1", adminRoute);
+
 
 app.use((req, res, next) => {
   const error = new AppError(
