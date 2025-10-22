@@ -10,6 +10,7 @@ export class AuthController {
 
     login = async (req: Request, res: Response): Promise<void> => {
         try {
+            console.log('got here')
             const result = await this.authService.login(
                 req.body,
                 req.ip,
@@ -82,7 +83,7 @@ export class AuthController {
 
     resetPassword = async (req: Request, res: Response): Promise<void> => {
         try {
-            await this.authService.resetPassword(req.body);
+            await this.authService.verifyOtpAndResetPassword(req.body);
             logger.info("Admin password reset successful", { email: req.body.email });
             sendSuccessResponse(res, "Password reset successful");
         } catch (error: any) {
@@ -124,4 +125,38 @@ export class AuthController {
             next();
         }
     };
+
+    async changePassword(
+        req: AdminAuthenticatedRequest,
+        res: Response,
+        next: NextFunction
+    ) {
+        try {
+            const adminId = req.admin?.adminId;
+            if (!adminId) {
+                sendErrorResponse(
+                    res,
+                    "Admin not authenticated",
+                    HTTP_STATUS.UNAUTHORIZED
+                );
+                return;
+            }
+            const { newPassword, currentPassword } = req.body;
+
+            const result = await this.authService.changePassword(
+                adminId,
+                newPassword,
+                currentPassword
+            );
+
+            sendSuccessResponse(res, null, "Password changed successfully");
+        } catch (error: any) {
+            logger.error("Error changing admin password", {
+                message: error.message,
+                adminId: req.admin?.adminId,
+                adminEmail: req.admin?.email,
+            });
+            next(error);
+        }
+    }
 }

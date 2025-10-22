@@ -68,7 +68,7 @@ const adminSchema = new Schema<IAdmin>(
     },
     permissions: {
       type: [String],
-      required: true,
+      required: false,
       validate: {
         validator: function (permissions: string[]) {
           const allPermissions = Object.values(ADMIN_PERMISSIONS).flatMap(

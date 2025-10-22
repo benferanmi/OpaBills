@@ -1,11 +1,13 @@
 import { CacheService } from "./CacheService";
 import { generateOTP } from "@/utils/cryptography";
 import { CACHE_TTL } from "@/utils/constants";
+import { EmailService } from "./EmailService";
 
 export class OTPService {
   private cacheService: CacheService;
   private otpLength: number = 6;
   private otpTTL: number = CACHE_TTL.TEN_MINUTES;
+  private emailService: EmailService = new EmailService();
 
   constructor() {
     this.cacheService = new CacheService();
@@ -18,12 +20,14 @@ export class OTPService {
       | "phone_verification"
       | "2fa"
       | "password_reset"
-      | "forgot_password"
+      | "forgot_password",
+    name: string
   ): Promise<string> {
     const otp = generateOTP(this.otpLength);
     const key = this.getKey(userId, purpose);
 
     await this.cacheService.set(key, otp, this.otpTTL);
+    await this.emailService.sendForgotPasswordEmail(userId, otp, name);
 
     return otp;
   }

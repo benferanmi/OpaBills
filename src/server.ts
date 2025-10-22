@@ -12,7 +12,7 @@ const startServer = async () => {
     await connectDatabase();
     await connectRedis();
     // console.log("admin creation started")
-    //await createAdmin();
+    // await createAdmin();
 
     // Start Express server
     const server = app.listen(PORT, () => {

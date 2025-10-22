@@ -8,6 +8,7 @@ import {
 }
     from "@/validations/admin/authValidation";
 import { AuthController } from "@/controllers/admin/AuthController";
+import { AdminAuthenticatedRequest } from "@/types/admin";
 AuthController
 const router = Router();
 const authController = new AuthController();
@@ -32,16 +33,23 @@ router.post(
 
 // Forgot password
 router.post(
-    "/forgot-password",
+    "/password/resend",
     validateRequest(forgotPasswordSchema),
     authController.forgotPassword
 );
 
 // Reset password
 router.post(
-    "/reset-password",
+    "/password/reset",
     validateRequest(resetPasswordSchema),
     authController.resetPassword
+);
+
+router.patch(
+    "/password/update",
+    validateRequest(resetPasswordSchema),
+    (req, res, next) =>
+        authController.changePassword(req as AdminAuthenticatedRequest, res, next)
 );
 
 export default router;

@@ -1,3 +1,4 @@
+
 export const HTTP_STATUS = {
   OK: 200,
   CREATED: 201,
@@ -92,3 +93,7 @@ export const TRANSACTION_TYPES = {
   FLIGHT_BOOKING: 'flight_booking',
   REFERRAL_COMMISSION: 'referral_commission',
 } as const;
+
+
+
+
