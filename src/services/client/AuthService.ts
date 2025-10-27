@@ -81,7 +81,7 @@ export interface Toggle2FADTO {
 }
 
 export interface Verify2FADTO {
-  userId: string;
+  email: string;
   otp: string;
 }
 
@@ -680,8 +680,8 @@ export class AuthService {
     return;
   }
 
-  async verify2FA(data: Verify2FADTO): Promise<IUserResponse | null> {
-    const user = await this.userRepository.findById(data.userId);
+  async verify2FA(data: Verify2FADTO): Promise<AuthResponseDTO | null> {
+    const user = await this.userRepository.findByEmail(data.email);
     if (!user) {
       throw new AppError(
         "User not found",
@@ -690,7 +690,11 @@ export class AuthService {
       );
     }
 
-    const isValid = await this.otpService.verify(data.userId, "2fa", data.otp);
+    const isValid = await this.otpService.verify(
+      user.id.toString(),
+      "2fa",
+      data.otp
+    );
     if (!isValid) {
       throw new AppError(
         "Invalid or expired OTP",
@@ -699,7 +703,7 @@ export class AuthService {
       );
     }
     // Clear user cache
-    await this.cacheService.delete(CACHE_KEYS.USER_PROFILE(data.userId));
+    await this.cacheService.delete(CACHE_KEYS.USER_PROFILE(user.id));
     const userDetails = await this.formatUserDetails(user);
     if (!userDetails) {
       throw new AppError(
@@ -709,7 +713,17 @@ export class AuthService {
       );
     }
 
-    return userDetails;
+    // Generate tokens
+    const accessToken = generateAccessToken({
+      id: user.id.toString(),
+      email: user.email,
+    });
+    const refreshToken = generateRefreshToken({
+      id: user.id.toString(),
+      email: user.email,
+    });
+
+    return { user: userDetails, accessToken, refreshToken };
   }
 
   private async formatUserDetails(user: IUser): Promise<IUserResponse | null> {
@@ -731,13 +745,15 @@ export class AuthService {
       state: user.state,
       status: user.status,
       authType: user.authType,
-      fcmToken: user.fcmToken,
+      fcmToken: user.fcmToken || null,
       virtualAccount: user.virtualAccount,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
-      loginBiometricEnabled: user.loginBiometricEnabled,
-      transactionBiometricEnabled: user.transactionBiometricEnabled,
-      twofactorEnabled: user.twofactorEnabled,
+      bvn: user.bvn || null,
+      nin: user.nin || null,
+      loginBiometricEnabled: user.loginBiometricEnabled || false,
+      transactionBiometricEnabled: user.transactionBiometricEnabled || false,
+      twofactorEnabled: user.twofactorEnabled || false,
       // emailVerifiedAt: user.emailVerifiedAt,
       // phoneVerifiedAt: user.phoneVerifiedAt,
       // pinActivatedAt: user.pinActivatedAt,

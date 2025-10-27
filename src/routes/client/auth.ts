@@ -107,7 +107,6 @@ router.post(
 );
 router.post(
   "/2fa/verify",
-  authenticate,
   validateRequest(verifyOTPSchema),
   authController.verify2FA
 );

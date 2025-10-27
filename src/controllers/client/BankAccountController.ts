@@ -49,4 +49,25 @@ export class BankAccountController {
       next(error);
     }
   };
+
+  verifyBankAccount = async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const { bankCode, accountNumber } = req.body;
+      const result = await this.bankAccountService.verifyBankAccount(bankCode, accountNumber);
+      return sendSuccessResponse(res, result, 'Bank account verified successfully');
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  setDefaultBankAccount = async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const userId = req.user!.id;
+      const { id } = req.params;
+      const account = await this.bankAccountService.setDefaultBankAccount(userId, id);
+      return sendSuccessResponse(res, account, 'Default bank account set successfully');
+    } catch (error) {
+      next(error);
+    }
+  };
 }

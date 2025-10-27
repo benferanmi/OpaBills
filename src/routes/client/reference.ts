@@ -1,33 +1,10 @@
 import { Router } from 'express';
 import { ReferenceDataController } from '@/controllers/client/ReferenceDataController';
 import { ReferenceDataService } from '@/services/client/ReferenceDataService';
-import { CountryRepository } from '@/repositories/CountryRepository';
-import { StateRepository } from '@/repositories/StateRepository';
-import { CityRepository } from '@/repositories/CityRepository';
-import { ProviderRepository } from '@/repositories/ProviderRepository';
-import { ServiceRepository } from '@/repositories/ServiceRepository';
-import { ProductRepository } from '@/repositories/ProductRepository';
-import { BankAccountRepository } from '@/repositories/BankAccountRepository';
 
 const router = Router();
 
-// Initialize dependencies
-const countryRepository = new CountryRepository();
-const stateRepository = new StateRepository();
-const cityRepository = new CityRepository();
-const providerRepository = new ProviderRepository();
-const serviceRepository = new ServiceRepository();
-const productRepository = new ProductRepository();
-const bankAccountRepository = new BankAccountRepository();
-
 const referenceDataService = new ReferenceDataService(
-  countryRepository,
-  stateRepository,
-  cityRepository,
-  providerRepository,
-  serviceRepository,
-  productRepository,
-  bankAccountRepository
 );
 
 const referenceDataController = new ReferenceDataController(referenceDataService);

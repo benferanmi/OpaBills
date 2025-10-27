@@ -1,7 +1,6 @@
-import { getRedisClient } from '@/config/redis';
-import { CACHE_TTL } from '@/utils/constants';
+import { getRedisClient } from "@/config/redis";
+import { CACHE_TTL } from "@/utils/constants";
 import { RedisClientType } from "redis";
-
 
 export class CacheService {
   private redis: RedisClientType | null = null;
@@ -18,16 +17,20 @@ export class CacheService {
       const data = await this.getRedis().get(key);
       return data ? JSON.parse(data) : null;
     } catch (error) {
-      console.error('Cache get error:', error);
+      console.error("Cache get error:", error);
       return null;
     }
   }
 
-  async set(key: string, value: any, ttl: number = CACHE_TTL.ONE_HOUR): Promise<void> {
+  async set(
+    key: string,
+    value: any,
+    ttl: number = CACHE_TTL.ONE_HOUR
+  ): Promise<void> {
     try {
       await this.getRedis().setEx(key, ttl, JSON.stringify(value));
     } catch (error) {
-      console.error('Cache set error:', error);
+      console.error("Cache set error:", error);
     }
   }
 
@@ -35,7 +38,7 @@ export class CacheService {
     try {
       await this.getRedis().del(key);
     } catch (error) {
-      console.error('Cache delete error:', error);
+      console.error("Cache delete error:", error);
     }
   }
 
@@ -46,7 +49,7 @@ export class CacheService {
         await this.getRedis().del(keys);
       }
     } catch (error) {
-      console.error('Cache delete pattern error:', error);
+      console.error("Cache delete pattern error:", error);
     }
   }
 
@@ -55,7 +58,7 @@ export class CacheService {
       const result = await this.getRedis().exists(key);
       return result === 1;
     } catch (error) {
-      console.error('Cache exists error:', error);
+      console.error("Cache exists error:", error);
       return false;
     }
   }
@@ -68,8 +71,13 @@ export class CacheService {
       }
       return result;
     } catch (error) {
-      console.error('Cache increment error:', error);
+      console.error("Cache increment error:", error);
       return 0;
     }
+  }
+
+  async acquireLock(key: string, value: string, ttl: number) {
+    const redis = this.getRedis();
+    return redis.set(key, value, { NX: true, EX: ttl });
   }
 }

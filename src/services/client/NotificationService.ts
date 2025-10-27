@@ -1,14 +1,15 @@
-import { NotificationRepository } from '@/repositories/NotificationRepository';
-import { UserRepository } from '@/repositories/UserRepository';
-import { EmailService } from '../EmailService';
-import { SMSService } from '../SMSService';
-import { AppError } from '@/middlewares/errorHandler';
-import { HTTP_STATUS, ERROR_CODES } from '@/utils/constants';
+import { NotificationRepository } from "@/repositories/NotificationRepository";
+import { UserRepository } from "@/repositories/UserRepository";
+import { EmailService } from "../EmailService";
+import { SMSService } from "../SMSService";
+import { AppError } from "@/middlewares/errorHandler";
+import { HTTP_STATUS, ERROR_CODES } from "@/utils/constants";
+import { Types } from "mongoose";
 
 export interface CreateNotificationDTO {
   type: string;
-  notifiableType: 'User' | 'Admin';
-  notifiableId: string;
+  notifiableType: "User" | "Admin";
+  notifiableId: Types.ObjectId;
   data: any;
   sendEmail?: boolean;
   sendSMS?: boolean;
@@ -30,55 +31,73 @@ export class NotificationService {
     const notification = await this.notificationRepository.create(data);
 
     // Send email if requested
-    if (data.sendEmail && data.notifiableType === 'User') {
+    if (data.sendEmail && data.notifiableType === "User") {
       try {
-        const user = await this.userRepository.findById(data.notifiableId);
+        const user = await this.userRepository.findById(
+          data.notifiableId.toString()
+        );
         if (user && user.email) {
-          await this.sendNotificationEmail(user.email, user.firstname, data.type, data.data);
+          await this.sendNotificationEmail(
+            user.email,
+            user.firstname,
+            data.type,
+            data.data
+          );
         }
       } catch (error) {
-        console.error('Error sending notification email:', error);
+        console.error("Error sending notification email:", error);
       }
     }
 
     // Send SMS if requested
-    if (data.sendSMS && data.notifiableType === 'User') {
+    if (data.sendSMS && data.notifiableType === "User") {
       try {
-        const user = await this.userRepository.findById(data.notifiableId);
+        const user = await this.userRepository.findById(
+          data.notifiableId.toString( )
+        );
         if (user && user.phone && user.phoneCode) {
-          await this.sendNotificationSMS(`${user.phoneCode}${user.phone}`, data.type, data.data);
+          await this.sendNotificationSMS(
+            `${user.phoneCode}${user.phone}`,
+            data.type,
+            data.data
+          );
         }
       } catch (error) {
-        console.error('Error sending notification SMS:', error);
+        console.error("Error sending notification SMS:", error);
       }
     }
 
     return notification;
   }
 
-  private async sendNotificationEmail(to: string, name: string, type: string, data: any): Promise<void> {
-    let subject = 'Notification from BillPadi';
-    let message = '';
+  private async sendNotificationEmail(
+    to: string,
+    name: string,
+    type: string,
+    data: any
+  ): Promise<void> {
+    let subject = "Notification from BillPadi";
+    let message = "";
 
     switch (type) {
-      case 'transaction_success':
-        subject = 'Transaction Successful';
+      case "transaction_success":
+        subject = "Transaction Successful";
         message = `Your ${data.transactionType} transaction of ₦${data.amount} was successful. Reference: ${data.reference}`;
         break;
-      case 'transaction_failed':
-        subject = 'Transaction Failed';
+      case "transaction_failed":
+        subject = "Transaction Failed";
         message = `Your ${data.transactionType} transaction of ₦${data.amount} failed. Please try again.`;
         break;
-      case 'wallet_credit':
-        subject = 'Wallet Credited';
+      case "wallet_credit":
+        subject = "Wallet Credited";
         message = `Your wallet has been credited with ₦${data.amount}. New balance: ₦${data.balance}`;
         break;
-      case 'wallet_debit':
-        subject = 'Wallet Debited';
+      case "wallet_debit":
+        subject = "Wallet Debited";
         message = `Your wallet has been debited with ₦${data.amount}. New balance: ₦${data.balance}`;
         break;
       default:
-        message = data.message || 'You have a new notification';
+        message = data.message || "You have a new notification";
     }
 
     const html = `
@@ -113,31 +132,40 @@ export class NotificationService {
     await this.emailService.sendEmail({ to, subject, html, text: message });
   }
 
-  private async sendNotificationSMS(to: string, type: string, data: any): Promise<void> {
-    let message = '';
+  private async sendNotificationSMS(
+    to: string,
+    type: string,
+    data: any
+  ): Promise<void> {
+    let message = "";
 
     switch (type) {
-      case 'transaction_success':
+      case "transaction_success":
         message = `BillPadi: Your ${data.transactionType} transaction of NGN${data.amount} was successful. Ref: ${data.reference}`;
         break;
-      case 'transaction_failed':
+      case "transaction_failed":
         message = `BillPadi: Your ${data.transactionType} transaction of NGN${data.amount} failed. Please try again.`;
         break;
-      case 'wallet_credit':
+      case "wallet_credit":
         message = `BillPadi: Your wallet has been credited with NGN${data.amount}. Balance: NGN${data.balance}`;
         break;
-      case 'wallet_debit':
+      case "wallet_debit":
         message = `BillPadi: Your wallet has been debited with NGN${data.amount}. Balance: NGN${data.balance}`;
         break;
       default:
-        message = data.message || 'You have a new notification from BillPadi';
+        message = data.message || "You have a new notification from BillPadi";
     }
 
     await this.smsService.sendSMS({ to, message });
   }
 
-  async getUserNotifications(userId: string, page: number = 1, limit: number = 10): Promise<any> {
-    const { data, total } = await this.notificationRepository.findByNotifiableId(userId, page, limit);
+  async getUserNotifications(
+    userId: string,
+    page: number = 1,
+    limit: number = 10
+  ): Promise<any> {
+    const { data, total } =
+      await this.notificationRepository.findByNotifiableId(userId, page, limit);
 
     return {
       data,
@@ -148,7 +176,8 @@ export class NotificationService {
   }
 
   async getUnreadNotifications(userId: string): Promise<any> {
-    const notifications = await this.notificationRepository.findUnreadByNotifiableId(userId);
+    const notifications =
+      await this.notificationRepository.findUnreadByNotifiableId(userId);
     return notifications;
   }
 
@@ -157,14 +186,57 @@ export class NotificationService {
   }
 
   async markAsRead(notificationId: string): Promise<any> {
-    const notification = await this.notificationRepository.markAsRead(notificationId);
+    const notification = await this.notificationRepository.markAsRead(
+      notificationId
+    );
     if (!notification) {
-      throw new AppError('Notification not found', HTTP_STATUS.NOT_FOUND, ERROR_CODES.NOT_FOUND);
+      throw new AppError(
+        "Notification not found",
+        HTTP_STATUS.NOT_FOUND,
+        ERROR_CODES.NOT_FOUND
+      );
     }
     return notification;
   }
 
   async markAllAsRead(userId: string): Promise<void> {
     await this.notificationRepository.markAllAsRead(userId);
+  }
+
+  async getNotificationById(notificationId: string): Promise<any> {
+    const notification = await this.notificationRepository.findById(
+      notificationId
+    );
+    if (!notification) {
+      throw new AppError(
+        "Notification not found",
+        HTTP_STATUS.NOT_FOUND,
+        ERROR_CODES.NOT_FOUND
+      );
+    }
+    return notification;
+  }
+
+  async markAsUnread(notificationId: string): Promise<any> {
+    const notification = await this.notificationRepository.update(
+      notificationId,
+      { read: false }
+    );
+    if (!notification) {
+      throw new AppError(
+        "Notification not found",
+        HTTP_STATUS.NOT_FOUND,
+        ERROR_CODES.NOT_FOUND
+      );
+    }
+    return notification;
+  }
+
+  async deleteNotification(notificationId: string): Promise<void> {
+    await this.notificationRepository.softDelete(notificationId);
+  }
+
+  async clearAllNotifications(userId: string): Promise<void> {
+    await this.notificationRepository.deleteMany(userId);
   }
 }

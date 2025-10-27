@@ -19,8 +19,12 @@ const notificationController = new NotificationController(notificationService);
 router.use(authenticate);
 router.get('/', validateQuery(paginationSchema), notificationController.getUserNotifications);
 router.get('/unread', notificationController.getUnreadNotifications);
-router.get('/unread/count', notificationController.getUnreadCount);
-router.patch('/:id/read', notificationController.markAsRead);
-router.patch('/read-all', notificationController.markAllAsRead);
+router.get('/unread-count', notificationController.getUnreadCount);
+router.get('/:id', notificationController.getNotificationById);
+router.put('/:id/read', notificationController.markAsRead);
+router.put('/:id/unread', notificationController.markAsUnread);
+router.put('/mark-all-read', notificationController.markAllAsRead);
+router.delete('/:id', notificationController.deleteNotification);
+router.delete('/clear-all', notificationController.clearAllNotifications);
 
 export default router;

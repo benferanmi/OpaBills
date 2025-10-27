@@ -121,15 +121,15 @@ refreshTokenSchema.statics.getUserActiveSessions = function (userId: string, use
 };
 
 // Transform JSON output
-refreshTokenSchema.set('toJSON', {
-    transform: function (doc, ret) {
-        delete ret.token;
-        delete ret.__v;
-        ret.id = ret._id;
-        delete ret._id;
-        return ret;
-    }
-});
+// refreshTokenSchema.set('toJSON', {
+//     transform: function (doc, ret) {
+//         delete ret.token;
+//         delete ret.__v;
+//         ret.id = ret._id;
+//         delete ret._id;
+//         return ret;
+//     }
+// });
 
 // Pre-save middleware to set expiry if not set
 refreshTokenSchema.pre('save', function (this: IRefreshToken, next) {

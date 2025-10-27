@@ -24,6 +24,11 @@ const dashboardController = new DashboardController(dashboardService);
 
 // Routes (all protected)
 router.use(authenticate);
+router.get('/', dashboardController.getDashboardStats);
 router.get('/stats', dashboardController.getDashboardStats);
+router.get('/recent-activity', dashboardController.getRecentActivity);
+router.get('/quick-actions', dashboardController.getQuickActions);
+router.get('/charts/transactions', dashboardController.getTransactionChartData);
+router.get('/charts/spending', dashboardController.getSpendingBreakdown);
 
 export default router;

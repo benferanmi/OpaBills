@@ -203,8 +203,8 @@ export class AuthController {
 
   verify2FA = async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
-      const userId = req.user!.id;
-      const result = await this.authService.verify2FA({ ...req.body, userId });
+      console.log("called")
+      const result = await this.authService.verify2FA({ ...req.body });
       return sendSuccessResponse(res, result, "2FA verified successfully");
     } catch (error) {
       next(error);

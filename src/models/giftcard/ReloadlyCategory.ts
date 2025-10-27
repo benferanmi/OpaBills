@@ -29,7 +29,4 @@ const ReloadlyCategorySchema = new Schema<IReloadlyCategory>(
   }
 );
 
-// Indexes
-ReloadlyCategorySchema.index({ categoryId: 1 }, { unique: true });
-
 export const ReloadlyCategory = mongoose.model<IReloadlyCategory>('ReloadlyCategory', ReloadlyCategorySchema);

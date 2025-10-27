@@ -1,8 +1,9 @@
-import mongoose, { Schema, Document, Types } from 'mongoose';
+import mongoose, { Schema, Document, Types } from "mongoose";
 
 export interface IBankAccount extends Document {
   userId: Types.ObjectId;
   bankId: Types.ObjectId;
+  bankCode: string;
   accountNumber: string;
   accountName: string;
   recipientCode?: string;
@@ -13,8 +14,9 @@ export interface IBankAccount extends Document {
 
 const BankAccountSchema = new Schema<IBankAccount>(
   {
-    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-    bankId: { type: Schema.Types.ObjectId, ref: 'Bank', required: true },
+    userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    bankId: { type: Schema.Types.ObjectId, ref: "Bank" },
+    bankCode: { type: String, required: true },
     accountNumber: { type: String, required: true },
     accountName: { type: String, required: true },
     recipientCode: { type: String },
@@ -30,4 +32,7 @@ BankAccountSchema.index({ userId: 1, accountNumber: 1 }, { unique: true });
 BankAccountSchema.index({ userId: 1 });
 BankAccountSchema.index({ bankId: 1 });
 
-export const BankAccount = mongoose.model<IBankAccount>('BankAccount', BankAccountSchema);
+export const BankAccount = mongoose.model<IBankAccount>(
+  "BankAccount",
+  BankAccountSchema
+);

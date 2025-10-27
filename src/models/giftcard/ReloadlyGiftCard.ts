@@ -52,8 +52,6 @@ const ReloadlyGiftCardSchema = new Schema<IReloadlyGiftCard>(
 );
 
 // Indexes
-ReloadlyGiftCardSchema.index({ productId: 1 }, { unique: true });
-ReloadlyGiftCardSchema.index({ categoryId: 1 });
 ReloadlyGiftCardSchema.index({ countryId: 1 });
 ReloadlyGiftCardSchema.index({ status: 1 });
 ReloadlyGiftCardSchema.index({ denominationType: 1 });

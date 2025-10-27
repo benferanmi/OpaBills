@@ -92,7 +92,7 @@ export class ProviderService {
     return {
       success,
       reference: data.giftCardId,
-      providerReference: uuidv4(),
+      providerReference: uuidv4(), // Generate a unique reference for the 
       message: success ? 'Gift card purchase successful' : 'Gift card purchase failed',
       data: success
         ? {

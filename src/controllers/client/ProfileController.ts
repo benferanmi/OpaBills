@@ -1,6 +1,6 @@
 import { Response, NextFunction } from "express";
 import { AuthRequest } from "@/middlewares/auth";
-import { ProfileService } from "@/services/ProfileService";
+import { ProfileService } from "@/services/client/ProfileService";
 import { sendSuccessResponse } from "@/utils/helpers";
 
 export class ProfileController {

@@ -64,4 +64,44 @@ export class NotificationController {
       next(error);
     }
   };
+
+  getNotificationById = async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const { id } = req.params;
+      const notification = await this.notificationService.getNotificationById(id);
+      return sendSuccessResponse(res, notification, 'Notification retrieved successfully');
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  markAsUnread = async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const { id } = req.params;
+      const notification = await this.notificationService.markAsUnread(id);
+      return sendSuccessResponse(res, notification, 'Notification marked as unread');
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  deleteNotification = async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const { id } = req.params;
+      await this.notificationService.deleteNotification(id);
+      return sendSuccessResponse(res, null, 'Notification deleted successfully');
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  clearAllNotifications = async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const userId = req.user!.id;
+      await this.notificationService.clearAllNotifications(userId);
+      return sendSuccessResponse(res, null, 'All notifications cleared successfully');
+    } catch (error) {
+      next(error);
+    }
+  };
 }

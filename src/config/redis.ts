@@ -66,7 +66,9 @@ export const connectRedis = async (): Promise<RedisClientType> => {
 
 export const getRedisClient = (): RedisClientType => {
   if (!redisClient) {
-    logger.error("Attempted to get Redis client before initialization");
+    const error = new Error("redis error");
+    console.log(error.stack)
+    logger.error("Attempted to get Redis client before initialization", );
     throw new Error("Redis client not initialized");
   }
   logger.debug("Redis client retrieved successfully");

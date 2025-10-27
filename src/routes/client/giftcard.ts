@@ -1,18 +1,5 @@
 import { Router } from 'express';
 import { GiftCardController } from '@/controllers/client/GiftCardController';
-import { GiftCardService } from '@/services/client/GiftCardService';
-import {
-  GiftCardRepository,
-  GiftCardCategoryRepository,
-  GiftCardTransactionRepository,
-} from '@/repositories/GiftCardRepository';
-import { TransactionRepository } from '@/repositories/TransactionRepository';
-import { BankAccountRepository } from '@/repositories/BankAccountRepository';
-import { WalletService } from '@/services/client/WalletService';
-import { WalletRepository } from '@/repositories/WalletRepository';
-import { LedgerRepository } from '@/repositories/LedgerRepository';
-import { ProviderService } from '@/services/client/ProviderService';
-import { CacheService } from '@/services/CacheService';
 import { authenticate } from '@/middlewares/auth';
 import { validateRequest, validateQuery } from '@/middlewares/validation';
 import {
@@ -25,27 +12,7 @@ import { paginationSchema } from '@/validations/client/transactionValidation';
 
 const router = Router();
 
-// Initialize dependencies
-const giftCardRepository = new GiftCardRepository();
-const giftCardCategoryRepository = new GiftCardCategoryRepository();
-const giftCardTransactionRepository = new GiftCardTransactionRepository();
-const transactionRepository = new TransactionRepository();
-const bankAccountRepository = new BankAccountRepository();
-const walletRepository = new WalletRepository();
-const ledgerRepository = new LedgerRepository();
-const cacheService = new CacheService();
-const providerService = new ProviderService();
-const walletService = new WalletService(walletRepository, ledgerRepository, cacheService);
-const giftCardService = new GiftCardService(
-  giftCardRepository,
-  giftCardCategoryRepository,
-  giftCardTransactionRepository,
-  transactionRepository,
-  bankAccountRepository,
-  walletService,
-  providerService
-);
-const giftCardController = new GiftCardController(giftCardService);
+const giftCardController = new GiftCardController();
 
 // Routes (all protected)
 router.use(authenticate);

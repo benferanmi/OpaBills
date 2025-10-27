@@ -6,6 +6,7 @@ export interface IGiftCard extends Document {
   categoryId: Types.ObjectId;
   productId: string;
   name: string;
+  logo: string;
   sellRate?: number;
   buyRate?: number;
   sellMinAmount?: number;
@@ -24,6 +25,9 @@ const GiftCardSchema = new Schema<IGiftCard>(
     categoryId: { type: Schema.Types.ObjectId, ref: 'GiftCardCategory', required: true },
     productId: { type: String, default: uuidv4, unique: true },
     name: { type: String, required: true },
+    logo: {
+      type: String
+    },
     sellRate: { type: Number },
     buyRate: { type: Number },
     sellMinAmount: { type: Number },

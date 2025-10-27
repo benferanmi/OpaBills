@@ -28,9 +28,14 @@ export interface IUser extends Document {
   otp?: string;
   otpExpiry?: Date;
   virtualAccount?: any;
+  dateOfBirth: Date;
   createdAt: Date;
   updatedAt: Date;
   deletedAt?: Date;
+
+  // new fields
+  bvn: string;
+  nin: string;
 }
 
 export interface IUserResponse {
@@ -38,33 +43,37 @@ export interface IUserResponse {
   firstname: string;
   lastname: string;
   email: string;
+  phoneCode?: string | null;
+  phone?: string | null;
+  username?: string | null;
+  gender?: "male" | "female" | "other" | null;
+  refCode?: string | null;
+  referredBy?: string | Types.ObjectId | null;
+  avatar?: string | null;
+  country?: string | null;
+  state?: string | null;
 
-  phoneCode?: string;
-  phone?: string;
-  username?: string;
-  gender?: "male" | "female" | "other";
-  refCode?: string;
-  referredBy?: string | Types.ObjectId;
-  avatar?: string;
-  country?: string;
-  state?: string;
-
-  status?: "active" | "inactive" | "suspended";
-  authType?: "password" | "biometric" | "social";
+  status?: "active" | "inactive" | "suspended" | null;
+  authType?: "password" | "biometric" | "social" | null;
   twofactorEnabled?: boolean;
 
-  emailVerifiedAt?: Date;
-  phoneVerifiedAt?: Date;
-  pinActivatedAt?: Date;
-  twoFactorEnabledAt?: Date;
+  emailVerifiedAt?: Date | null;
+  phoneVerifiedAt?: Date | null;
+  pinActivatedAt?: Date | null;
+  twoFactorEnabledAt?: Date | null;
+  dateOfBirth?: Date | null;
   loginBiometricEnabled?: boolean;
   transactionBiometricEnabled?: boolean;
 
-  fcmToken?: string;
-  virtualAccount?: any;
-  createdAt?: Date;
-  updatedAt?: Date;
-  deletedAt?: Date;
+  fcmToken?: string | null;
+  virtualAccount?: any | null;
+  createdAt?: Date | null;
+  updatedAt?: Date | null;
+  deletedAt?: Date | null;
+
+  // new fields
+  bvn?: string | null;
+  nin?: string | null;
 }
 
 const UserSchema = new Schema<IUser>(
@@ -85,6 +94,7 @@ const UserSchema = new Schema<IUser>(
     phoneVerifiedAt: { type: Date },
     pinActivatedAt: { type: Date },
     twoFactorEnabledAt: { type: Date },
+    dateOfBirth: { type: Date },
     twofactorEnabled: { type: Boolean, default: false },
     loginBiometricEnabled: { type: Boolean, default: false },
     transactionBiometricEnabled: { type: Boolean, default: false },
@@ -105,6 +115,9 @@ const UserSchema = new Schema<IUser>(
     otpExpiry: { type: Date },
     virtualAccount: { type: Schema.Types.Mixed },
     deletedAt: { type: Date },
+
+    bvn: { type: String },
+    nin: { type: String },
   },
   {
     timestamps: true,

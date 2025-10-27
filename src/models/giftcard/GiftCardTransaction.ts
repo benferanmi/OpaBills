@@ -23,6 +23,7 @@ export interface IGiftCardTransaction extends Document {
   status: 'pending' | 'success' | 'failed' | 'approved' | 'declined';
   preorder: boolean;
   bankName?: string;
+  bankCode?: string;
   accountName?: string;
   accountNumber?: string;
   reviewNote?: string;
@@ -61,6 +62,7 @@ const GiftCardTransactionSchema = new Schema<IGiftCardTransaction>(
     },
     preorder: { type: Boolean, default: false },
     bankName: { type: String },
+    bankCode: {type: String},
     accountName: { type: String },
     accountNumber: { type: String },
     reviewNote: { type: String },
@@ -76,6 +78,8 @@ const GiftCardTransactionSchema = new Schema<IGiftCardTransaction>(
 );
 
 // Indexes
+GiftCardTransactionSchema.index({ userId: 1 });
+GiftCardTransactionSchema.index({ giftCardId: 1 });
 GiftCardTransactionSchema.index({ status: 1 });
 GiftCardTransactionSchema.index({ tradeType: 1 });
 GiftCardTransactionSchema.index({ groupTag: 1 });

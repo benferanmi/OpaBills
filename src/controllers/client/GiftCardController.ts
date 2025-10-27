@@ -5,7 +5,10 @@ import { sendSuccessResponse, sendPaginatedResponse } from '@/utils/helpers';
 import { HTTP_STATUS } from '@/utils/constants';
 
 export class GiftCardController {
-  constructor(private giftCardService: GiftCardService) {}
+  private giftCardService: GiftCardService
+  constructor() {
+    this.giftCardService = new GiftCardService();
+  }
 
   getCategories = async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
@@ -147,6 +150,43 @@ export class GiftCardController {
       const { reference } = req.params;
       const transaction = await this.giftCardService.getGiftCardTransactionByReference(reference);
       return sendSuccessResponse(res, transaction, 'Transaction retrieved successfully');
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getGiftCardsByType = async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const { type } = req.params;
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 20;
+      
+      const result = await this.giftCardService.getGiftCardsByType(type, page, limit);
+      
+      return sendPaginatedResponse(
+        res,
+        result.data,
+        { total: result.total, page, limit },
+        'Gift cards retrieved successfully'
+      );
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getBreakdown = async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const breakdown = await this.giftCardService.calculateBreakdown(req.body);
+      return sendSuccessResponse(res, breakdown, 'Breakdown calculated successfully');
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getRates = async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const rates = await this.giftCardService.getGiftCardRates();
+      return sendSuccessResponse(res, rates, 'Gift card rates retrieved successfully');
     } catch (error) {
       next(error);
     }
