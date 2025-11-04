@@ -19,6 +19,7 @@ export const HTTP_STATUS = {
   INTERNAL_SERVER_ERROR: 500,
   SERVICE_UNAVAILABLE: 503,
   LOCKED: 423,
+  NOT_IMPLEMENTED: 501
 } as const;
 
 export const ERROR_CODES = {
@@ -44,8 +45,11 @@ export const ERROR_CODES = {
   SERVICE_UNAVAILABLE: "SERVICE_UNAVAILABLE",
   RESOURCE_NOT_FOUND: "RESOURCE_NOT_FOUND",
   THIRD_PARTY_ERROR: "THIRD_PARTY_ERROR",
+  PROVIDER_ERROR: "PROVIDER_ERROR",
   INVALID_PROVIDER: "INVALID_PROVIDER",
   DATABASE_ERROR: "DATABASE_ERROR",
+  NOT_IMPLEMENTED: "NOT_IMPLEMENTED",
+  INVALID_PIN: "INVALID_PIN",
 } as const;
 
 export const CACHE_KEYS = {
@@ -54,6 +58,7 @@ export const CACHE_KEYS = {
   OTP: (identifier: string) => `otp:${identifier}`,
   TOKEN_BLACKLIST: (token: string) => `token:blacklist:${token}`,
   RATE_LIMIT: (ip: string, route: string) => `ratelimit:${ip}:${route}`,
+  IDENTITY_VALIDATION: 'identity:validation',
   BANKS: "banks:all",
   PROVIDERS: "providers:all",
   SERVICES: "services:all",

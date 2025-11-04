@@ -8,7 +8,7 @@ import { BankAccountRepository } from "@/repositories/BankAccountRepository";
 import { AppError } from "@/middlewares/errorHandler";
 import { HTTP_STATUS, ERROR_CODES } from "@/utils/constants";
 import { Bank } from "@/models/reference/Bank";
-import { FlutterwaveService } from "./FlutterwaveService";
+import { SaveHavenService } from "./SaveHavenService";
 export class ReferenceDataService {
   private countryRepository: CountryRepository;
   private stateRepository: StateRepository;
@@ -17,8 +17,7 @@ export class ReferenceDataService {
   private serviceRepository: ServiceRepository;
   private productRepository: ProductRepository;
   private bankAccountRepository: BankAccountRepository;
-  private flutterwaveService: FlutterwaveService;
-
+private saveHavenService: SaveHavenService
   constructor() {
     this.countryRepository = new CountryRepository();
     this.stateRepository = new StateRepository();
@@ -27,7 +26,7 @@ export class ReferenceDataService {
     this.serviceRepository = new ServiceRepository();
     this.productRepository = new ProductRepository();
     this.bankAccountRepository = new BankAccountRepository();
-    this.flutterwaveService = new FlutterwaveService();
+    this.saveHavenService = new SaveHavenService()
   }
 
   // Countries
@@ -297,7 +296,7 @@ export class ReferenceDataService {
 
   // Banks
   async getBanks(page: number = 1, limit: number = 100): Promise<any> {
-    const data = await this.flutterwaveService.getBanks();
+    const data = await this.saveHavenService.getBanks();
     return { banks: data, total: data.length, page, limit };
   }
 }

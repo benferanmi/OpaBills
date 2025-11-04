@@ -110,7 +110,7 @@ router.get("/product-types", (req, res) => {
       "betting",
       "epin",
       "international-airtime",
-      "international-data",
+      "internationalData",
     ],
   });
 });

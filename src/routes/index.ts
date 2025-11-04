@@ -7,4 +7,12 @@ const router = Router();
 router.use("/admin", adminRoute);
 router.use("/", clientRoute);
 
+router.get("/", (req, res) => {
+  res.json({
+    status: "OK",
+    timestamp: new Date().toISOString(),
+    version: "1.0.0",
+  });
+});
+
 export default router;

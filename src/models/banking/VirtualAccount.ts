@@ -10,8 +10,9 @@ export interface IVirtualAccount extends Document {
   accountName?: string;
   accountNumber: string;
   accountReference?: string;
+  isPrimary?: boolean;
+  isActive?: boolean;
   orderReference?: string;
-  flwRef?: string;
   type: "permanent" | "temporary";
   expiredAt?: Date;
   createdAt: Date;
@@ -45,9 +46,10 @@ const virtualAccountSchema = new Schema<IVirtualAccount>(
       unique: true,
       index: true,
     },
-    flwRef: String,
     accountReference: String,
     orderReference: String,
+    isPrimary: { Boolean },
+    isActive: { Boolean },
     type: {
       type: String,
       enum: ["permanent", "temporary"],

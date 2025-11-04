@@ -6,7 +6,8 @@ import { walletLock } from "@/middlewares/walletLock";
 import { serviceCheck } from "@/middlewares/serviceCheck";
 import { rateLimiter } from "@/middlewares/rateLimiter";
 import { validateRequest } from "@/middlewares/validation";
-import { airtimePurchaseSchema } from "@/validations/client/billpaymentValidation";
+import { airtimePurchaseSchema, verifyPhoneNumberSchema } from "@/validations/client/billpaymentValidation";
+import { checkAndVerifyPin } from "@/middlewares/checkAndVerifyPin";
 
 const router = Router();
 
@@ -16,21 +17,20 @@ const billPaymentController = new BillPaymentController();
 router.use(authenticate);
 router.use(serviceCheck("airtime"));
 
-// router.get("/providers", billPaymentController.getAirtimeProviders);
-// router.post("/verify", billPaymentController.verifyPhone);
+router.get("/providers", billPaymentController.getAirtimeProviders);
+router.post(
+  "/verify",
+  validateRequest(verifyPhoneNumberSchema),
+  billPaymentController.verifyPhone
+);
 router.post(
   "/",
   rateLimiter(10, 60000),
+  checkAndVerifyPin,
   walletLock,
   validateRequest(airtimePurchaseSchema),
   billPaymentController.purchaseAirtime
 );
-// router.get("/history", billPaymentController.getAirtimeHistory);
-// router.post(
-//   "/bulk",
-//   rateLimiter(3, 60000),
-//   walletLock,
-//   billPaymentController.bulkPurchaseAirtime
-// );
+router.get("/history", billPaymentController.getAirtimeHistory);
 
 export default router;

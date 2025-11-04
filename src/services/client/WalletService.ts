@@ -77,13 +77,11 @@ export class WalletService {
     }
 
     const oldBalance = wallet.balance;
-    const newBalance = oldBalance + amount;
+    const newBalance = oldBalance + Number(amount);
+
 
     // Update wallet balance
-    await this.walletRepository.updateBalance(
-      wallet.id.toString(),
-      newBalance
-    );
+    await this.walletRepository.updateBalance(wallet.id.toString(), newBalance);
 
     // Create ledger entry
     await this.ledgerRepository.create({
@@ -152,10 +150,7 @@ export class WalletService {
     const newBalance = oldBalance - amount;
 
     // Update wallet balance
-    await this.walletRepository.updateBalance(
-      wallet.id.toString(),
-      newBalance
-    );
+    await this.walletRepository.updateBalance(wallet.id.toString(), newBalance);
 
     // Create ledger entry
     await this.ledgerRepository.create({
@@ -366,7 +361,7 @@ export class WalletService {
     };
   }
 
-  async fundWallet (userId: string, amount: number): Promise<any> {
+  async fundWallet(userId: string, amount: number): Promise<any> {
     const user = await this.userRepository.findById(userId);
     if (!user) {
       throw new AppError(

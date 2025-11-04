@@ -4,17 +4,16 @@ import { WalletService } from "./WalletService";
 import { generateReference } from "@/utils/helpers";
 import { AppError } from "@/middlewares/errorHandler";
 import { HTTP_STATUS, ERROR_CODES } from "@/utils/constants";
-import { FlutterwaveService } from "./FlutterwaveService";
 import logger from "@/logger";
 import { User } from "@/models/core/User";
 import { PaystackService } from "./PaystackService";
-import { SaveHavenService } from "@/controllers/client/SaveHaven";
-import { MonnifyService } from "./MonifyService";
+import { SaveHavenService } from "@/services/client/SaveHavenService";
+import { MonnifyService } from "./MonnifyService";
 
 export interface InitializePaymentDTO {
   userId: string;
   amount: number;
-  provider?: "paystack" | "monify" | "flutterwave" | "saveHaven";
+  provider?: | "monnify"  | "saveHaven" | "flutterwave";
   meta?: any;
 }
 
@@ -27,30 +26,26 @@ export interface ProcessWithdrawalDTO {
   bankCode: string ;
   bankName: string;
   reference: string;
-  provider?: "paystack" | "flutterwave" | "saveHaven" | "monify";
+  provider?:  "saveHaven" | "monnify" | "flutterwave";
 }
 
 export class PaymentService {
   private walletService: WalletService;
   private notificationRepository: NotificationRepository;
-  private flutterwaveService: FlutterwaveService;
   private paystackService: PaystackService;
   private saveHavenService: SaveHavenService;
-  private monifyService: MonnifyService;
+  private monnifyService: MonnifyService;
   constructor() {
     this.walletService = new WalletService();
     this.notificationRepository = new NotificationRepository();
-    this.flutterwaveService = new FlutterwaveService();
     this.paystackService = new PaystackService();
     this.saveHavenService = new SaveHavenService();
-    this.monifyService = new MonnifyService();
+    this.monnifyService = new MonnifyService();
   }
 
   // payment.service.ts
   async initializePayment(data: InitializePaymentDTO): Promise<any> {
     const reference = generateReference("PAY");
-
-    console.log(data);
 
     // Create payment record first
     const payment = await Payment.create({
@@ -61,7 +56,6 @@ export class PaymentService {
       meta: data.meta,
     });
 
-    console.log(payment);
 
     // Get user details for virtual account creation
     const user = await User.findById(data.userId);
@@ -73,67 +67,15 @@ export class PaymentService {
       throw new AppError("Bvn is required", 400, ERROR_CODES.VALIDATION_ERROR);
     }
 
-    // Select provider service (default to flutterwave)
-    const provider = data.provider || "flutterwave";
+    const provider = data.provider || "saveHaven";
     let virtualAccountData;
 
     try {
       switch (provider) {
-        case "flutterwave":
-          virtualAccountData =
-            await this.flutterwaveService.createVirtualAccount({
-              email: user.email,
-              is_permanent: false,
-              bvn: user.bvn || "", // You might need to handle BVN validation
-              tx_ref: reference,
-              amount: data.amount,
-              firstname: user.firstname,
-              lastname: user.lastname,
-              narration: `Wallet funding - ${reference}`,
-            });
+       
 
-          await Payment.findByIdAndUpdate(payment._id, {
-            $set: {
-              "meta.virtualAccount": {
-                accountNumber: virtualAccountData.account_number,
-                bankName: virtualAccountData.bank_name,
-                accountName: virtualAccountData.account_name,
-                provider: provider,
-                orderReference: virtualAccountData.order_ref,
-                providerReference: virtualAccountData.flw_ref,
-                expiresAt:
-                  virtualAccountData.expires_at ||
-                  new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours default
-              },
-            },
-          });
-          break;
-
-        case "paystack":
-          virtualAccountData = await this.paystackService.createVirtualAccount({
-            email: user.email,
-            reference: reference,
-            amount: data.amount,
-            firstname: user.firstname,
-            lastname: user.lastname,
-          });
-          await Payment.findByIdAndUpdate(payment._id, {
-            $set: {
-              "meta.virtualAccount": {
-                accountNumber: virtualAccountData.account_number,
-                bankName: virtualAccountData.bank_name,
-                accountName: virtualAccountData.account_name,
-                provider: provider,
-                expiresAt:
-                  virtualAccountData.expires_at ||
-                  new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours default
-              },
-            },
-          });
-          break;
-
-        // case "monify":
-        //   virtualAccountData = await this.monifyService.createVirtualAccount({
+        // case "monnify":
+        //   virtualAccountData = await this.monnifyService.createVirtualAccount({
         //     email: user.email,
         //     reference: reference,
         //     amount: data.amount,
@@ -146,10 +88,13 @@ export class PaymentService {
           virtualAccountData = await this.saveHavenService.createVirtualAccount(
             {
               email: user.email,
-              reference: reference,
-              amount: data.amount,
               firstname: user.firstname,
+              amount: data.amount,
               lastname: user.lastname,
+              reference: reference,
+              phone: user.phone,
+              bvn: user.bvn,
+             
             }
           );
           await Payment.findByIdAndUpdate(payment._id, {
@@ -213,7 +158,7 @@ export class PaymentService {
       );
     }
 
-    const result = this.flutterwaveService.verifyPayment(reference);
+    const result = this.saveHavenService.verifyPayment(reference);
 
     if (!result) {
       throw new AppError(
@@ -254,7 +199,7 @@ export class PaymentService {
   }
 
   async processWithdrawal(data: ProcessWithdrawalDTO): Promise<any> {
-    const provider = data.provider || "flutterwave";
+    const provider = data.provider || "saveHaven";
 
     // Get user details
     const user = await User.findById(data.userId);
@@ -283,59 +228,15 @@ export class PaymentService {
       let transferResponse;
 
       switch (provider) {
-        case "flutterwave":
-          transferResponse = await this.flutterwaveService.initiateTransfer({
-            account_number: data.accountNumber,
-            account_bank: data.bankCode,
-            amount: data.amount,
-            narration: `Withdrawal - ${data.reference}`,
-            currency: "NGN",
-            reference: data.reference,
-            callback_url: `${process.env.BASE_URL}/api/webhooks/flutterwave/transfer`,
-            debit_currency: "NGN",
-            beneficiary_name: data.accountName,
-          });
-
-          // Update payment with transfer details
-          await Payment.findByIdAndUpdate(payment._id, {
-            $set: {
-              status: "processing",
-              "meta.transferId": transferResponse.id,
-              "meta.transferStatus": transferResponse.status,
-              "meta.providerReference": transferResponse.reference,
-            },
-          });
-
-          break;
-
-        case "paystack":
-          transferResponse = await this.paystackService.initiateTransfer({
-            source: "balance",
-            amount: data.amount * 100, // Paystack uses kobo
-            recipient: data.accountNumber,
-            reason: `Withdrawal - ${data.reference}`,
-            reference: data.reference,
-          });
-
-          await Payment.findByIdAndUpdate(payment._id, {
-            $set: {
-              status: "processing",
-              "meta.transferId": transferResponse.id,
-              "meta.transferCode": transferResponse.transfer_code,
-              "meta.providerReference": transferResponse.reference,
-            },
-          });
-
-          break;
+      
 
         case "saveHaven":
           transferResponse = await this.saveHavenService.initiateTransfer({
             account_number: data.accountNumber,
-            account_bank: data.bankCode,
+            bank_code: data.bankCode,
             amount: data.amount,
             narration: `Withdrawal - ${data.reference}`,
             reference: data.reference,
-            beneficiary_name: data.accountName,
           });
 
           await Payment.findByIdAndUpdate(payment._id, {
@@ -349,8 +250,8 @@ export class PaymentService {
 
           break;
 
-        // case "monify":
-        //   transferResponse = await this.monifyService.initiateTransfer({
+        // case "monnify":
+        //   transferResponse = await this.monnifyService.initiateTransfer({
         //     account_number: data.accountNumber,
         //     account_bank: data.bankCode,
         //     amount: data.amount,
@@ -427,22 +328,12 @@ export class PaymentService {
       );
     }
 
-    const provider = payment.meta?.provider || "flutterwave";
+    const provider = payment.meta?.provider || "saveHaven";
     let verificationResult;
 
     try {
       switch (provider) {
-        case "flutterwave":
-          verificationResult = await this.flutterwaveService.verifyPayment(
-            payment.meta.transferId
-          );
-          break;
-
-        case "paystack":
-          verificationResult = await this.paystackService.verifyPayment(
-            payment.meta.transferId
-          );
-          break;
+      
 
         case "saveHaven":
           verificationResult = await this.saveHavenService.verifyPayment(
@@ -450,8 +341,8 @@ export class PaymentService {
           );
           break;
 
-        case "monify":
-          verificationResult = await this.monifyService.verifyPayment(
+        case "monnify":
+          verificationResult = await this.monnifyService.verifyPayment(
             payment.meta.transferId
           );
           break;
@@ -502,22 +393,13 @@ export class PaymentService {
    */
   private mapProviderStatus(providerStatus: string, provider: string): string {
     const statusMap: Record<string, Record<string, string>> = {
-      flutterwave: {
-        SUCCESSFUL: "success",
-        FAILED: "failed",
-        PENDING: "processing",
-      },
-      paystack: {
-        success: "success",
-        failed: "failed",
-        pending: "processing",
-      },
+    
       saveHaven: {
         successful: "success",
         failed: "failed",
         pending: "processing",
       },
-      monify: {
+      monnify: {
         SUCCESS: "success",
         FAILED: "failed",
         PENDING: "processing",

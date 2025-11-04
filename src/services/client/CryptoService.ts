@@ -173,7 +173,7 @@ export class CryptoService {
         cryptoTransaction.id,
         status
       );
-      await this.transactionRepository.updateStatus(transaction._id, status);
+      await this.transactionRepository.updateStatus(transaction.id, status);
 
       // Send notification
       await this.notificationRepository.create({
@@ -210,7 +210,7 @@ export class CryptoService {
         cryptoTransaction.id,
         "failed"
       );
-      await this.transactionRepository.updateStatus(transaction._id, "failed");
+      await this.transactionRepository.updateStatus(transaction.id, "failed");
       await this.walletService.creditWallet(
         data.userId,
         totalAmount,

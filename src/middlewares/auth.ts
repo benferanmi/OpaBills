@@ -4,7 +4,7 @@ import { sendErrorResponse } from "@/utils/helpers";
 import { HTTP_STATUS, ERROR_CODES, CACHE_KEYS } from "@/utils/constants";
 import { CacheService } from "@/services/CacheService";
 import { cache } from "joi";
-import { User } from "@/models/core/User";
+import { IUser, User } from "@/models/core/User";
 
 const cacheService = new CacheService();
 export interface AuthRequest extends Request {
@@ -13,6 +13,7 @@ export interface AuthRequest extends Request {
     email: string;
     role?: string;
   };
+  userData?: IUser;
 }
 
 export const authenticate = async (
@@ -51,11 +52,8 @@ export const authenticate = async (
       );
     }
 
-
     const decoded = jwt.verify(token, process.env.JWT_SECRET) as any;
 
-    const user = User.findById(decoded.id);
-    
     req.user = {
       id: decoded.id,
       email: decoded.email,

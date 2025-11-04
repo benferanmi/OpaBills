@@ -1,8 +1,8 @@
 import { BankAccountRepository } from "@/repositories/BankAccountRepository";
 import { AppError } from "@/middlewares/errorHandler";
 import { HTTP_STATUS, ERROR_CODES } from "@/utils/constants";
-import { FlutterwaveService } from "./FlutterwaveService";
 import { Types } from "mongoose";
+import { SaveHavenService } from "./SaveHavenService";
 
 export interface CreateBankAccountDTO {
   userId: Types.ObjectId;
@@ -15,10 +15,10 @@ export interface CreateBankAccountDTO {
 
 export class BankAccountService {
   private bankAccountRepository: BankAccountRepository;
-  private flutterwaveService: FlutterwaveService;
+  private saveHavenService: SaveHavenService;
   constructor() {
     this.bankAccountRepository = new BankAccountRepository();
-    this.flutterwaveService = new FlutterwaveService();
+    this.saveHavenService = new SaveHavenService();
   }
 
   async createBankAccount(data: CreateBankAccountDTO): Promise<any> {
@@ -36,7 +36,7 @@ export class BankAccountService {
     }
 
     // Validating account details
-    const result = await this.flutterwaveService.verifyBankAccount(
+    const result = await this.saveHavenService.nameEnquiry(
       data.accountNumber,
       data.bankCode
     );
@@ -49,7 +49,7 @@ export class BankAccountService {
       );
     }
 
-    if (result.account_name !== data.accountName) {
+    if (result.accountName !== data.accountName) {
       throw new AppError(
         "Account name does not match",
         HTTP_STATUS.BAD_REQUEST,
@@ -86,17 +86,15 @@ export class BankAccountService {
     bankCode: string,
     accountNumber: string
   ): Promise<any> {
-    // TODO: use multiple provider
-
-    const result = await this.flutterwaveService.verifyBankAccount(
+    const result = await this.saveHavenService.nameEnquiry(
       accountNumber,
       bankCode
     );
 
     console.log(result, "verify");
     return {
-      accountNumber: result.account_number,
-      accountName: result.account_name,
+      accountNumber: result.accountNumber,
+      accountName: result.accountName,
       bankCode,
     };
   }

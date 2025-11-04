@@ -13,6 +13,8 @@ export interface IUser extends Document {
   avatar?: string;
   country?: string;
   state?: string;
+  bvnVerified: boolean;
+  bvnValidated: boolean;
   emailVerifiedAt?: Date;
   phoneVerifiedAt?: Date;
   pinActivatedAt?: Date;
@@ -57,6 +59,9 @@ export interface IUserResponse {
   authType?: "password" | "biometric" | "social" | null;
   twofactorEnabled?: boolean;
 
+  bvnVerified?: boolean;
+  bvnValidated?: boolean;
+
   emailVerifiedAt?: Date | null;
   phoneVerifiedAt?: Date | null;
   pinActivatedAt?: Date | null;
@@ -90,6 +95,10 @@ const UserSchema = new Schema<IUser>(
     avatar: { type: String },
     country: { type: String },
     state: { type: String },
+
+    bvnVerified: { type: Boolean, default: false },
+    bvnValidated: { type: Boolean, default: false },
+
     emailVerifiedAt: { type: Date },
     phoneVerifiedAt: { type: Date },
     pinActivatedAt: { type: Date },

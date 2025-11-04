@@ -21,8 +21,9 @@ export interface MonnifyAccountData {
   reservedAccountType: string;
   status: string;
   createdOn: string;
-  expires_at: string;
-
+  bvn?: string;
+  nin?: string;
+  restrictPaymentSource?: boolean;
 }
 
 export interface MonnifyCreateAccountRes {
@@ -129,6 +130,100 @@ export class MonnifyService {
     }
   }
 
+  /**
+   * BVN and Account Match Verification
+   * Verifies that BVN and account number match
+   */
+  async verifyBVNAccountMatch(data: {
+    bvn: string;
+    accountNumber: string;
+    bankCode: string;
+  }): Promise<{
+    accountNumber: string;
+    accountName: string;
+    bvn: string;
+    matchStatus: boolean;
+  }> {
+    try {
+      const response = await this.makeAuthenticatedRequest(
+        "POST",
+        "/api/v1/vas/bvn-account-match",
+        {
+          bvn: data.bvn,
+          accountNumber: data.accountNumber,
+          bankCode: data.bankCode,
+        }
+      );
+
+      if (!response.requestSuccessful) {
+        throw new AppError(
+          response.responseMessage || "BVN-Account match verification failed",
+          400,
+          ERROR_CODES.VALIDATION_ERROR
+        );
+      }
+
+      logger.info(`Monnify: Verified BVN-Account match: ${data.accountNumber}`);
+      return response.responseBody;
+    } catch (error: any) {
+      logger.error("Monnify: Error verifying BVN-Account match:", error);
+      throw new AppError(
+        error.response?.data?.responseMessage ||
+          "BVN-Account match verification failed",
+        400,
+        ERROR_CODES.VALIDATION_ERROR
+      );
+    }
+  }
+
+  /**
+   * Update existing reserved account with BVN/NIN
+   * This is the alternative to creating a new account
+   */
+  async updateReservedAccountKYC(data: {
+    accountReference: string;
+    bvn?: string;
+    nin?: string;
+  }): Promise<MonnifyAccountData> {
+    try {
+      const payload: any = {
+        accountReference: data.accountReference,
+      };
+
+      if (data.bvn) {
+        payload.bvn = data.bvn;
+      }
+
+      if (data.nin) {
+        payload.nin = data.nin;
+      }
+
+      const response = await this.makeAuthenticatedRequest(
+        "PUT",
+        "/api/v2/bank-transfer/reserved-accounts",
+        payload
+      );
+
+      if (!response.requestSuccessful) {
+        throw new AppError(
+          response.responseMessage || "Failed to update account KYC",
+          400,
+          ERROR_CODES.SERVICE_UNAVAILABLE
+        );
+      }
+
+      logger.info(`Monnify: Updated account KYC: ${data.accountReference}`);
+      return response.responseBody;
+    } catch (error: any) {
+      logger.error("Monnify: Error updating account KYC:", error);
+      throw new AppError(
+        error.response?.data?.responseMessage || "Failed to update account KYC",
+        400,
+        ERROR_CODES.SERVICE_UNAVAILABLE
+      );
+    }
+  }
+
   // Verify bank account
   async verifyBankAccount(
     accountNumber: string,
@@ -191,36 +286,54 @@ export class MonnifyService {
     }
   }
 
-  // Create reserved account for wallet funding (temporary)
+  // Create reserved account for wallet funding (permanent account)
   async createVirtualAccount(data: {
     email: string;
     firstname: string;
     lastname: string;
     reference: string;
     bvn?: string;
+    nin?: string;
+    getAllBanks?: boolean;
   }): Promise<MonnifyAccountData> {
     try {
-      const payload = {
+      console.log(this.provider);
+      const payload: any = {
         accountReference: data.reference,
         accountName: `${data.firstname} ${data.lastname}`,
         currencyCode: "NGN",
         contractCode: this.provider.contractCode,
         customerEmail: data.email,
         customerName: `${data.firstname} ${data.lastname}`,
-        getAllAvailableBanks: true, // Get multiple bank accounts
-        preferredBanks: ["035", "232"], // Wema Bank and Sterling Bank
+        getAllAvailableBanks: data.getAllBanks !== false, // Default to true
       };
 
-      // Only add BVN if provided
+      // Add BVN if provided
       if (data.bvn) {
-        Object.assign(payload, { bvn: data.bvn });
+        payload.bvn = data.bvn;
       }
+
+      // Add NIN if provided (alternative to BVN)
+      if (data.nin) {
+        payload.nin = data.nin;
+      }
+
+      // Don't add preferredBanks when getAllAvailableBanks is true
+      // If you want specific banks, set getAllBanks to false and add preferredBanks
+      if (data.getAllBanks === false) {
+        // You can add preferredBanks here if needed
+        // payload.preferredBanks = ["035", "232"]; // Wema Bank and Sterling Bank
+      }
+
+      console.log(payload);
 
       const response = await this.makeAuthenticatedRequest(
         "POST",
         "/api/v2/bank-transfer/reserved-accounts",
         payload
       );
+
+      console.log(response)
 
       if (!response.requestSuccessful) {
         throw new AppError(
@@ -272,29 +385,36 @@ export class MonnifyService {
   }
 
   // Initiate transfer/disbursement (for withdrawal from wallet to bank)
+  // Updated to use correct endpoint and payload structure
   async initiateTransfer(data: {
     amount: number;
     destinationBankCode: string;
     destinationAccountNumber: string;
     narration: string;
     reference: string;
-    destinationAccountName: string;
     currency?: string;
+    async?: boolean;
   }): Promise<any> {
     try {
+      const payload: any = {
+        amount: data.amount,
+        reference: data.reference,
+        narration: data.narration,
+        destinationBankCode: data.destinationBankCode,
+        destinationAccountNumber: data.destinationAccountNumber,
+        currency: data.currency || "NGN",
+        sourceAccountNumber: this.provider.walletAccountNumber,
+      };
+
+      // Add async parameter if provided
+      if (data.async !== undefined) {
+        payload.async = data.async;
+      }
+
       const response = await this.makeAuthenticatedRequest(
         "POST",
         "/api/v2/disbursements/single",
-        {
-          amount: data.amount,
-          reference: data.reference,
-          narration: data.narration,
-          destinationBankCode: data.destinationBankCode,
-          destinationAccountNumber: data.destinationAccountNumber,
-          currency: data.currency || "NGN",
-          sourceAccountNumber: this.provider.walletAccountNumber,
-          destinationAccountName: data.destinationAccountName,
-        }
+        payload
       );
 
       if (!response.requestSuccessful) {
@@ -519,5 +639,33 @@ export class MonnifyService {
         ERROR_CODES.VALIDATION_ERROR
       );
     }
+  }
+
+  /**
+   * Helper: Format date for Monnify BVN verification
+   * Converts YYYY-MM-DD to DD-MMM-YYYY
+   */
+  private formatDateForBVN(dateString: string): string {
+    const date = new Date(dateString);
+    const months = [
+      "Jan",
+      "Feb",
+      "Mar",
+      "Apr",
+      "May",
+      "Jun",
+      "Jul",
+      "Aug",
+      "Sep",
+      "Oct",
+      "Nov",
+      "Dec",
+    ];
+
+    const day = String(date.getDate()).padStart(2, "0");
+    const month = months[date.getMonth()];
+    const year = date.getFullYear();
+
+    return `${day}-${month}-${year}`;
   }
 }

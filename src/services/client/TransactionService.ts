@@ -142,8 +142,8 @@ export class TransactionService {
       "tv_subscription",
       "betting",
       "e_pin",
-      "international_airtime",
-      "international_data",
+      "internationalAirtime",
+      "internationalData",
       "gift_card",
       "crypto",
       "flight",
@@ -169,7 +169,7 @@ export class TransactionService {
     }
 
     const updated = await this.transactionRepository.updateStatus(
-      transaction._id,
+      transaction.id,
       status
     );
     return updated;

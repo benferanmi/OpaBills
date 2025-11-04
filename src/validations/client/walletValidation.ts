@@ -22,7 +22,7 @@ export const generateVirtualAccountSchema = Joi.object({
   value: Joi.string().required(),
   firstname: Joi.string().required(),
   lastname: Joi.string().required(),
-  // dateOfBirth: Joi.date().required(),
+  dateOfBirth: Joi.date().required(),
 });
 
 export const fundWalletSchema = Joi.object({
@@ -32,7 +32,7 @@ export const fundWalletSchema = Joi.object({
     .optional()
     .default("main"),
   provider: Joi.string()
-    .valid("paystack", "monify", "flutterwave", "saveHaven")
+    .valid("paystack", "monnify", "flutterwave", "saveHaven")
     .default("flutterwave"),
   method: Joi.string().valid("card", "bank").default("card"),
 });
@@ -56,9 +56,85 @@ export const bankTransferSchema = Joi.object({
     "string.pattern.base": "Pin must contain only numbers",
   }),
   provider: Joi.string()
-    .valid("paystack", "monify", "flutterwave", "saveHaven")
+    .valid("paystack", "monnify", "flutterwave", "saveHaven")
     .default("flutterwave")
     .messages({
       "any.required": "Provider is required",
     }),
+});
+
+export const identificationSchema = Joi.object({
+  identificationType: Joi.string().valid("bvn", "nin").required().messages({
+    "any.required": "identificationType is required",
+    "any.only": "identificationType must be either 'bvn' or 'nin'",
+  }),
+
+  value: Joi.string().trim().pattern(/^\d+$/).length(11).required().messages({
+    "any.required": "value is required",
+    "string.pattern.base": "{{#label}} must contain only digits",
+    "string.length": "{{#label}} must be exactly 11 digits",
+  }),
+
+  firstname: Joi.string()
+    .pattern(/^[a-zA-Z\s\-']+$/)
+    .required()
+    .messages({
+      "any.required": "firstname is required",
+      "string.pattern.base": "firstname contains invalid characters",
+    }),
+
+  middlename: Joi.string()
+    .allow(null, "")
+    .pattern(/^[a-zA-Z\s\-']+$/)
+    .messages({
+      "string.pattern.base": "middlename contains invalid characters",
+    }),
+
+  lastname: Joi.string()
+    .pattern(/^[a-zA-Z\s\-']+$/)
+    .required()
+    .messages({
+      "any.required": "lastname is required",
+      "string.pattern.base": "lastname contains invalid characters",
+    }),
+
+  dateOfBirth: Joi.string()
+    .pattern(/^\d{4}-\d{2}-\d{2}$/)
+    .required()
+    .custom((value, helpers) => {
+      const birthDate = new Date(value);
+      const now = new Date();
+
+      if (isNaN(birthDate.getTime())) {
+        return helpers.error("any.invalid", { message: "Invalid date format" });
+      }
+
+      if (birthDate > now) {
+        return helpers.error("any.invalid", {
+          message: "dateOfBirth cannot be in the future",
+        });
+      }
+
+      const age = now.getFullYear() - birthDate.getFullYear();
+      const hasBirthdayPassed =
+        now.getMonth() > birthDate.getMonth() ||
+        (now.getMonth() === birthDate.getMonth() &&
+          now.getDate() >= birthDate.getDate());
+      const actualAge = hasBirthdayPassed ? age : age - 1;
+
+      if (actualAge < 18) {
+        return helpers.error("any.invalid", {
+          message: "You must be at least 18 years old to create an account",
+        });
+      }
+
+      return value;
+    })
+    .messages({
+      "any.required": "dateOfBirth is required",
+      "string.pattern.base":
+        "dateOfBirth must be in format YYYY-MM-DD (e.g., 1990-01-15)",
+      "any.invalid": "{{#message}}",
+    }),
+ 
 });

@@ -36,7 +36,7 @@ export class WithdrawalService {
     amount: number;
     bankAccountId: string;
     pin?: string;
-    provider?: "paystack" | "flutterwave" | "saveHaven" | "monify";
+    provider?:  "flutterwave" | "saveHaven" | "monnify";
   }) {
     const reference = generateReference("WTH");
 
@@ -219,7 +219,7 @@ export class WithdrawalService {
     accountNumber: string;
     accountName?: string;
     bankCode: string;
-    provider?: "paystack" | "flutterwave" | "saveHaven" | "monify";
+    provider?: "flutterwave" | "saveHaven" | "monnify";
   }) {
     const reference = generateReference("BTR");
 

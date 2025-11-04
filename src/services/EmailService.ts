@@ -18,8 +18,6 @@ export class EmailService {
   constructor() {
     if (emailConfig.transport === "mailgun") {
       this.initializeMailgun();
-    } else if (emailConfig.transport === "smtp") {
-      this.initializeSMTP();
     } else if (emailConfig.transport === "gmail") {
       this.initializeGmail();
     } else {
@@ -34,16 +32,6 @@ export class EmailService {
       username: "api",
       key: emailConfig.mailgun.apiKey,
       url: `https://${emailConfig.mailgun.host}`,
-    });
-  }
-
-  private initializeSMTP() {
-    logger.debug("Initializing SMTP transport...");
-    this.transporter = nodemailer.createTransport({
-      host: emailConfig.smtp.host,
-      port: emailConfig.smtp.port,
-      secure: emailConfig.smtp.secure,
-      auth: emailConfig.smtp.auth,
     });
   }
 

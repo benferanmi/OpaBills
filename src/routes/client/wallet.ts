@@ -9,11 +9,14 @@ import {
   bankTransferSchema,
   fundWalletSchema,
   generateVirtualAccountSchema,
+  identificationSchema,
   walletTypeSchema,
 } from "@/validations/client/walletValidation";
+import { VirtualAccountController } from "@/controllers/client/VirtualAccountController ";
 
 const router = Router();
 const walletController = new WalletController();
+const virtualAccountController = new VirtualAccountController();
 
 // All routes require authentication
 router.use(authenticate);
@@ -72,12 +75,26 @@ router.post(
 );
 
 // Virtual accounts
-router.get("/accounts", walletController.getVirtualAccounts);
 router.post(
-  "/accounts/generate",
-  validateRequest(generateVirtualAccountSchema),
-  // rateLimiter(2, 300000),
-  walletController.generateVirtualAccount
+  "/accounts/initiate", validateRequest(identificationSchema),
+  profileComplete,
+  virtualAccountController.initiateVirtualAccountGeneration
 );
+router.post(
+  "/accounts/verify",
+  virtualAccountController.verifyOTPAndCreateAccount
+);
+router.get(
+  "/account/validation-status/:identityId",
+  virtualAccountController.getValidationStatus
+);
+router.get("/accounts", virtualAccountController.getUserVirtualAccount);
+// router.post(
+//   "/accounts/generate",
+//   validateRequest(generateVirtualAccountSchema),
+//   // rateLimiter(2, 300000),
+//   profileComplete,
+//   virtualAccountController.generateVirtualAccount
+// );
 
 export default router;

@@ -150,7 +150,7 @@ export class FlightService {
         bookingId,
       });
       await this.transactionRepository.updateStatus(
-        transaction._id,
+        transaction.id,
         success ? "success" : "failed"
       );
 
@@ -184,7 +184,7 @@ export class FlightService {
     } catch (error) {
       // Reverse wallet deduction on error
       await this.flightRepository.updateStatus(flightBooking._id, "failed");
-      await this.transactionRepository.updateStatus(transaction._id, "failed");
+      await this.transactionRepository.updateStatus(transaction.id, "failed");
       await this.walletService.creditWallet(
         data.userId,
         amount,
