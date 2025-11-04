@@ -11,6 +11,7 @@ const startServer = async () => {
     logger.info("Starting server...");
     await connectDatabase();
     await connectRedis();
+
     // await runAllSeeders();
     // Start Express server
     const server = app.listen(PORT, () => {
