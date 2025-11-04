@@ -2,7 +2,6 @@ import { connectDatabase } from "./config/database";
 import { connectRedis } from "./config/redis";
 import app from "./app";
 import logger from "./logger";
-import { runAllSeeders } from "./seeders";
 
 const PORT = process.env.PORT || 5000;
 
@@ -12,7 +11,6 @@ const startServer = async () => {
     await connectDatabase();
     await connectRedis();
 
-    // await runAllSeeders();
     // Start Express server
     const server = app.listen(PORT, () => {
       logger.info(`Server running on port ${PORT}`);
