@@ -178,7 +178,7 @@ export class ProductRepository extends BaseRepository<IProduct> {
   }
 
   async getDistinctDataTypes(): Promise<string[]> {
-    return this.model.distinct("dataType").exec();
+    return this.model.distinct("attributes.dataType").exec();
   }
 
   async findCheapestByService(
@@ -269,7 +269,7 @@ export class ProductRepository extends BaseRepository<IProduct> {
       .exec();
 
     const grouped = products.reduce((acc, product) => {
-      const type = product.dataType || "UNCATEGORIZED";
+      const type = product.attributes?.dataType || "UNCATEGORIZED";
       if (!acc[type]) {
         acc[type] = [];
       }

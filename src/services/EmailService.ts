@@ -1,6 +1,7 @@
 import nodemailer from "nodemailer";
 import FormData from "form-data";
 import Mailgun from "mailgun.js";
+import { Resend } from "resend";
 import { emailConfig } from "@/config/email";
 import logger from "@/logger";
 
@@ -14,12 +15,15 @@ interface EmailOptions {
 export class EmailService {
   private transporter: any;
   private mailgunClient: any;
+  private resendClient: Resend | null = null;
 
   constructor() {
     if (emailConfig.transport === "mailgun") {
       this.initializeMailgun();
     } else if (emailConfig.transport === "gmail") {
       this.initializeGmail();
+    } else if (emailConfig.transport === "resend") {
+      this.initializeResend();
     } else {
       throw new Error("Invalid email transport configuration");
     }
@@ -48,10 +52,19 @@ export class EmailService {
     });
   }
 
+  private initializeResend() {
+    logger.debug("Initializing Resend transport...");
+    this.resendClient = new Resend(
+      emailConfig.resend?.apiKey || process.env.RESEND_API_KEY
+    );
+  }
+
   async sendEmail(options: EmailOptions): Promise<void> {
     try {
       if (emailConfig.transport === "mailgun") {
         await this.sendViaMailgun(options);
+      } else if (emailConfig.transport === "resend") {
+        await this.sendViaResend(options);
       } else {
         await this.sendViaSMTP(options);
       }
@@ -75,6 +88,20 @@ export class EmailService {
       emailConfig.mailgun.domain,
       messageData
     );
+  }
+
+  private async sendViaResend(options: EmailOptions): Promise<void> {
+    if (!this.resendClient) {
+      throw new Error("Resend client not initialized");
+    }
+
+    await this.resendClient.emails.send({
+      from: `noreply@yourdomain.com`,
+      to: options.to,
+      subject: options.subject,
+      html: options.html,
+      text: options.text,
+    });
   }
 
   private async sendViaSMTP(options: EmailOptions): Promise<void> {

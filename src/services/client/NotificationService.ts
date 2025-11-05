@@ -18,13 +18,14 @@ export interface CreateNotificationDTO {
 export class NotificationService {
   private emailService: EmailService;
   private smsService: SMSService;
+  private notificationRepository: NotificationRepository;
+  private userRepository: UserRepository;
 
-  constructor(
-    private notificationRepository: NotificationRepository,
-    private userRepository: UserRepository
-  ) {
+  constructor() {
     this.emailService = new EmailService();
     this.smsService = new SMSService();
+    this.notificationRepository = new NotificationRepository();
+    this.userRepository = new UserRepository();
   }
 
   async createNotification(data: CreateNotificationDTO): Promise<any> {
@@ -53,7 +54,7 @@ export class NotificationService {
     if (data.sendSMS && data.notifiableType === "User") {
       try {
         const user = await this.userRepository.findById(
-          data.notifiableId.toString( )
+          data.notifiableId.toString()
         );
         if (user && user.phone && user.phoneCode) {
           await this.sendNotificationSMS(

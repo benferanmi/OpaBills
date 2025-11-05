@@ -30,7 +30,7 @@ interface AdminJWTConfig {
 
 class AdminJWTUtil {
   private config: AdminJWTConfig;
-  private cacheService: CacheService
+  private cacheService: CacheService;
 
   constructor() {
     this.config = {

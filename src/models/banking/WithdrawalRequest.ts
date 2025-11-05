@@ -1,7 +1,6 @@
-import mongoose, { Schema, Document, Types } from 'mongoose';
+import mongoose, { Schema, Document, Types } from "mongoose";
 
 export interface IWithdrawalRequest extends Document {
-  _id: string; // UUID
   userId: Types.ObjectId;
   reference: string;
   provider: string;
@@ -10,10 +9,16 @@ export interface IWithdrawalRequest extends Document {
   accountNumber?: string;
   bankName?: string;
   bankCode?: string;
-  status: 'pending' | 'approved' | 'declined';
+  status: "pending" | "approved" | "declined";
   type: string;
   proof?: string;
   reviewProof?: string;
+  approvedAt?: Date;
+  approvedBy?: Types.ObjectId | string;
+  walletId?: Types.ObjectId | string;
+  declinedAt?: Date;
+  declinedBy?: Types.ObjectId | string;
+  declineReason?: string;
   meta?: any;
   createdAt: Date;
   updatedAt: Date;
@@ -23,7 +28,7 @@ const withdrawalRequestSchema = new Schema<IWithdrawalRequest>(
   {
     userId: {
       type: Schema.Types.ObjectId,
-      ref: 'User',
+      ref: "User",
       required: true,
       index: true,
     },
@@ -47,12 +52,12 @@ const withdrawalRequestSchema = new Schema<IWithdrawalRequest>(
     bankCode: String,
     status: {
       type: String,
-      enum: ['pending', 'approved', 'declined'],
-      default: 'pending',
+      enum: ["pending", "approved", "declined"],
+      default: "pending",
       index: true,
     },
     type: {
-      String
+      String,
     },
     proof: String,
     reviewProof: String,
@@ -63,4 +68,7 @@ const withdrawalRequestSchema = new Schema<IWithdrawalRequest>(
   }
 );
 
-export const WithdrawalRequest = mongoose.model<IWithdrawalRequest>('WithdrawalRequest', withdrawalRequestSchema);
+export const WithdrawalRequest = mongoose.model<IWithdrawalRequest>(
+  "WithdrawalRequest",
+  withdrawalRequestSchema
+);

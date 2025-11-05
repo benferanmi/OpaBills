@@ -131,7 +131,7 @@ export class WithdrawalService {
 
     try {
       const result = await this.paymentService.processWithdrawal({
-        withdrawalId: withdrawalRequest._id.toString(),
+        withdrawalId: withdrawalRequest.id.toString(),
         userId: data.userId,
         amount: data.amount,
         accountNumber: bankAccount.accountNumber,
@@ -144,7 +144,7 @@ export class WithdrawalService {
       });
 
       // Update withdrawal request with payment details and status
-      await this.withdrawalRepository.update(withdrawalRequest._id.toString(), {
+      await this.withdrawalRepository.update(withdrawalRequest.id.toString(), {
         status: "processing",
         meta: {
           paymentReference: result.reference,
@@ -182,7 +182,7 @@ export class WithdrawalService {
       );
 
       // Update withdrawal status to failed
-      await this.withdrawalRepository.update(withdrawalRequest._id.toString(), {
+      await this.withdrawalRepository.update(withdrawalRequest.id.toString(), {
         status: "failed",
         meta: {
           error: error.message,
@@ -314,7 +314,7 @@ export class WithdrawalService {
 
     try {
       const result = await this.paymentService.processWithdrawal({
-        withdrawalId: withdrawalRequest._id.toString(),
+        withdrawalId: withdrawalRequest.id.toString(),
         userId: data.userId,
         amount: data.amount,
         accountNumber: data.accountNumber,
@@ -325,7 +325,7 @@ export class WithdrawalService {
         provider: data.provider || "flutterwave",
       });
 
-      await this.withdrawalRepository.update(withdrawalRequest._id.toString(), {
+      await this.withdrawalRepository.update(withdrawalRequest.id.toString(), {
         status: "processing",
         meta: {
           paymentReference: result.reference,
@@ -365,7 +365,7 @@ export class WithdrawalService {
       );
 
       // Update withdrawal status to failed
-      await this.withdrawalRepository.update(withdrawalRequest._id.toString(), {
+      await this.withdrawalRepository.update(withdrawalRequest.id.toString(), {
         status: "failed",
         meta: {
           error: error.message,

@@ -49,6 +49,17 @@ export const PROVIDERS = {
       process.env.MYSIMHOSTING_BASE_URL || "https://api.mysimhosting.com",
     apiKey: process.env.MYSIMHOSTING_API_KEY || "",
   },
+  VTUNG: {
+    baseUrl: process.env.VTUNG_BASE_URL || "https://api-service.vtpass.com/api",
+    username: process.env.VTUNG_USERNAME || "",
+    password: process.env.VTUNG_PASSWORD || "",
+    userPin: process.env.VTUNG_USER_PIN || "",
+  },
+  BILALSADASUB: {
+    baseUrl:
+      process.env.BILALSADASUB_BASE_URL || "https://bilalsadasub.com/api",
+    apiKey: process.env.BILALSADASUB_API_KEY || "",
+  }
 } as const;
 
 export type ProviderName = keyof typeof PROVIDERS;

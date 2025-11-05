@@ -495,7 +495,7 @@ export class BillPaymentService {
         amount: product.amount,
         plan: product.name,
         serviceCode: service.code,
-        variationCode: product.code,
+        productCode: product.code,
         reference,
       });
 

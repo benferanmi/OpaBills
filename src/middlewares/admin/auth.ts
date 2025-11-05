@@ -4,8 +4,8 @@ import { sendErrorResponse } from "@/utils/helpers";
 import { ERROR_CODES, HTTP_STATUS } from "@/utils/constants";
 import logger from "@/logger";
 import { CacheService } from "@/services/CacheService";
-import Admin from "@/models/admin/Index";
 import adminJwtUtil from "@/config/admin/jwt";
+import { Admin } from "@/models/admin/Admin";
 
 const cacheService = new CacheService();
 export const verifyAdminToken = async (

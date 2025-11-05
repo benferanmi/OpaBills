@@ -10,6 +10,8 @@ import { VTPassService } from "./providers/VtpassService";
 import { ClubKonnectService } from "./providers/ClubkonnectService";
 import { MySimHostingService } from "./providers/MySimHostingService";
 import { CoolsubService } from "./providers/CoolsubService";
+import { VtuNgService } from "./providers/VtuNgService";
+import { BilalsadasubService } from "./providers/BilalsadasubService";
 
 interface ProviderResponse {
   success: boolean;
@@ -34,7 +36,7 @@ interface DataDataDTO {
   amount: number;
   provider?: string;
   plan: string;
-  productCode?: string;
+  productCode: string;
   serviceCode?: string;
   variationCode?: string;
   reference: string;
@@ -66,6 +68,27 @@ interface BettingData {
   provider: string;
 }
 
+interface AirtimeEPINData {
+  network: string;
+  value: number; // 100, 200, or 500
+  quantity: number; // 1 to 100
+  reference: string;
+}
+
+interface DataEPINData {
+  network: string;
+  dataPlan: string;
+  quantity: number;
+  reference: string;
+}
+
+interface EducationEPINData {
+  examType: string; // 'waec' or 'jamb'
+  phone: string;
+  reference: string;
+  profileId?: string; // For JAMB profile verification
+}
+
 interface EducationData {
   profileId: string;
   phone: string;
@@ -80,6 +103,8 @@ export class ProviderService {
   private coolsubService: CoolsubService;
   private mySimHostingService: MySimHostingService;
   private mydataplugClient: AxiosInstance;
+  private vtuNgService: VtuNgService;
+  private bilalsadasubService: BilalsadasubService;
 
   constructor() {
     // Initialize VTPass Service
@@ -93,6 +118,12 @@ export class ProviderService {
 
     // Initialize MySimHosting Service
     this.mySimHostingService = new MySimHostingService();
+
+    // Initialize VTU.ng Service
+    this.vtuNgService = new VtuNgService();
+
+    // Initialize Bilalsadasub Service
+    this.bilalsadasubService = new BilalsadasubService();
 
     // Initialize MyDataPlug client (to be extracted later)
     this.mydataplugClient = axios.create({
@@ -125,7 +156,7 @@ export class ProviderService {
         );
       }
 
-      console.log(serviceType)
+      console.log(serviceType);
 
       // Find active provider mapping for this service type
       const providerMapping = await ServiceTypeProvider.findOne({
@@ -140,7 +171,7 @@ export class ProviderService {
           select: "+apiKey +apiSecret", // Include encrypted fields
         });
 
-      console.log(providerMapping)
+      console.log(providerMapping);
 
       if (!providerMapping || !providerMapping.providerId) {
         throw new AppError(
@@ -254,7 +285,7 @@ export class ProviderService {
         id: product._id,
         name: product.name,
         code: product.code,
-        dataType: product.dataType,
+        dataType: product.attributes?.dataType,
         amount: product.amount,
         validity: product.validity,
         description: product.description,
@@ -293,7 +324,7 @@ export class ProviderService {
         id: product._id,
         name: product.name,
         code: product.code,
-        dataType: product.dataType,
+        dataType: product.attributes?.dataType,
         amount: product.amount,
         validity: product.validity,
         description: product.description,
@@ -314,7 +345,7 @@ export class ProviderService {
    */
   async getDataTypes(): Promise<string[]> {
     try {
-      const dataTypes = await Product.distinct("dataType", {
+      const dataTypes = await Product.distinct("attributes.dataType", {
         isActive: true,
         dataType: { $exists: true, $ne: null },
       });
@@ -325,7 +356,6 @@ export class ProviderService {
       return ["SME", "GIFTING", "DIRECT", "CORPORATE GIFTING", "PACKAGE"];
     }
   }
-
 
   async purchaseAirtime(data: AirtimeData): Promise<ProviderResponse> {
     try {
@@ -341,8 +371,12 @@ export class ProviderService {
           return await this.coolsubService.purchaseAirtime(data);
         case "mysimhosting":
           return await this.mySimHostingService.purchaseAirtime(data);
+        case "vtung":
+          return await this.vtuNgService.purchaseAirtime(data);
         case "mydataplug":
           return await this.mydataplugPurchaseAirtime(data);
+        case "bilalsadasub":
+          return await this.bilalsadasubService.purchaseAirtime(data);
         default:
           throw new AppError(
             `Unsupported airtime provider: ${provider.code}`,
@@ -355,8 +389,105 @@ export class ProviderService {
       throw error;
     }
   }
+  async purchaseAirtimeEPIN(data: AirtimeEPINData): Promise<ProviderResponse> {
+    try {
+      const provider = await this.getActiveApiProvider("airtime_epin");
+      logger.info(
+        `Processing airtime E-PIN purchase with ${provider.code}`,
+        data
+      );
 
+      switch (provider.code.toLowerCase()) {
+        case "clubkonnect":
+          return await this.clubKonnectService.purchaseAirtimeEPIN(data);
+        case "vtung":
+          return await this.vtuNgService.purchaseEPINs(data);
+        default:
+          throw new AppError(
+            `Unsupported airtime E-PIN provider: ${provider.code}`,
+            HTTP_STATUS.BAD_REQUEST,
+            ERROR_CODES.PROVIDER_ERROR
+          );
+      }
+    } catch (error: any) {
+      logger.error("Airtime E-PIN purchase failed", error);
+      throw error;
+    }
+  }
 
+  //  DATA E-PIN PURCHASE
+  async purchaseDataEPIN(data: DataEPINData): Promise<ProviderResponse> {
+    try {
+      const provider = await this.getActiveApiProvider("data_epin");
+      logger.info(`Processing data E-PIN purchase with ${provider.code}`, data);
+
+      switch (provider.code.toLowerCase()) {
+        case "clubkonnect":
+          return await this.clubKonnectService.purchaseDataEPIN(data);
+        default:
+          throw new AppError(
+            `Unsupported data E-PIN provider: ${provider.code}`,
+            HTTP_STATUS.BAD_REQUEST,
+            ERROR_CODES.PROVIDER_ERROR
+          );
+      }
+    } catch (error: any) {
+      logger.error("Data E-PIN purchase failed", error);
+      throw error;
+    }
+  }
+
+  // WAEC E-PIN PURCHASE
+  async purchaseWAECEPIN(data: EducationEPINData): Promise<ProviderResponse> {
+    try {
+      const provider = await this.getActiveApiProvider("waec");
+      logger.info(`Processing WAEC e-PIN purchase with ${provider.code}`, data);
+
+      switch (provider.code.toLowerCase()) {
+        case "clubkonnect":
+          return await this.clubKonnectService.purchaseWAECEPIN(data);
+        default:
+          throw new AppError(
+            `Unsupported WAEC provider: ${provider.code}`,
+            HTTP_STATUS.BAD_REQUEST,
+            ERROR_CODES.PROVIDER_ERROR
+          );
+      }
+    } catch (error: any) {
+      logger.error("WAEC e-PIN purchase failed", error);
+      throw error;
+    }
+  }
+
+  // JAMB E-PIN PURCHASE
+  async purchaseJAMBEPIN(data: EducationEPINData): Promise<ProviderResponse> {
+    try {
+      const provider = await this.getActiveApiProvider("jamb");
+      logger.info(`Processing JAMB e-PIN purchase with ${provider.code}`, data);
+
+      switch (provider.code.toLowerCase()) {
+        case "vtpass":
+          return await this.vtpassService.purchaseEducation({
+            profileId: data.profileId || "",
+            phone: data.phone,
+            variationCode: data.examType,
+            amount: 0, // Amount should be passed from the caller
+            reference: data.reference,
+          });
+        case "clubkonnect":
+          return await this.clubKonnectService.purchaseJAMBEPIN(data);
+        default:
+          throw new AppError(
+            `Unsupported JAMB provider: ${provider.code}`,
+            HTTP_STATUS.BAD_REQUEST,
+            ERROR_CODES.PROVIDER_ERROR
+          );
+      }
+    } catch (error: any) {
+      logger.error("JAMB e-PIN purchase failed", error);
+      throw error;
+    }
+  }
   async getInternationalAirtimeCountries(): Promise<any> {
     return await this.vtpassService.getInternationalAirtimeCountries();
   }
@@ -395,7 +526,6 @@ export class ProviderService {
     return await this.vtpassService.purchaseInternationalAirtime(data);
   }
 
-
   async purchaseData(data: DataDataDTO): Promise<ProviderResponse> {
     try {
       const provider = await this.getActiveApiProvider("data");
@@ -412,6 +542,10 @@ export class ProviderService {
           return await this.mySimHostingService.purchaseData(data);
         case "mydataplug":
           return await this.mydataplugPurchaseData(data);
+        case "vtung":
+          return await this.vtuNgService.purchaseData(data);
+        case "bilalsadasub":
+          return await this.bilalsadasubService.purchaseData(data);
         default:
           throw new AppError(
             `Unsupported data provider: ${provider.code}`,
@@ -424,7 +558,6 @@ export class ProviderService {
       throw error;
     }
   }
-
 
   async getInternationalDataCountries(): Promise<any> {
     return await this.vtpassService.getInternationalDataCountries();
@@ -460,7 +593,6 @@ export class ProviderService {
     return await this.vtpassService.purchaseInternationalData(data);
   }
 
-
   async purchaseCableTv(data: CableTvData): Promise<ProviderResponse> {
     try {
       const provider = await this.getActiveApiProvider("cable_tv");
@@ -473,6 +605,10 @@ export class ProviderService {
           return await this.clubKonnectService.purchaseCableTv(data);
         case "coolsub":
           return await this.coolsubService.purchaseCableTv(data);
+        case "vtung":
+          return await this.vtuNgService.purchaseCableTv(data);
+        case "bilalsadasub":
+          return await this.bilalsadasubService.purchaseCableTv(data);
         default:
           throw new AppError(
             `Unsupported cable TV provider: ${provider.code}`,
@@ -485,8 +621,6 @@ export class ProviderService {
       throw error;
     }
   }
-
-  // ==================== EDUCATION/E-PIN PURCHASE ====================
 
   async purchaseEducation(data: EducationData): Promise<ProviderResponse> {
     try {
@@ -509,7 +643,6 @@ export class ProviderService {
     }
   }
 
-
   async purchaseElectricity(data: ElectricityData): Promise<ProviderResponse> {
     try {
       const provider = await this.getActiveApiProvider("electricity");
@@ -523,6 +656,8 @@ export class ProviderService {
           return await this.vtpassService.purchaseElectricity(data);
         case "clubkonnect":
           return await this.clubKonnectService.purchaseElectricity(data);
+        case "vtung":
+          return await this.vtuNgService.purchaseElectricity(data);
         case "coolsub":
           return await this.coolsubService.purchaseElectricity(data);
         default:
@@ -538,7 +673,6 @@ export class ProviderService {
     }
   }
 
-
   async fundBetting(data: BettingData): Promise<ProviderResponse> {
     try {
       const provider = await this.getActiveApiProvider("betting");
@@ -551,6 +685,8 @@ export class ProviderService {
           return await this.clubKonnectService.fundBetting(data);
         case "coolsub":
           return await this.coolsubService.fundBetting(data);
+        case "vtung":
+          return await this.vtuNgService.fundBetting(data);
         default:
           throw new AppError(
             `Unsupported betting provider: ${provider.code}`,
@@ -563,7 +699,6 @@ export class ProviderService {
       throw error;
     }
   }
-
 
   async verifySmartCard(
     smartCardNumber: string,
@@ -590,7 +725,6 @@ export class ProviderService {
     // VTPass only for JAMB verification
     return await this.vtpassService.verifyJambProfile(profileId, type);
   }
-
 
   async queryClubKonnectTransaction(
     orderIdOrReference: string,
@@ -675,7 +809,7 @@ export class ProviderService {
     );
   }
 
-  // ==================== MYSIMHOSTING SPECIFIC METHODS ====================
+  //  MYSIMHOSTING SPECIFIC METHODS
 
   async getMySimHostingDataPlans(): Promise<any> {
     return await this.mySimHostingService.getDataPlans();
@@ -699,7 +833,7 @@ export class ProviderService {
     return await this.mySimHostingService.sendSMSRequest(data);
   }
 
-  // ==================== MYDATAPLUG METHODS (Temporary - To be extracted later) ====================
+  // MYDATAPLUG METHODS
 
   private async mydataplugPurchaseAirtime(
     data: AirtimeData
@@ -774,5 +908,53 @@ export class ProviderService {
       etisalat: 4,
     };
     return networkMap[serviceType.toLowerCase()] || 1;
+  }
+
+  //VTUNG METHODS
+  async queryVtuNgTransaction(requestId: string): Promise<any> {
+    return await this.vtuNgService.requeryTransaction(requestId);
+  }
+
+  async checkVtuNgBalance(): Promise<any> {
+    return await this.vtuNgService.checkBalance();
+  }
+
+  async verifyVtuNgSmartCard(
+    smartCardNumber: string,
+    provider: string
+  ): Promise<any> {
+    return await this.vtuNgService.verifySmartCard(smartCardNumber, provider);
+  }
+
+  async verifyVtuNgMeterNumber(
+    meterNumber: string,
+    provider: string,
+    meterType: string
+  ): Promise<any> {
+    return await this.vtuNgService.verifyMeterNumber(
+      meterNumber,
+      provider,
+      meterType
+    );
+  }
+
+  async verifyVtuNgBettingCustomer(
+    customerId: string,
+    provider: string
+  ): Promise<any> {
+    return await this.vtuNgService.verifyBettingCustomer(customerId, provider);
+  }
+
+  //Billandsub
+  async verifyBilalsadasubMeterNumber(
+    meterNumber: string,
+    provider: string,
+    meterType: string
+  ): Promise<any> {
+    return await this.bilalsadasubService.verifyMeterNumber(
+      meterNumber,
+      provider,
+      meterType
+    );
   }
 }

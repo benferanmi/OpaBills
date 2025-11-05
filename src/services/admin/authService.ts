@@ -1,4 +1,4 @@
-import { Admin } from "@/models/admin/Index";
+import { Admin } from "@/models/admin/Admin";
 import { OTPService } from "../OTPService";
 import { HTTP_STATUS } from "@/utils/constants";
 import adminJwtUtil from "@/config/admin/jwt";

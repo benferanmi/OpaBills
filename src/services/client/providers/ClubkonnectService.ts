@@ -14,6 +14,7 @@ interface ProviderResponse {
   message: string;
   data?: any;
   token?: string;
+  pins?: any[]; // For E-PIN responses
 }
 
 interface AirtimeData {
@@ -28,7 +29,7 @@ interface DataDataDTO {
   amount: number;
   provider?: string;
   plan: string;
-  productCode?: string;
+  productCode: string;
   serviceCode?: string;
   variationCode?: string;
   reference: string;
@@ -60,6 +61,26 @@ interface BettingData {
   provider: string;
 }
 
+interface AirtimeEPINData {
+  network: string;
+  value: number; // 100, 200, or 500
+  quantity: number; // 1 to 100
+  reference: string;
+}
+
+interface DataEPINData {
+  network: string;
+  dataPlan: string;
+  quantity: number;
+  reference: string;
+}
+
+interface EducationEPINData {
+  examType: string; // 'waec' or 'jamb'
+  phone: string;
+  reference: string;
+}
+
 export class ClubKonnectService {
   private client: AxiosInstance;
   private provider = PROVIDERS.CLUBKONNECT;
@@ -73,7 +94,7 @@ export class ClubKonnectService {
     });
   }
 
-  // AIRTIME PURCHASE
+  // ==================== AIRTIME PURCHASE ====================
   async purchaseAirtime(data: AirtimeData): Promise<ProviderResponse> {
     try {
       const networkCode = this.getNetworkCode(data.network);
@@ -99,7 +120,7 @@ export class ClubKonnectService {
     }
   }
 
-  // DATA PURCHASE
+  // ==================== DATA PURCHASE ====================
   async purchaseData(data: DataDataDTO): Promise<ProviderResponse> {
     try {
       // Get product details to retrieve ClubKonnect data plan code
@@ -120,7 +141,6 @@ export class ClubKonnectService {
       }
 
       // Get ClubKonnect data plan code (fallback to main code if not available)
-      const dataPlanCode = product.providerCodes?.clubkonnect || product.code;
 
       // Extract network from service code (e.g., "mtn-data" -> "mtn")
       const serviceCode = (product.serviceId as any).code || "";
@@ -134,6 +154,24 @@ export class ClubKonnectService {
         );
       }
 
+      // Check if it's Smile or Spectranet (use different endpoints)
+      if (network.toLowerCase() === "smile") {
+        return await this.purchaseSmileData({
+          phone: data.phone,
+          dataPlan: data.productCode,
+          reference: data.reference,
+        });
+      }
+
+      if (network.toLowerCase() === "spectranet") {
+        return await this.purchaseSpectranetData({
+          phone: data.phone,
+          dataPlan: data.productCode,
+          reference: data.reference,
+        });
+      }
+
+      // Regular data purchase
       const networkCode = this.getNetworkCode(network);
 
       const response = await this.client.get("/APIDatabundleV1.asp", {
@@ -141,7 +179,7 @@ export class ClubKonnectService {
           UserID: this.provider.userId,
           APIKey: this.provider.apiKey,
           MobileNetwork: networkCode,
-          DataPlan: dataPlanCode,
+          DataPlan: data.productCode,
           MobileNumber: data.phone,
           RequestID: data.reference,
         },
@@ -158,7 +196,63 @@ export class ClubKonnectService {
     }
   }
 
-  // CABLE TV PURCHASE
+  // ==================== SMILE DATA PURCHASE ====================
+  async purchaseSmileData(data: {
+    phone: string;
+    dataPlan: string;
+    reference: string;
+  }): Promise<ProviderResponse> {
+    try {
+      const response = await this.client.get("/APISmileV1.asp", {
+        params: {
+          UserID: this.provider.userId,
+          APIKey: this.provider.apiKey,
+          MobileNetwork: "smile-direct",
+          DataPlan: data.dataPlan,
+          MobileNumber: data.phone,
+          RequestID: data.reference,
+        },
+      });
+
+      return this.handleResponse(
+        response.data,
+        data.reference,
+        "Smile data purchase"
+      );
+    } catch (error: any) {
+      return this.handleError(error, "Smile data purchase");
+    }
+  }
+
+  // ==================== SPECTRANET DATA PURCHASE ====================
+  async purchaseSpectranetData(data: {
+    phone: string;
+    dataPlan: string;
+    reference: string;
+  }): Promise<ProviderResponse> {
+    try {
+      const response = await this.client.get("/APISpectranetV1.asp", {
+        params: {
+          UserID: this.provider.userId,
+          APIKey: this.provider.apiKey,
+          MobileNetwork: "spectranet",
+          DataPlan: data.dataPlan,
+          MobileNumber: data.phone,
+          RequestID: data.reference,
+        },
+      });
+
+      return this.handleResponse(
+        response.data,
+        data.reference,
+        "Spectranet data purchase"
+      );
+    } catch (error: any) {
+      return this.handleError(error, "Spectranet data purchase");
+    }
+  }
+
+  // ==================== CABLE TV PURCHASE ====================
   async purchaseCableTv(data: CableTvData): Promise<ProviderResponse> {
     try {
       // Get product details to retrieve ClubKonnect package code
@@ -177,9 +271,7 @@ export class ClubKonnectService {
           ERROR_CODES.RESOURCE_NOT_FOUND
         );
       }
-
-      // Get ClubKonnect package code (fallback to main code if not available)
-      const packageCode = product.providerCodes?.clubkonnect || product.code;
+      const packageCode = product.code;
 
       // Get CableTV code from provider
       const cableTvCode = this.getCableTvCode(data.provider);
@@ -207,7 +299,7 @@ export class ClubKonnectService {
     }
   }
 
-  // ELECTRICITY PURCHASE
+  // ==================== ELECTRICITY PURCHASE ====================
   async purchaseElectricity(data: ElectricityData): Promise<ProviderResponse> {
     try {
       // Get electric company code
@@ -247,7 +339,7 @@ export class ClubKonnectService {
     }
   }
 
-  // BETTING FUNDING
+  // ==================== BETTING FUNDING ====================
   async fundBetting(data: BettingData): Promise<ProviderResponse> {
     try {
       // Get betting company code
@@ -282,7 +374,196 @@ export class ClubKonnectService {
     }
   }
 
-  // VERIFY SMART CARD
+  // ==================== AIRTIME E-PIN PURCHASE ====================
+  async purchaseAirtimeEPIN(data: AirtimeEPINData): Promise<ProviderResponse> {
+    try {
+      // Validate value (must be 100, 200, or 500)
+      if (![100, 200, 500].includes(data.value)) {
+        throw new AppError(
+          "Invalid value. Must be 100, 200, or 500",
+          HTTP_STATUS.BAD_REQUEST,
+          ERROR_CODES.VALIDATION_ERROR
+        );
+      }
+
+      // Validate quantity (1 to 100)
+      if (data.quantity < 1 || data.quantity > 100) {
+        throw new AppError(
+          "Invalid quantity. Must be between 1 and 100",
+          HTTP_STATUS.BAD_REQUEST,
+          ERROR_CODES.VALIDATION_ERROR
+        );
+      }
+
+      const networkCode = this.getNetworkCode(data.network);
+
+      const response = await this.client.get("/APIEPINV1.asp", {
+        params: {
+          UserID: this.provider.userId,
+          APIKey: this.provider.apiKey,
+          MobileNetwork: networkCode,
+          Value: data.value,
+          Quantity: data.quantity,
+          RequestID: data.reference,
+        },
+      });
+
+      // E-PIN responses are different - they return immediately with pins
+      if (response.data.TXN_EPIN && Array.isArray(response.data.TXN_EPIN)) {
+        return {
+          success: true,
+          pending: false,
+          reference: data.reference,
+          message: "Airtime E-PIN generated successfully",
+          pins: response.data.TXN_EPIN.map((pin: any) => ({
+            transactionId: pin.transactionid,
+            transactionDate: pin.transactiondate,
+            network: pin.mobilenetwork,
+            amount: pin.amount,
+            batchNo: pin.batchno,
+            serialNo: pin.sno,
+            pin: pin.pin,
+          })),
+          data: response.data,
+        };
+      }
+
+      // Fallback to standard response handling if format is different
+      return this.handleResponse(
+        response.data,
+        data.reference,
+        "Airtime E-PIN purchase"
+      );
+    } catch (error: any) {
+      if (error instanceof AppError) throw error;
+      return this.handleError(error, "Airtime E-PIN purchase");
+    }
+  }
+
+  // ==================== DATA E-PIN PURCHASE ====================
+  async purchaseDataEPIN(data: DataEPINData): Promise<ProviderResponse> {
+    try {
+      // Validate quantity (1 to 100)
+      if (data.quantity < 1 || data.quantity > 100) {
+        throw new AppError(
+          "Invalid quantity. Must be between 1 and 100",
+          HTTP_STATUS.BAD_REQUEST,
+          ERROR_CODES.VALIDATION_ERROR
+        );
+      }
+
+      const networkCode = this.getNetworkCode(data.network);
+
+      const response = await this.client.get("/APIDatabundleEPINV1.asp", {
+        params: {
+          UserID: this.provider.userId,
+          APIKey: this.provider.apiKey,
+          MobileNetwork: networkCode,
+          DataPlan: data.dataPlan,
+          Quantity: data.quantity,
+          RequestID: data.reference,
+        },
+      });
+
+      // Check for immediate E-PIN response
+      if (
+        response.data.TXN_EPIN_DATABUNDLE &&
+        Array.isArray(response.data.TXN_EPIN_DATABUNDLE)
+      ) {
+        return {
+          success: true,
+          pending: false,
+          reference: data.reference,
+          message: "Data E-PIN generated successfully",
+          pins: response.data.TXN_EPIN_DATABUNDLE.map((pin: any) => ({
+            transactionId: pin.transactionid,
+            transactionDate: pin.transactiondate,
+            network: pin.mobilenetwork,
+            productName: pin.productname,
+            batchNo: pin.batchno,
+            serialNo: pin.sno,
+            pin: pin.pin,
+          })),
+          data: response.data,
+        };
+      }
+
+      // Otherwise use standard response handling
+      return this.handleResponse(
+        response.data,
+        data.reference,
+        "Data E-PIN purchase"
+      );
+    } catch (error: any) {
+      if (error instanceof AppError) throw error;
+      return this.handleError(error, "Data E-PIN purchase");
+    }
+  }
+
+  // ==================== WAEC E-PIN PURCHASE ====================
+  async purchaseWAECEPIN(data: EducationEPINData): Promise<ProviderResponse> {
+    try {
+      const response = await this.client.get("/APIWAECV1.asp", {
+        params: {
+          UserID: this.provider.userId,
+          APIKey: this.provider.apiKey,
+          ExamType: data.examType, // e.g., 'waecdirect'
+          PhoneNo: data.phone,
+          RequestID: data.reference,
+        },
+      });
+
+      const result = this.handleResponse(
+        response.data,
+        data.reference,
+        "WAEC e-PIN purchase"
+      );
+
+      // Extract PIN details from carddetails if available
+      if (result.success && response.data.carddetails) {
+        result.token = response.data.carddetails;
+      }
+
+      return result;
+    } catch (error: any) {
+      if (error instanceof AppError) throw error;
+      return this.handleError(error, "WAEC e-PIN purchase");
+    }
+  }
+
+  // ==================== JAMB E-PIN PURCHASE ====================
+  async purchaseJAMBEPIN(data: EducationEPINData): Promise<ProviderResponse> {
+    try {
+      const response = await this.client.get("/APIJAMBV1.asp", {
+        params: {
+          UserID: this.provider.userId,
+          APIKey: this.provider.apiKey,
+          ExamType: data.examType, // e.g., 'jamb'
+          PhoneNo: data.phone,
+          RequestID: data.reference,
+        },
+      });
+
+      const result = this.handleResponse(
+        response.data,
+        data.reference,
+        "JAMB e-PIN purchase"
+      );
+
+      // Extract PIN details from carddetails if available
+      if (result.success && response.data.carddetails) {
+        result.token = response.data.carddetails;
+      }
+
+      return result;
+    } catch (error: any) {
+      if (error instanceof AppError) throw error;
+      return this.handleError(error, "JAMB e-PIN purchase");
+    }
+  }
+
+  // ==================== VERIFICATION METHODS ====================
+
   async verifySmartCard(
     smartCardNumber: string,
     provider: string
@@ -334,7 +615,6 @@ export class ClubKonnectService {
     }
   }
 
-  // VERIFY METER NUMBER
   async verifyMeterNumber(meterNumber: string, provider: string): Promise<any> {
     try {
       const electricCompanyCode = this.getElectricCompanyCode(provider);
@@ -383,7 +663,6 @@ export class ClubKonnectService {
     }
   }
 
-  // VERIFY BETTING CUSTOMER ID
   async verifyBettingCustomer(
     customerId: string,
     provider: string
@@ -435,7 +714,102 @@ export class ClubKonnectService {
     }
   }
 
-  // QUERY TRANSACTION
+  async verifySmilePhone(phone: string): Promise<any> {
+    try {
+      const response = await this.client.get("/APIVerifySmileV1.asp", {
+        params: {
+          UserID: this.provider.userId,
+          APIKey: this.provider.apiKey,
+          MobileNetwork: "smile-direct",
+          MobileNumber: phone,
+        },
+      });
+
+      const customerName = response.data.customer_name;
+
+      if (
+        !customerName ||
+        customerName === "INVALID_ACCOUNTNO" ||
+        customerName.includes("INVALID")
+      ) {
+        throw new AppError(
+          "Invalid Smile phone number",
+          HTTP_STATUS.BAD_REQUEST,
+          ERROR_CODES.VALIDATION_ERROR
+        );
+      }
+
+      return {
+        valid: true,
+        customerName: customerName,
+        phone: phone,
+      };
+    } catch (error: any) {
+      if (error instanceof AppError) throw error;
+
+      logger.error(
+        "ClubKonnect Smile phone verification error",
+        error.response?.data || error.message
+      );
+
+      throw new AppError(
+        error.response?.data?.customer_name ||
+          "Smile phone verification failed",
+        HTTP_STATUS.BAD_REQUEST,
+        ERROR_CODES.VALIDATION_ERROR
+      );
+    }
+  }
+
+  async verifyJAMBProfile(profileId: string, examType: string): Promise<any> {
+    try {
+      const response = await this.client.get("/APIVerifyJAMBV1.asp", {
+        params: {
+          UserID: this.provider.userId,
+          APIKey: this.provider.apiKey,
+          ExamType: examType,
+          ProfileID: profileId,
+        },
+      });
+
+      const customerName = response.data.customer_name;
+
+      if (
+        !customerName ||
+        customerName === "INVALID_ACCOUNTNO" ||
+        customerName.includes("INVALID")
+      ) {
+        throw new AppError(
+          "Invalid JAMB profile ID",
+          HTTP_STATUS.BAD_REQUEST,
+          ERROR_CODES.VALIDATION_ERROR
+        );
+      }
+
+      return {
+        valid: true,
+        customerName: customerName,
+        profileId: profileId,
+      };
+    } catch (error: any) {
+      if (error instanceof AppError) throw error;
+
+      logger.error(
+        "ClubKonnect JAMB profile verification error",
+        error.response?.data || error.message
+      );
+
+      throw new AppError(
+        error.response?.data?.customer_name ||
+          "JAMB profile verification failed",
+        HTTP_STATUS.BAD_REQUEST,
+        ERROR_CODES.VALIDATION_ERROR
+      );
+    }
+  }
+
+  // ==================== QUERY & CANCEL TRANSACTIONS ====================
+
   async queryTransaction(
     orderIdOrReference: string,
     isOrderId: boolean = true
@@ -470,7 +844,6 @@ export class ClubKonnectService {
     }
   }
 
-  // CANCEL TRANSACTION
   async cancelTransaction(orderId: string): Promise<any> {
     try {
       const response = await this.client.get("/APICancelV1.asp", {
@@ -507,7 +880,8 @@ export class ClubKonnectService {
     }
   }
 
-  // Handle ClubKonnect Response - Centralized response handling
+  // ==================== RESPONSE HANDLERS ====================
+
   private handleResponse(
     responseData: any,
     reference: string,
@@ -649,7 +1023,6 @@ export class ClubKonnectService {
     };
   }
 
-  // Handle ClubKonnect Error - Centralized error handling
   private handleError(error: any, operationType: string): never {
     if (error instanceof AppError) {
       throw error;
@@ -685,7 +1058,6 @@ export class ClubKonnectService {
     );
   }
 
-  // Get ClubKonnect Network Code
   private getNetworkCode(network: string): string {
     const networkMap: { [key: string]: string } = {
       mtn: "01",
@@ -708,7 +1080,6 @@ export class ClubKonnectService {
     return code;
   }
 
-  // Get ClubKonnect Cable TV Code
   private getCableTvCode(provider: string): string {
     const cableTvMap: { [key: string]: string } = {
       dstv: "dstv",
@@ -730,7 +1101,6 @@ export class ClubKonnectService {
     return code;
   }
 
-  // Get ClubKonnect Electric Company Code
   private getElectricCompanyCode(provider: string): string {
     const electricCompanyMap: { [key: string]: string } = {
       ekedc: "01",
@@ -773,7 +1143,6 @@ export class ClubKonnectService {
     return code;
   }
 
-  // Get ClubKonnect Meter Type Code
   private getMeterTypeCode(meterType: string): string {
     const meterTypeMap: { [key: string]: string } = {
       prepaid: "01",
@@ -793,7 +1162,6 @@ export class ClubKonnectService {
     return code;
   }
 
-  // Get ClubKonnect Betting Company Code
   private getBettingCompanyCode(provider: string): string {
     const bettingCompanyMap: { [key: string]: string } = {
       msport: "msport",
