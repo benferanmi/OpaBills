@@ -155,7 +155,6 @@ router.get("/system-banks", (req, res) => {
 router.get("/virtual-account-providers", (req, res) => {
   res.json({
     data: [
-      { name: "Paystack", code: "paystack", active: true },
       { name: "Monnify", code: "monnify", active: true },
       { name: "Safe Haven", code: "safehaven", active: false },
     ],

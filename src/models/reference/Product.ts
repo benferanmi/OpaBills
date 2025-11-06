@@ -1,8 +1,9 @@
 import mongoose, { Schema, Document, Types } from "mongoose";
+import { IProvider } from "./Provider";
 
 export interface IProduct extends Document {
   serviceId: Types.ObjectId;
-  providerId: Types.ObjectId;
+  providerId: Types.ObjectId | IProvider;
   type:
     | "data"
     | "airtime"
@@ -17,6 +18,7 @@ export interface IProduct extends Document {
     | "giftcard";
   name: string;
   code: string;
+  providerAmount: number;
   amount: number;
   validity?: string;
   description?: string;
@@ -90,6 +92,7 @@ const ProductSchema = new Schema<IProduct>(
       ],
       required: true,
     },
+    providerAmount: { type: Number, required: true },
     amount: { type: Number, required: true },
     validity: { type: String },
     description: { type: String },

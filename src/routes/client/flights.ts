@@ -12,9 +12,9 @@ const flightBookingController = new FlightBookingController();
 router.use(authenticate);
 router.get('/search', validateQuery(searchFlightsSchema), flightBookingController.searchFlights);
 router.post('/book', validateRequest(createFlightBookingSchema), flightBookingController.createFlightBooking);
-router.get('/', validateQuery(flightBookingQuerySchema), flightBookingController.getFlightBookings);
-router.get('/:bookingId', flightBookingController.getFlightBookingById);
-router.get('/reference/:reference', flightBookingController.getFlightBookingByReference);
+// router.get('/', validateQuery(flightBookingQuerySchema), flightBookingController.getFlightBookings);
+// router.get('/:bookingId', flightBookingController.getFlightBookingById);
+// router.get('/reference/:reference', flightBookingController.getFlightBookingByReference);
 router.post('/:bookingId/cancel', flightBookingController.cancelFlightBooking);
 
 export default router;

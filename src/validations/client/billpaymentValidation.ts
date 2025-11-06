@@ -189,3 +189,20 @@ export const verifyPhoneNumberSchema = Joi.object({
       "string.pattern.base": "Invalid phone number",
     }),
 });
+
+export const bettingPurchaseSchema = Joi.object({
+  providerId: Joi.string().required().messages({
+    "any.required": "ProviderId is required",
+    "string.empty": "ProviderId is required",
+  }),
+  amount: Joi.number().positive().required().messages({
+    "any.required": "Amount is required",
+  }),
+  number: Joi.string().required().messages({
+    "any.required": "Number is required",
+    "string.empty": "Number is not allowed to be empty",
+  }),
+  pin: Joi.string().required().messages({
+    "any.required": "Pin is required",
+  }),
+});

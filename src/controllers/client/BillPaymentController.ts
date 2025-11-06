@@ -599,9 +599,11 @@ export class BillPaymentController {
     next: NextFunction
   ) => {
     try {
-      const result = await this.billPaymentService.verifyBettingAccount(
-        req.body
-      );
+      const { number, providerId } = req.body;
+      const result = await this.billPaymentService.verifyBettingAccount({
+        customerId: number,
+        providerId,
+      });
       return sendSuccessResponse(
         res,
         result,
@@ -615,9 +617,12 @@ export class BillPaymentController {
   fundBetting = async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       const userId = req.user!.id;
+      const { providerId, amount, number } = req.body;
       const result = await this.billPaymentService.fundBetting({
-        ...req.body,
         userId,
+        customerId: number,
+        providerId,
+        amount,
       });
       return sendSuccessResponse(
         res,

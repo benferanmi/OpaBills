@@ -31,11 +31,6 @@ router.post('/opay', (req, res) => {
   res.json({ status: 'received' });
 });
 
-router.post('/paystack', (req, res) => {
-  // TODO: Implement Paystack webhook handler
-  res.json({ status: 'received' });
-});
-
 router.post('/safehaven', (req, res) => {
   // TODO: Implement Safe Haven webhook handler
   res.json({ status: 'received' });

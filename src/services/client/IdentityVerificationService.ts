@@ -71,9 +71,9 @@ export class IdentityVerificationService {
         `[FLOW START] Starting BVN/NIN validation for user ${userId}`
       );
 
-      // ==========================================
+      // ===
       // STEP 0: Check if user already has SafeHaven account (the real goal)
-      // ==========================================
+      // ===
       const existingSafeHavenAccount =
         await this.virtualAccountRepository.findOne({
           userId: new Types.ObjectId(userId.toString()),
@@ -93,10 +93,10 @@ export class IdentityVerificationService {
         );
       }
 
-      // ==========================================
+      // ===
       // STEP 1: Validate BVN/NIN with Monnify (if not already validated)
       // Purpose: Confirm BVN/NIN details are correct (not for actual use)
-      // ==========================================
+      // ===
       let monnifyAccount;
       let shouldSaveMonnify = false;
 
@@ -145,11 +145,11 @@ export class IdentityVerificationService {
         );
       }
 
-      // ==========================================
+      // ===
       // STEP 1.1: Save Monnify Account to Database (if newly created)
       // isPrimary = false (not for user's actual use)
       // type = "permanent" (for record-keeping)
-      // ==========================================
+      // ===
       if (shouldSaveMonnify) {
         logger.info(
           "[STEP 1.1] 💾 Saving Monnify account to database (for validation records only)..."
@@ -174,10 +174,10 @@ export class IdentityVerificationService {
           `[STEP 1.1] ✅ Monnify account saved (validation record): ${savedMonnifyAccount.accountNumber}`
         );
 
-        // ==========================================
+        // ===
         // STEP 1.2: Update User with BVN and Validation Status
         // bvnValidated = true (means: "BVN details confirmed correct")
-        // ==========================================
+        // ===
         logger.info(
           "[STEP 1.2] 💾 Updating user with BVN and validation status..."
         );
@@ -199,10 +199,10 @@ export class IdentityVerificationService {
         }
       }
 
-      // ==========================================
+      // ===
       // STEP 2: Send OTP via SafeHaven (if not already verified)
       // Purpose: Confirm user owns the BVN/NIN phone number
-      // ==========================================
+      // ===
       let identityId: string;
       let otpAlreadySent = false;
 
@@ -243,9 +243,9 @@ export class IdentityVerificationService {
         );
       }
 
-      // ==========================================
+      // ===
       // Store validation data in cache
-      // ==========================================
+      // ===
       const cacheKey = `${CACHE_KEYS.IDENTITY_VALIDATION}:${identityId}`;
 
       const cacheData = {

@@ -5,6 +5,9 @@ import { authenticate } from "@/middlewares/auth";
 import { walletLock } from "@/middlewares/walletLock";
 import { serviceCheck } from "@/middlewares/serviceCheck";
 import { rateLimiter } from "@/middlewares/rateLimiter";
+import { checkAndVerifyPin } from "@/middlewares/checkAndVerifyPin";
+import { validateRequest } from "@/middlewares/validation";
+import { bettingPurchaseSchema } from "@/validations/client/billpaymentValidation";
 
 const router = Router();
 
@@ -19,6 +22,8 @@ router.post("/verify", billPaymentController.verifyBettingAccount);
 router.post(
   "/",
   rateLimiter(10, 60000),
+  validateRequest(bettingPurchaseSchema),
+  checkAndVerifyPin,
   walletLock,
   billPaymentController.fundBetting
 );

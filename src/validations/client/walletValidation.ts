@@ -32,7 +32,7 @@ export const fundWalletSchema = Joi.object({
     .optional()
     .default("main"),
   provider: Joi.string()
-    .valid("paystack", "monnify", "flutterwave", "saveHaven")
+    .valid("monnify", "flutterwave", "saveHaven")
     .default("flutterwave"),
   method: Joi.string().valid("card", "bank").default("card"),
 });
@@ -56,7 +56,7 @@ export const bankTransferSchema = Joi.object({
     "string.pattern.base": "Pin must contain only numbers",
   }),
   provider: Joi.string()
-    .valid("paystack", "monnify", "flutterwave", "saveHaven")
+    .valid("monnify", "flutterwave", "saveHaven")
     .default("flutterwave")
     .messages({
       "any.required": "Provider is required",
@@ -136,5 +136,4 @@ export const identificationSchema = Joi.object({
         "dateOfBirth must be in format YYYY-MM-DD (e.g., 1990-01-15)",
       "any.invalid": "{{#message}}",
     }),
- 
 });

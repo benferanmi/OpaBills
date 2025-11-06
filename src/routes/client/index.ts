@@ -47,7 +47,7 @@ import publicRoutes from './public';
 
 const router = Router();
 
-// ============= AUTHENTICATED ROUTES =============
+//  AUTHENTICATED ROUTES 
 
 // Auth & Profile
 router.use('/auth', authRoutes);
@@ -88,10 +88,10 @@ router.use('/referrals', referralRoutes);
 router.use('/reference', referenceRoutes);
 router.use('/faqs', faqRoutes);
 
-// ============= WEBHOOK ROUTES (No Auth) =============
+//  WEBHOOK ROUTES (No Auth) 
 router.use('/webhooks', webhookRoutes);
 
-// ============= PUBLIC ROUTES (No Auth) =============
+//  PUBLIC ROUTES (No Auth) 
 router.use('/', publicRoutes);
 
 

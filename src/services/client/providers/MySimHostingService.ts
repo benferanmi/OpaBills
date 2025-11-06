@@ -4,35 +4,9 @@ import { HTTP_STATUS, ERROR_CODES } from "@/utils/constants";
 import logger from "@/logger";
 import { PROVIDERS } from "@/config";
 import https from "https";
+import { DataDataDTO, ProviderResponse, AirtimeData } from "@/types";
 
-interface ProviderResponse {
-  success: boolean;
-  pending?: boolean;
-  reference?: string;
-  status?: string;
-  providerReference?: string;
-  message: string;
-  data?: any;
-  token?: string;
-}
 
-interface AirtimeData {
-  phone: string;
-  amount: number;
-  network: string;
-  reference: string;
-}
-
-interface DataDataDTO {
-  phone: string;
-  amount: number;
-  provider?: string;
-  plan: string;
-  productCode?: string;
-  serviceCode?: string;
-  variationCode?: string;
-  reference: string;
-}
 
 export class MySimHostingService {
   private client: AxiosInstance;
@@ -48,7 +22,7 @@ export class MySimHostingService {
     });
   }
 
-  // ==================== DATA PLANS ====================
+  //  DATA PLANS 
   async getDataPlans(): Promise<any> {
     try {
       const agent = new https.Agent({ rejectUnauthorized: false });
@@ -86,7 +60,7 @@ export class MySimHostingService {
     }
   }
 
-  // ==================== DATA PURCHASE ====================
+  //  DATA PURCHASE 
   async purchaseData(data: DataDataDTO): Promise<ProviderResponse> {
     try {
       const payload = {
@@ -116,7 +90,7 @@ export class MySimHostingService {
     }
   }
 
-  // ==================== AIRTIME PURCHASE ====================
+  //  AIRTIME PURCHASE 
   // Note: MySimHosting API documentation doesn't show airtime endpoint
   // This is a placeholder implementation - needs to be verified with actual API docs
   async purchaseAirtime(data: AirtimeData): Promise<ProviderResponse> {
@@ -135,7 +109,7 @@ export class MySimHostingService {
     }
   }
 
-  // ==================== USSD/SMS REQUEST ====================
+  //  USSD/SMS REQUEST 
   async sendUSSDRequest(data: {
     command: string;
     sim: number;
@@ -227,7 +201,7 @@ export class MySimHostingService {
     }
   }
 
-  // ==================== HELPER METHODS ====================
+  //  HELPER METHODS 
   private handleTransactionResponse(
     responseData: any,
     clientReference: string,

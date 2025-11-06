@@ -1,12 +1,12 @@
 import { Response, NextFunction } from "express";
 import { AuthRequest } from "@/middlewares/auth";
-import { FlightService } from "@/services/client/FlightService";
 import { sendSuccessResponse, sendPaginatedResponse } from "@/utils/helpers";
+import { TravelBookingService } from "@/services/client/TravelBookingService";
 
 export class FlightBookingController {
-  private flightService: FlightService;
+  private travelBookingService: TravelBookingService;
   constructor() {
-    this.flightService = new FlightService();
+    this.travelBookingService = new TravelBookingService();
   }
 
   searchFlights = async (
@@ -16,7 +16,9 @@ export class FlightBookingController {
   ) => {
     try {
       const data = req.query;
-      const flights = await this.flightService.searchFlights(data as any);
+      const flights = await this.travelBookingService.searchFlights(
+        data as any
+      );
       return sendSuccessResponse(
         res,
         flights,
@@ -35,7 +37,7 @@ export class FlightBookingController {
     try {
       const userId = req.user!.id;
       const data = { ...req.body, userId };
-      const booking = await this.flightService.createFlightBooking(data);
+      const booking = await this.travelBookingService.bookFlight(data);
       return sendSuccessResponse(
         res,
         booking,
@@ -46,76 +48,76 @@ export class FlightBookingController {
     }
   };
 
-  getFlightBookings = async (
-    req: AuthRequest,
-    res: Response,
-    next: NextFunction
-  ) => {
-    try {
-      const userId = req.user!.id;
-      const page = parseInt(req.query.page as string) || 1;
-      const limit = parseInt(req.query.limit as string) || 10;
-      const filters = {
-        status: req.query.status as string,
-        startDate: req.query.startDate as string,
-        endDate: req.query.endDate as string,
-      };
+  // getFlightBookings = async (
+  //   req: AuthRequest,
+  //   res: Response,
+  //   next: NextFunction
+  // ) => {
+  //   try {
+  //     const userId = req.user!.id;
+  //     const page = parseInt(req.query.page as string) || 1;
+  //     const limit = parseInt(req.query.limit as string) || 10;
+  //     const filters = {
+  //       status: req.query.status as string,
+  //       startDate: req.query.startDate as string,
+  //       endDate: req.query.endDate as string,
+  //     };
 
-      const result = await this.flightService.getFlightBookings(
-        userId,
-        filters,
-        page,
-        limit
-      );
+  //     const result = await this.travelBookingService.getFlightBookings(
+  //       userId,
+  //       filters,
+  //       page,
+  //       limit
+  //     );
 
-      return sendPaginatedResponse(
-        res,
-        result.data,
-        { total: result.total, page, limit },
-        "Flight bookings retrieved successfully"
-      );
-    } catch (error) {
-      next(error);
-    }
-  };
+  //     return sendPaginatedResponse(
+  //       res,
+  //       result.data,
+  //       { total: result.total, page, limit },
+  //       "Flight bookings retrieved successfully"
+  //     );
+  //   } catch (error) {
+  //     next(error);
+  //   }
+  // };
 
-  getFlightBookingById = async (
-    req: AuthRequest,
-    res: Response,
-    next: NextFunction
-  ) => {
-    try {
-      const { bookingId } = req.params;
-      const booking = await this.flightService.getFlightBookingById(bookingId);
-      return sendSuccessResponse(
-        res,
-        booking,
-        "Flight booking retrieved successfully"
-      );
-    } catch (error) {
-      next(error);
-    }
-  };
+  // getFlightBookingById = async (
+  //   req: AuthRequest,
+  //   res: Response,
+  //   next: NextFunction
+  // ) => {
+  //   try {
+  //     const { bookingId } = req.params;
+  //     const booking = await this.travelBookingService.getFlightBookingById(bookingId);
+  //     return sendSuccessResponse(
+  //       res,
+  //       booking,
+  //       "Flight booking retrieved successfully"
+  //     );
+  //   } catch (error) {
+  //     next(error);
+  //   }
+  // };
 
-  getFlightBookingByReference = async (
-    req: AuthRequest,
-    res: Response,
-    next: NextFunction
-  ) => {
-    try {
-      const { reference } = req.params;
-      const booking = await this.flightService.getFlightBookingByReference(
-        reference
-      );
-      return sendSuccessResponse(
-        res,
-        booking,
-        "Flight booking retrieved successfully"
-      );
-    } catch (error) {
-      next(error);
-    }
-  };
+  // getFlightBookingByReference = async (
+  //   req: AuthRequest,
+  //   res: Response,
+  //   next: NextFunction
+  // ) => {
+  //   try {
+  //     const { reference } = req.params;
+  //     const booking = await this.travelBookingService.getFlightBookingByReference(
+  //       reference
+  //     );
+  //     return sendSuccessResponse(
+  //       res,
+  //       booking,
+  //       "Flight booking retrieved successfully"
+  //     );
+  //   } catch (error) {
+  //     next(error);
+  //   }
+  // };
 
   cancelFlightBooking = async (
     req: AuthRequest,
@@ -124,11 +126,12 @@ export class FlightBookingController {
   ) => {
     try {
       const userId = req.user!.id;
-      const { bookingId } = req.params;
-      const booking = await this.flightService.cancelFlightBooking(
-        bookingId,
-        userId
-      );
+      const { orderId, transactionId } = req.params;
+      const booking = await this.travelBookingService.cancelFlightBooking({
+        orderId,
+        transactionId,
+        userId,
+      });
       return sendSuccessResponse(
         res,
         booking,
@@ -141,7 +144,7 @@ export class FlightBookingController {
 
   getAirlines = async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
-      const airlines = await this.flightService.getAirlines();
+      const airlines = await this.travelBookingService.getAirlines();
       return sendSuccessResponse(
         res,
         airlines,
@@ -159,29 +162,31 @@ export class FlightBookingController {
   ) => {
     try {
       const { keyword } = req.query;
-      const cities = await this.flightService.searchCities(keyword as string);
+      const cities = await this.travelBookingService.searchFlightCities(
+        keyword as string
+      );
       return sendSuccessResponse(res, cities, "Cities retrieved successfully");
     } catch (error) {
       next(error);
     }
   };
 
-  getFlightClasses = async (
-    req: AuthRequest,
-    res: Response,
-    next: NextFunction
-  ) => {
-    try {
-      const classes = await this.flightService.getFlightClasses();
-      return sendSuccessResponse(
-        res,
-        classes,
-        "Flight classes retrieved successfully"
-      );
-    } catch (error) {
-      next(error);
-    }
-  };
+  // getFlightClasses = async (
+  //   req: AuthRequest,
+  //   res: Response,
+  //   next: NextFunction
+  // ) => {
+  //   try {
+  //     const classes = await this.travelBookingService.getFlightClasses();
+  //     return sendSuccessResponse(
+  //       res,
+  //       classes,
+  //       "Flight classes retrieved successfully"
+  //     );
+  //   } catch (error) {
+  //     next(error);
+  //   }
+  // };
 
   getFlightOffers = async (
     req: AuthRequest,
@@ -189,7 +194,9 @@ export class FlightBookingController {
     next: NextFunction
   ) => {
     try {
-      const offers = await this.flightService.searchFlights(req.query as any);
+      const offers = await this.travelBookingService.searchFlights(
+        req.query as any
+      );
       return sendSuccessResponse(
         res,
         offers,
@@ -207,7 +214,9 @@ export class FlightBookingController {
   ) => {
     try {
       const { offerId } = req.params;
-      const result = await this.flightService.validateOfferPrice(offerId);
+      const result = await this.travelBookingService.validateFlightPrice(
+        offerId
+      );
       return sendSuccessResponse(
         res,
         result,

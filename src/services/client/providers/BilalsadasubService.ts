@@ -3,45 +3,7 @@ import { AppError } from "@/middlewares/errorHandler";
 import { HTTP_STATUS, ERROR_CODES } from "@/utils/constants";
 import logger from "@/logger";
 import { PROVIDERS } from "@/config";
-
-interface ProviderResponse {
-  success: boolean;
-  pending?: boolean;
-  reference?: string;
-  status?: string;
-  providerReference?: string;
-  message: string;
-  data?: any;
-  token?: string;
-}
-
-interface AirtimeData {
-  phone: string;
-  amount: number;
-  network: string;
-  reference: string;
-}
-
-interface DataDataDTO {
-  phone: string;
-  amount: number;
-  provider?: string;
-  plan: string;
-  productCode?: string;
-  serviceCode?: string;
-  variationCode?: string;
-  reference?: string;
-}
-
-interface CableTvData {
-  smartCardNumber: string;
-  amount: number;
-  provider: string;
-  package: string;
-  reference: string;
-  phone?: string;
-  subscriptionType: "renew" | "change";
-}
+import { AirtimeData, CableTvData, DataDataDTO, ProviderResponse } from "@/types";
 
 export class BilalsadasubService {
   private client: AxiosInstance;

@@ -3,68 +3,7 @@ import { AppError } from "@/middlewares/errorHandler";
 import { HTTP_STATUS, ERROR_CODES } from "@/utils/constants";
 import logger from "@/logger";
 import { PROVIDERS } from "@/config";
-
-interface ProviderResponse {
-  success: boolean;
-  pending?: boolean;
-  reference?: string;
-  status?: string;
-  providerReference?: string;
-  message: string;
-  data?: any;
-  token?: string;
-}
-
-interface AirtimeData {
-  phone: string;
-  amount: number;
-  network: string;
-  reference: string;
-}
-
-interface DataDataDTO {
-  phone: string;
-  amount: number;
-  provider?: string;
-  plan: string;
-  productCode?: string;
-  serviceCode?: string;
-  variationCode?: string;
-  reference?: string;
-}
-
-interface CableTvData {
-  smartCardNumber: string;
-  amount: number;
-  provider: string;
-  package: string;
-  reference: string;
-  phone?: string;
-  subscriptionType: "renew" | "change";
-}
-
-interface ElectricityData {
-  reference: string;
-  meterNumber: string;
-  amount: number;
-  provider: string;
-  meterType: string;
-  productCode: string;
-  phone: string;
-}
-
-interface BettingData {
-  customerId: string;
-  amount: number;
-  provider: string;
-}
-
-interface AirtimeEPINData {
-  network: string;
-  value: number;
-  quantity: number;
-  reference: string;
-}
+import { AirtimeData, ProviderResponse, DataDataDTO, CableTvData, ElectricityData, BettingData, AirtimeEPINData } from "@/types";
 
 export class VtuNgService {
   private client: AxiosInstance;
@@ -153,7 +92,7 @@ export class VtuNgService {
     return networkMap[network.toLowerCase()] || network.toLowerCase();
   }
 
-  // ==================== AIRTIME PURCHASE ====================
+  //  AIRTIME PURCHASE 
 
   async purchaseAirtime(data: AirtimeData): Promise<ProviderResponse> {
     try {
@@ -177,7 +116,7 @@ export class VtuNgService {
     }
   }
 
-  // ==================== DATA PURCHASE ====================
+  //  DATA PURCHASE 
 
   async purchaseData(data: DataDataDTO): Promise<ProviderResponse> {
     try {
@@ -201,7 +140,7 @@ export class VtuNgService {
     }
   }
 
-  // ==================== CABLE TV PURCHASE ====================
+  //  CABLE TV PURCHASE 
 
   async purchaseCableTv(data: CableTvData): Promise<ProviderResponse> {
     try {
@@ -230,7 +169,7 @@ export class VtuNgService {
     }
   }
 
-  // ==================== ELECTRICITY PURCHASE ====================
+  //  ELECTRICITY PURCHASE 
 
   async purchaseElectricity(data: ElectricityData): Promise<ProviderResponse> {
     try {
@@ -261,7 +200,7 @@ export class VtuNgService {
     }
   }
 
-  // ==================== BETTING FUNDING ====================
+  //  BETTING FUNDING 
 
   async fundBetting(data: BettingData): Promise<ProviderResponse> {
     try {
@@ -284,7 +223,7 @@ export class VtuNgService {
     }
   }
 
-  // ==================== EPIN PURCHASE ====================
+  //  EPIN PURCHASE 
 
   async purchaseEPINs(data: AirtimeEPINData): Promise<ProviderResponse> {
     try {
@@ -318,7 +257,7 @@ export class VtuNgService {
     }
   }
 
-  // ==================== VERIFICATION METHODS ====================
+  //  VERIFICATION METHODS 
 
   async verifySmartCard(smartCardNumber: string, provider: string): Promise<any> {
     try {
@@ -417,7 +356,7 @@ export class VtuNgService {
     }
   }
 
-  // ==================== QUERY TRANSACTION ====================
+  //  QUERY TRANSACTION 
 
   async requeryTransaction(requestId: string): Promise<any> {
     try {
@@ -457,7 +396,7 @@ export class VtuNgService {
     }
   }
 
-  // ==================== CHECK BALANCE ====================
+  //  CHECK BALANCE 
 
   async checkBalance(): Promise<any> {
     try {
@@ -491,7 +430,7 @@ export class VtuNgService {
     }
   }
 
-  // ==================== HELPER METHODS ====================
+  //  HELPER METHODS 
 
   private handleTransactionResponse(
     responseData: any,

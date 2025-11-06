@@ -11,16 +11,12 @@ export const PROVIDERS = {
     name: "Flutterwave",
     baseUrl:
       process.env.FLUTTERWAVE_BASE_URL || "https://api.flutterwave.com/v3",
-    secretKey: process.env.FLUTTERWAVE_SECRET_KEY || "",
-    publicKey: process.env.FLUTTERWAVE_PUBLIC_KEY || "",
-  },
-  PAYSTACK: {
-    name: "Paystack",
-    baseUrl: process.env.PAYSTACK_BASE_URL || "https://api.paystack.co",
-    secretKey: process.env.PAYSTACK_SECRET_KEY || "",
-    publicKey: process.env.PAYSTACK_PUBLIC_KEY || "",
+    secretKey: process.env.FLUTTERWAVE_SECRET_KEY,
+    publicKey: process.env.FLUTTERWAVE_PUBLIC_KEY,
+    encryptionKey: process.env.FLUTTERWAVE_ENCRYPTION_KEY,
   },
   MONNIFY: {
+    name: "Monnify",
     baseUrl: process.env.MONNIFY_BASE_URL || "https://api.monnify.com",
     apiKey: process.env.MONNIFY_API_KEY || "",
     secretKey: process.env.MONNIFY_SECRET_KEY || "",
@@ -59,7 +55,19 @@ export const PROVIDERS = {
     baseUrl:
       process.env.BILALSADASUB_BASE_URL || "https://bilalsadasub.com/api",
     apiKey: process.env.BILALSADASUB_API_KEY || "",
-  }
+  },
+  GIFTBILLS: {
+    baseUrl: process.env.GIFTBILLS_BASE_URL || "https://api.giftbills.com/v1",
+    apiKey: process.env.GIFTBILLS_API_KEY || "",
+    merchantId: process.env.GIFTBILLS_MERCHANT_ID || "",
+    encryptionKey: process.env.GIFTBILLS_ENCRYPTION_KEY || "",
+  },
+  AMADEUS: {
+    name: "Amadeus",
+    baseUrl: process.env.AMADEUS_BASE_URL || "https://test.api.amadeus.com",
+    apiKey: process.env.AMADEUS_API_KEY || "",
+    secretKey: process.env.AMADEUS_SECRET_KEY || "",
+  },
 } as const;
 
 export type ProviderName = keyof typeof PROVIDERS;

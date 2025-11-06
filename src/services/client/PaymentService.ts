@@ -6,7 +6,6 @@ import { AppError } from "@/middlewares/errorHandler";
 import { HTTP_STATUS, ERROR_CODES } from "@/utils/constants";
 import logger from "@/logger";
 import { User } from "@/models/core/User";
-import { PaystackService } from "./PaystackService";
 import { SaveHavenService } from "@/services/client/SaveHavenService";
 import { MonnifyService } from "./MonnifyService";
 
@@ -32,13 +31,11 @@ export interface ProcessWithdrawalDTO {
 export class PaymentService {
   private walletService: WalletService;
   private notificationRepository: NotificationRepository;
-  private paystackService: PaystackService;
   private saveHavenService: SaveHavenService;
   private monnifyService: MonnifyService;
   constructor() {
     this.walletService = new WalletService();
     this.notificationRepository = new NotificationRepository();
-    this.paystackService = new PaystackService();
     this.saveHavenService = new SaveHavenService();
     this.monnifyService = new MonnifyService();
   }

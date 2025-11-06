@@ -7,23 +7,17 @@ import { HTTP_STATUS, ERROR_CODES } from "@/utils/constants";
 import { Types } from "mongoose";
 import { AppError } from "@/middlewares/errorHandler";
 import { generateReference } from "@/utils/helpers";
-import { Service } from "@/models/reference/Service";
 import { Product } from "@/models/reference/Product";
-import logger from "@/logger";
 import { IUser } from "@/models/core/User";
 import { ServiceRepository } from "@/repositories/ServiceRepository";
+import logger from "@/logger";
 
-interface BillPaymentData {
+interface BettingData {
   userId: string;
-  productId: string;
+  customerId: string;
   amount: number;
-  phone?: string;
-  phoneCode?: string;
-  smartCardNumber?: string;
-  meterNumber?: string;
-  meterType?: string;
-  customerId?: string;
-  serviceCode?: string;
+  providerId: string;
+  reference?: string;
 }
 
 export class BillPaymentService {
@@ -302,7 +296,7 @@ export class BillPaymentService {
         phone: data.phone,
         countryCode: data.countryCode,
         operatorId: data.operatorId,
-        email: data.email
+        email: data.email,
       },
     });
 
@@ -580,7 +574,7 @@ export class BillPaymentService {
     operatorId: string;
     countryCode: string;
     amount: number;
-    email: string
+    email: string;
   }) {
     const reference = generateReference("INT_DATA");
 
@@ -652,7 +646,7 @@ export class BillPaymentService {
           countryCode: data.countryCode,
           amount: totalAmount,
           reference,
-          email: data.email
+          email: data.email,
         });
 
       let status: "success" | "pending" | "failed";
@@ -1053,8 +1047,8 @@ export class BillPaymentService {
   /**
    * BETTING METHODS
    */
-  async fundBetting(data: BillPaymentData) {
-    const { userId, customerId, amount, serviceCode } = data;
+  async fundBetting(data: BettingData) {
+    const { userId, customerId, amount, providerId } = data;
     const reference = generateReference("BET");
 
     const wallet = await this.walletService.getWallet(userId);
@@ -1081,12 +1075,28 @@ export class BillPaymentService {
       "main"
     );
 
+    const service = await this.serviceRepository.findById(providerId);
+
+    if (!service) {
+      throw new AppError(
+        "Service not found",
+        HTTP_STATUS.NOT_FOUND,
+        ERROR_CODES.NOT_FOUND
+      );
+    }
+
+    const serviceCode = service.code;
+
     const transaction = await this.transactionRepository.create({
       walletId: wallet._id,
       reference,
       sourceId: new Types.ObjectId(userId),
       amount,
       type: "betting",
+      // provider: ""
+      direction: "DEBIT",
+      purpose: "betting_funding",
+      remark: `Betting funding for ${service.name} for ${customerId}`,
       status: "pending",
       meta: { customerId, serviceCode },
     });
@@ -1095,7 +1105,7 @@ export class BillPaymentService {
       const providerResult = await this.providerService.fundBetting({
         customerId: customerId!,
         amount,
-        provider: serviceCode!,
+        provider: serviceCode,
       });
 
       // Determine transaction status based on provider response
@@ -1151,16 +1161,23 @@ export class BillPaymentService {
     return this.providerService.getServicesByServiceTypeCode("betting");
   }
 
-  async verifyBettingAccount(data: {
-    customerId: string;
-    serviceCode: string;
-  }) {
+  async verifyBettingAccount(data: { customerId: string; providerId: string }) {
+    const service = await this.serviceRepository.findById(data.providerId);
+
+    if (!service) {
+      throw new AppError(
+        "Service not found",
+        HTTP_STATUS.NOT_FOUND,
+        ERROR_CODES.NOT_FOUND
+      );
+    }
+
+    const result = this.providerService.verifyClubKonnectBettingCustomer(
+      data.customerId,
+      service.code
+    );
     // Mock verification - implement actual provider verification if available
-    return {
-      valid: true,
-      customerId: data.customerId,
-      customerName: "Customer Name",
-    };
+    return result;
   }
 
   async getBettingHistory(

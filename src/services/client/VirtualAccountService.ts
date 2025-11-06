@@ -96,10 +96,10 @@ export class VirtualAccountService {
       `[STEP 4] Creating SafeHaven sub-account for user ${data.userId}`
     );
 
-    // ==========================================
+    // ===
     // STEP 4: Create SafeHaven Sub-Account (Primary Account)
     // Uses verified identityId from OTP validation
-    // ==========================================
+    // ===
     const saveHavenAccount = await this.createSafeHavenSubAccount(
       user,
       validationData.saveHavenIdentityId
@@ -119,10 +119,10 @@ export class VirtualAccountService {
       isActive: true,
     });
 
-    // ==========================================
+    // ===
     // NOTE: Monnify account already saved during validation
     // No need to save it again here
-    // ==========================================
+    // ===
     logger.info(
       `[STEP 4] ✅ SafeHaven sub-account created (primary): ${virtualAccount.accountNumber}`
     );

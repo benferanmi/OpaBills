@@ -4,82 +4,9 @@ import { AppError } from "@/middlewares/errorHandler";
 import { HTTP_STATUS, ERROR_CODES } from "@/utils/constants";
 import logger from "@/logger";
 import { PROVIDERS } from "@/config";
+import { AirtimeData, ProviderResponse, DataDataDTO, CableTvData, ElectricityData, BettingData, AirtimeEPINData, DataEPINData, EducationEPINData } from "@/types";
 
-interface ProviderResponse {
-  success: boolean;
-  pending?: boolean;
-  reference?: string;
-  status?: string;
-  providerReference?: string;
-  message: string;
-  data?: any;
-  token?: string;
-  pins?: any[]; // For E-PIN responses
-}
 
-interface AirtimeData {
-  phone: string;
-  amount: number;
-  network: string;
-  reference: string;
-}
-
-interface DataDataDTO {
-  phone: string;
-  amount: number;
-  provider?: string;
-  plan: string;
-  productCode: string;
-  serviceCode?: string;
-  variationCode?: string;
-  reference: string;
-}
-
-interface CableTvData {
-  smartCardNumber: string;
-  amount: number;
-  provider: string;
-  package: string;
-  reference: string;
-  phone?: string;
-  subscriptionType: "renew" | "change";
-}
-
-interface ElectricityData {
-  reference: string;
-  meterNumber: string;
-  amount: number;
-  provider: string;
-  meterType: string;
-  productCode: string;
-  phone: string;
-}
-
-interface BettingData {
-  customerId: string;
-  amount: number;
-  provider: string;
-}
-
-interface AirtimeEPINData {
-  network: string;
-  value: number; // 100, 200, or 500
-  quantity: number; // 1 to 100
-  reference: string;
-}
-
-interface DataEPINData {
-  network: string;
-  dataPlan: string;
-  quantity: number;
-  reference: string;
-}
-
-interface EducationEPINData {
-  examType: string; // 'waec' or 'jamb'
-  phone: string;
-  reference: string;
-}
 
 export class ClubKonnectService {
   private client: AxiosInstance;
@@ -94,7 +21,7 @@ export class ClubKonnectService {
     });
   }
 
-  // ==================== AIRTIME PURCHASE ====================
+  //  AIRTIME PURCHASE
   async purchaseAirtime(data: AirtimeData): Promise<ProviderResponse> {
     try {
       const networkCode = this.getNetworkCode(data.network);
@@ -120,7 +47,7 @@ export class ClubKonnectService {
     }
   }
 
-  // ==================== DATA PURCHASE ====================
+  //  DATA PURCHASE
   async purchaseData(data: DataDataDTO): Promise<ProviderResponse> {
     try {
       // Get product details to retrieve ClubKonnect data plan code
@@ -196,7 +123,7 @@ export class ClubKonnectService {
     }
   }
 
-  // ==================== SMILE DATA PURCHASE ====================
+  //  SMILE DATA PURCHASE
   async purchaseSmileData(data: {
     phone: string;
     dataPlan: string;
@@ -224,7 +151,7 @@ export class ClubKonnectService {
     }
   }
 
-  // ==================== SPECTRANET DATA PURCHASE ====================
+  //  SPECTRANET DATA PURCHASE
   async purchaseSpectranetData(data: {
     phone: string;
     dataPlan: string;
@@ -252,7 +179,7 @@ export class ClubKonnectService {
     }
   }
 
-  // ==================== CABLE TV PURCHASE ====================
+  //  CABLE TV PURCHASE
   async purchaseCableTv(data: CableTvData): Promise<ProviderResponse> {
     try {
       // Get product details to retrieve ClubKonnect package code
@@ -299,7 +226,7 @@ export class ClubKonnectService {
     }
   }
 
-  // ==================== ELECTRICITY PURCHASE ====================
+  //  ELECTRICITY PURCHASE
   async purchaseElectricity(data: ElectricityData): Promise<ProviderResponse> {
     try {
       // Get electric company code
@@ -339,7 +266,7 @@ export class ClubKonnectService {
     }
   }
 
-  // ==================== BETTING FUNDING ====================
+  //  BETTING FUNDING
   async fundBetting(data: BettingData): Promise<ProviderResponse> {
     try {
       // Get betting company code
@@ -374,7 +301,7 @@ export class ClubKonnectService {
     }
   }
 
-  // ==================== AIRTIME E-PIN PURCHASE ====================
+  //  AIRTIME E-PIN PURCHASE
   async purchaseAirtimeEPIN(data: AirtimeEPINData): Promise<ProviderResponse> {
     try {
       // Validate value (must be 100, 200, or 500)
@@ -440,7 +367,7 @@ export class ClubKonnectService {
     }
   }
 
-  // ==================== DATA E-PIN PURCHASE ====================
+  //  DATA E-PIN PURCHASE
   async purchaseDataEPIN(data: DataEPINData): Promise<ProviderResponse> {
     try {
       // Validate quantity (1 to 100)
@@ -500,7 +427,7 @@ export class ClubKonnectService {
     }
   }
 
-  // ==================== WAEC E-PIN PURCHASE ====================
+  //  WAEC E-PIN PURCHASE
   async purchaseWAECEPIN(data: EducationEPINData): Promise<ProviderResponse> {
     try {
       const response = await this.client.get("/APIWAECV1.asp", {
@@ -531,7 +458,7 @@ export class ClubKonnectService {
     }
   }
 
-  // ==================== JAMB E-PIN PURCHASE ====================
+  //  JAMB E-PIN PURCHASE
   async purchaseJAMBEPIN(data: EducationEPINData): Promise<ProviderResponse> {
     try {
       const response = await this.client.get("/APIJAMBV1.asp", {
@@ -562,7 +489,7 @@ export class ClubKonnectService {
     }
   }
 
-  // ==================== VERIFICATION METHODS ====================
+  //  VERIFICATION METHODS
 
   async verifySmartCard(
     smartCardNumber: string,
@@ -808,7 +735,7 @@ export class ClubKonnectService {
     }
   }
 
-  // ==================== QUERY & CANCEL TRANSACTIONS ====================
+  //  QUERY & CANCEL TRANSACTIONS
 
   async queryTransaction(
     orderIdOrReference: string,
@@ -880,8 +807,7 @@ export class ClubKonnectService {
     }
   }
 
-  // ==================== RESPONSE HANDLERS ====================
-
+  //  RESPONSE HANDLERS
   private handleResponse(
     responseData: any,
     reference: string,
@@ -890,10 +816,16 @@ export class ClubKonnectService {
     const statusCode = parseInt(responseData.statuscode || "0");
     const status = responseData.status || "";
 
+    // ClubKonnect uses different field names for order ID across different services
+    // orderid - for most services (airtime, data, cable, electricity)
+    // transactionid - for betting and some other services
+    const providerReference =
+      responseData.orderid || responseData.transactionid || "";
+
     logger.info(`ClubKonnect ${operationType} response`, {
       statusCode,
       status,
-      orderid: responseData.orderid,
+      providerReference,
     });
 
     // SUCCESS: 200 - ORDER_COMPLETED
@@ -902,7 +834,7 @@ export class ClubKonnectService {
         success: true,
         pending: false,
         reference: reference,
-        providerReference: responseData.orderid,
+        providerReference: providerReference,
         status: status,
         message: responseData.remark || `${operationType} successful`,
         data: responseData,
@@ -915,7 +847,7 @@ export class ClubKonnectService {
         success: false,
         pending: true,
         reference: reference,
-        providerReference: responseData.orderid,
+        providerReference: providerReference,
         status: status,
         message: "Order received and awaiting processing",
         data: responseData,
@@ -928,7 +860,7 @@ export class ClubKonnectService {
         success: false,
         pending: true,
         reference: reference,
-        providerReference: responseData.orderid,
+        providerReference: providerReference,
         status: status,
         message: "Transaction sent, awaiting network response",
         data: responseData,
@@ -941,7 +873,7 @@ export class ClubKonnectService {
         success: false,
         pending: true,
         reference: reference,
-        providerReference: responseData.orderid,
+        providerReference: providerReference,
         status: status,
         message:
           "Transaction sent but network unresponsive. Will retry automatically.",
@@ -955,7 +887,7 @@ export class ClubKonnectService {
         success: false,
         pending: true,
         reference: reference,
-        providerReference: responseData.orderid,
+        providerReference: providerReference,
         status: status,
         message:
           responseData.remark ||
@@ -971,8 +903,30 @@ export class ClubKonnectService {
         remark: responseData.remark,
       });
 
+      // Map specific error codes to user-friendly messages
+      const errorMessages: { [key: number]: string } = {
+        400: "Invalid credentials",
+        401: "Invalid request format",
+        402: "User ID is missing",
+        403: "API key is missing",
+        404: "Mobile network is missing",
+        405: "Amount is missing",
+        406: "Invalid amount",
+        407: "Minimum amount is 100",
+        408: "Minimum amount is 50,000",
+        409: "Invalid phone number",
+        412: "Insufficient balance",
+        417: "Insufficient balance",
+        418: "Invalid mobile network",
+      };
+
+      const errorMessage =
+        errorMessages[statusCode] ||
+        responseData.remark ||
+        `${operationType} failed`;
+
       throw new AppError(
-        responseData.remark || `${operationType} failed`,
+        errorMessage,
         HTTP_STATUS.BAD_REQUEST,
         ERROR_CODES.PROVIDER_ERROR
       );
@@ -992,7 +946,7 @@ export class ClubKonnectService {
       );
     }
 
-    // UNSPECIFIED ERRORS: x99 codes
+    // UNSPECIFIED ERRORS: x99 codes (199, 299, 399, 499, 599, 699)
     if (statusCode % 100 === 99) {
       logger.error(`ClubKonnect ${operationType} unspecified error`, {
         statusCode,
@@ -1006,21 +960,108 @@ export class ClubKonnectService {
       );
     }
 
-    // Unknown status - treat as pending for safety
-    logger.warn(`ClubKonnect ${operationType} unknown status`, {
+    // Handle statusCode 0 or missing - check if it's actually a valid pending status
+    if (statusCode === 0 || !statusCode) {
+      // Check if we have a provider reference (orderid or transactionid)
+      if (providerReference) {
+        // Check if status indicates a known state
+        const statusUpper = status.toUpperCase();
+
+        if (
+          statusUpper === "ORDER_RECEIVED" ||
+          statusUpper === "ORDER_PROCESSED"
+        ) {
+          // Valid pending states without proper statuscode
+          logger.warn(
+            `ClubKonnect ${operationType} missing statuscode but has valid status`,
+            {
+              status,
+              providerReference,
+            }
+          );
+
+          return {
+            success: false,
+            pending: true,
+            reference: reference,
+            providerReference: providerReference,
+            status: status,
+            message: "Transaction is being processed",
+            data: responseData,
+          };
+        }
+
+        if (statusUpper === "ORDER_COMPLETED") {
+          // Success without proper statuscode
+          logger.warn(
+            `ClubKonnect ${operationType} missing statuscode but marked completed`,
+            {
+              status,
+              providerReference,
+            }
+          );
+
+          return {
+            success: true,
+            pending: false,
+            reference: reference,
+            providerReference: providerReference,
+            status: status,
+            message: `${operationType} successful`,
+            data: responseData,
+          };
+        }
+
+        // Has provider reference but unknown status
+        logger.warn(
+          `ClubKonnect ${operationType} unknown status with reference`,
+          {
+            statusCode,
+            status,
+            providerReference,
+          }
+        );
+
+        return {
+          success: false,
+          pending: true,
+          reference: reference,
+          providerReference: providerReference,
+          status: status,
+          message: "Transaction status unclear, please requery",
+          data: responseData,
+        };
+      }
+
+      // No provider reference - likely a validation error
+      logger.error(
+        `ClubKonnect ${operationType} error - no provider reference`,
+        {
+          statusCode,
+          status,
+          responseData,
+        }
+      );
+
+      throw new AppError(
+        status || `${operationType} failed`,
+        HTTP_STATUS.BAD_REQUEST,
+        ERROR_CODES.PROVIDER_ERROR
+      );
+    }
+
+    // Unknown status code - treat as error for safety
+    logger.error(`ClubKonnect ${operationType} unknown status code`, {
       statusCode,
       status,
+      providerReference,
     });
 
-    return {
-      success: false,
-      pending: true,
-      reference: reference,
-      providerReference: responseData.orderid,
-      status: status,
-      message: "Transaction status unclear, please requery",
-      data: responseData,
-    };
+    throw new AppError(
+      status || "Unknown transaction status",
+      HTTP_STATUS.BAD_REQUEST,
+      ERROR_CODES.PROVIDER_ERROR
+    );
   }
 
   private handleError(error: any, operationType: string): never {

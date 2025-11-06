@@ -4,9 +4,9 @@ const fs = require('fs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 
-// ============================================
+// =====
 // SafeHaven Client Assertion Generator
-// ============================================
+// =====
 
 // STEP 1: UPDATE THESE VALUES
 const CLIENT_ID = '248897306f83bd0ee7ef72bf68fa48cc'; // Get this from SafeHaven after uploading public key

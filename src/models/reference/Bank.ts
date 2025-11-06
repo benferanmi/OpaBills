@@ -3,7 +3,6 @@ import mongoose, { Schema, Document } from "mongoose";
 export interface IBank extends Document {
   name: string;
   shortName?: string;
-  paystackCode?: string;
   flutterwaveCode?: string;
   monnifyCode?: string;
   savehavenCode?: string;
@@ -21,7 +20,6 @@ const BankSchema = new Schema<IBank>(
   {
     name: { type: String, required: true },
     shortName: { type: String },
-    paystackCode: { type: String },
     flutterwaveCode: { type: String },
     monnifyCode: { type: String },
     savehavenCode: { type: String },
@@ -37,7 +35,6 @@ const BankSchema = new Schema<IBank>(
 
 // Indexes for performance
 BankSchema.index({ name: 1 });
-BankSchema.index({ paystackCode: 1 });
 BankSchema.index({ flutterwaveCode: 1 });
 BankSchema.index({ monnifyCode: 1 });
 BankSchema.index({ savehavenCode: 1 });

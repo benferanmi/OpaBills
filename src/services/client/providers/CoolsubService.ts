@@ -3,69 +3,8 @@ import { AppError } from "@/middlewares/errorHandler";
 import { HTTP_STATUS, ERROR_CODES } from "@/utils/constants";
 import logger from "@/logger";
 import { PROVIDERS } from "@/config";
+import { AirtimeData, ProviderResponse, DataDataDTO, CableTvData, ElectricityData, EducationData, BettingData } from "@/types";
 
-interface ProviderResponse {
-  success: boolean;
-  pending?: boolean;
-  reference?: string;
-  status?: string;
-  providerReference?: string;
-  message: string;
-  data?: any;
-  token?: string;
-}
-
-interface AirtimeData {
-  phone: string;
-  amount: number;
-  network: string;
-  reference: string;
-}
-
-interface DataDataDTO {
-  phone: string;
-  amount: number;
-  provider?: string;
-  plan: string;
-  productCode?: string;
-  serviceCode?: string;
-  variationCode?: string;
-  reference: string;
-}
-
-interface CableTvData {
-  smartCardNumber: string;
-  amount: number;
-  provider: string;
-  package: string;
-  reference: string;
-  phone?: string;
-  subscriptionType: "renew" | "change";
-}
-
-interface ElectricityData {
-  reference: string;
-  meterNumber: string;
-  amount: number;
-  provider: string;
-  meterType: string;
-  productCode: string;
-  phone: string;
-}
-
-interface BettingData { 
-  customerId: string;
-  amount: number;
-  provider: string;
-}
-
-interface EducationData {
-  profileId: string;
-  phone: string;
-  variationCode: string;
-  amount: number;
-  reference: string;
-}
 
 export class CoolsubService {
   private client: AxiosInstance;
