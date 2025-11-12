@@ -1,0 +1,196 @@
+name: Pelbliss Staging Deployment
+
+on:
+  push:
+    branches:
+      - staging
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    if: github.event_name == 'push'
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: "20"
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Build Pelbliss Staging Project
+        env:
+          # Remove STAGING_ prefix for build environment variables
+          MONGODB_URI: ${{ secrets.STAGING_MONGODB_URI }}
+          DB_NAME: ${{ secrets.STAGING_DB_NAME }}
+          REDIS_URL: ${{ secrets.STAGING_REDIS_URL }}
+
+          #JWT
+          JWT_ACCESS_SECRET: ${{ secrets.STAGING_JWT_ACCESS_SECRET }}
+          JWT_REFRESH_SECRET: ${{ secrets.STAGING_JWT_REFRESH_SECRET }}
+          JWT_ACCESS_EXPIRES_IN: ${{ secrets.STAGING_JWT_ACCESS_EXPIRES_IN }}
+          JWT_REFRESH_EXPIRES_IN: ${{ secrets.STAGING_JWT_REFRESH_EXPIRES_IN }}
+
+          #Admin Jwt
+          ADMIN_JWT_ACCESS_SECRET: ${{ secrets.STAGING_ADMIN_JWT_ACCESS_SECRET }}
+          ADMIN_JWT_REFRESH_SECRET: ${{ secrets.STAGING_ADMIN_JWT_REFRESH_SECRET }}
+          ADMIN_JWT_ACCESS_EXPIRES_IN: ${{ secrets.STAGING_ADMIN_JWT_ACCESS_EXPIRES_IN }}
+          ADMIN_JWT_REFRESH_EXPIRES_IN: ${{ secrets.STAGING_ADMIN_JWT_REFRESH_EXPIRES_IN }}
+
+          #Google OAuth / users /vendors
+          GOOGLE_CLIENT_ID_USER: ${{ secrets.STAGING_GOOGLE_CLIENT_ID_USER }}
+          GOOGLE_CLIENT_SECRET_USER: ${{ secrets.STAGING_GOOGLE_CLIENT_SECRET_USER }}
+          GOOGLE_CLIENT_ID_VENDOR: ${{ secrets.STAGING_GOOGLE_CLIENT_ID_VENDOR }}
+          GOOGLE_CLIENT_SECRET_VENDOR: ${{ secrets.STAGING_GOOGLE_CLIENT_SECRET_VENDOR }}
+
+          #Email service
+          EMAIL_SERVICE: ${{ secrets.STAGING_EMAIL_SERVICE }}
+          EMAIL_USER: ${{ secrets.STAGING_EMAIL_USER }}
+          EMAIL_PASSWORD: ${{ secrets.STAGING_EMAIL_PASSWORD }}
+          EMAIL_FROM: ${{ secrets.STAGING_EMAIL_FROM }}
+          ADMIN_EMAIL: ${{ secrets.STAGING_ADMIN_EMAIL }}
+
+          #imagekit
+          IMAGEKIT_PUBLIC_KEY: ${{ secrets.STAGING_IMAGEKIT_PUBLIC_KEY }}
+          IMAGEKIT_PRIVATE_KEY: ${{ secrets.STAGING_IMAGEKIT_PRIVATE_KEY }}
+          IMAGEKIT_URL_ENDPOINT: ${{ secrets.STAGING_IMAGEKIT_URL_ENDPOINT }}
+
+          #paystack
+          PAYSTACK_SECRET_KEY: ${{ secrets.STAGING_PAYSTACK_SECRET_KEY }}
+
+          #new relic
+          NEW_RELIC_APP_NAME: ${{ secrets.STAGING_NEW_RELIC_APP_NAME }}
+          NEW_RELIC_LICENSE_KEY: ${{ secrets.STAGING_NEW_RELIC_LICENSE_KEY }}
+
+          #Application
+          PORT: ${{ secrets.STAGING_PORT }}
+          NODE_ENV: ${{ secrets.STAGING_NODE_ENV }}
+          CLIENT_URL: ${{ secrets.STAGING_CLIENT_URL }}
+          API_BASE_URL: ${{ secrets.STAGING_API_BASE_URL }}
+
+          #MAILGUN
+          MAILGUN_DOMAIN: ${{ secrets.PROD_MAILGUN_DOMAIN }}
+          MAILGUN_API_KEY: ${{ secrets.PROD_MAILGUN_API_KEY }}
+
+          #Security
+          BCRYPT_SALT_ROUNDS: ${{ secrets.STAGING_BCRYPT_SALT_ROUNDS }}
+          OTP_EXPIRY_MINUTES: ${{ secrets.STAGING_OTP_EXPIRY_MINUTES }}
+          RESET_OTP_EXPIRY_MINUTES: ${{ secrets.STAGING_RESET_OTP_EXPIRY_MINUTES }}
+          MAX_LOGIN_ATTEMPTS: ${{ secrets.STAGING_MAX_LOGIN_ATTEMPTS }}
+          ACCOUNT_LOCKOUT_TIME: ${{ secrets.STAGING_ACCOUNT_LOCKOUT_TIME }}
+
+          #Rate Limiting
+          RATE_LIMIT_WINDOW_MS: ${{ secrets.STAGING_RATE_LIMIT_WINDOW_MS }}
+          RATE_LIMIT_MAX_REQUESTS: ${{ secrets.STAGING_RATE_LIMIT_MAX_REQUESTS }}
+          AUTH_RATE_LIMIT_MAX: ${{ secrets.STAGING_AUTH_RATE_LIMIT_MAX }}
+          REGISTRATION_RATE_LIMIT_MAX: ${{ secrets.STAGING_REGISTRATION_RATE_LIMIT_MAX }}
+          OTP_RATE_LIMIT_MAX: ${{ secrets.STAGING_OTP_RATE_LIMIT_MAX }}
+
+        run: |
+          npm run build
+
+      - name: Deploy to Pelbliss Staging Server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.STAGING_SSH_HOST }}
+          username: ${{ secrets.STAGING_SSH_USER }}
+          port: ${{ secrets.STAGING_SSH_PORT }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          source: "./*"
+          target: ${{ secrets.STAGING_PROJECT_PATH }}
+
+      - name: Create Pelbliss Staging .env file on server
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.STAGING_SSH_HOST }}
+          username: ${{ secrets.STAGING_SSH_USER }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          port: ${{ secrets.STAGING_SSH_PORT }}
+          script: |
+            rm -rf ${{ secrets.STAGING_ENV_PATH }}
+            echo "PORT=${{ secrets.STAGING_PORT }}" >> ${{ secrets.STAGING_ENV_PATH }}
+            echo "MONGODB_URI=${{ secrets.STAGING_MONGODB_URI }}" >> ${{ secrets.STAGING_ENV_PATH }}
+            echo "DB_NAME=${{ secrets.STAGING_DB_NAME }}" >> ${{ secrets.STAGING_ENV_PATH }}
+            echo "REDIS_URL=${{ secrets.STAGING_REDIS_URL }}" >> ${{ secrets.STAGING_ENV_PATH }}
+
+            echo "JWT_ACCESS_SECRET=${{ secrets.STAGING_JWT_ACCESS_SECRET }}" >> ${{ secrets.STAGING_ENV_PATH }}
+            echo "JWT_REFRESH_SECRET=${{ secrets.STAGING_JWT_REFRESH_SECRET }}" >> ${{ secrets.STAGING_ENV_PATH }}
+            echo "JWT_ACCESS_EXPIRES_IN=${{ secrets.STAGING_JWT_ACCESS_EXPIRES_IN }}" >> ${{ secrets.STAGING_ENV_PATH }}
+            echo "JWT_REFRESH_EXPIRES_IN=${{ secrets.STAGING_JWT_REFRESH_EXPIRES_IN }}" >> ${{ secrets.STAGING_ENV_PATH }}
+
+            echo "JWT_ADMIN_ACCESS_SECRET=${{ secrets.STAGING_ADMIN_JWT_ACCESS_SECRET }}" >> ${{ secrets.STAGING_ENV_PATH }}
+            echo "JWT_ADMIN_REFRESH_SECRET=${{ secrets.STAGING_ADMIN_JWT_REFRESH_SECRET }}" >> ${{ secrets.STAGING_ENV_PATH }}
+            echo "JWT_ADMIN_ACCESS_EXPIRES_IN=${{ secrets.STAGING_ADMIN_JWT_ACCESS_EXPIRES_IN }}" >> ${{ secrets.STAGING_ENV_PATH }}
+            echo "JWT_ADMIN_REFRESH_EXPIRES_IN=${{ secrets.STAGING_ADMIN_JWT_REFRESH_EXPIRES_IN }}" >> ${{ secrets.STAGING_ENV_PATH }}
+
+            echo "MAILGUN_DOMAIN=${{ secrets.PROD_MAILGUN_DOMAIN }}" >> ${{ secrets.STAGING_ENV_PATH }}
+            echo "MAILGUN_API_KEY=${{ secrets.STAGING_MAILGUN_API_KEY }}" >> ${{ secrets.PROD_ENV_PATH }}
+
+            echo "GOOGLE_CLIENT_ID_USER=${{ secrets.STAGING_GOOGLE_CLIENT_ID_USER }}" >> ${{ secrets.STAGING_ENV_PATH }}
+            echo "GOOGLE_CLIENT_SECRET_USER=${{ secrets.STAGING_GOOGLE_CLIENT_SECRET_USER }}" >> ${{ secrets.STAGING_ENV_PATH }}
+            echo "GOOGLE_CLIENT_ID_VENDOR=${{ secrets.STAGING_GOOGLE_CLIENT_ID_VENDOR }}" >> ${{ secrets.STAGING_ENV_PATH }}
+            echo "GOOGLE_CLIENT_SECRET_VENDOR=${{ secrets.STAGING_GOOGLE_CLIENT_SECRET_VENDOR }}" >> ${{ secrets.STAGING_ENV_PATH }}
+
+            echo "EMAIL_SERVICE=${{ secrets.STAGING_EMAIL_SERVICE }}" >> ${{ secrets.STAGING_ENV_PATH }}
+            echo "EMAIL_USER=${{ secrets.STAGING_EMAIL_USER }}" >> ${{ secrets.STAGING_ENV_PATH }}
+            echo "EMAIL_PASSWORD=${{ secrets.STAGING_EMAIL_PASSWORD }}" >> ${{ secrets.STAGING_ENV_PATH }}
+            echo "EMAIL_FROM=${{ secrets.STAGING_EMAIL_FROM }}" >> ${{ secrets.STAGING_ENV_PATH }}
+            echo "ADMIN_EMAIL=${{ secrets.STAGING_ADMIN_EMAIL }}" >> ${{ secrets.STAGING_ENV_PATH }}
+
+            echo "IMAGEKIT_PUBLIC_KEY=${{ secrets.STAGING_IMAGEKIT_PUBLIC_KEY }}" >> ${{ secrets.STAGING_ENV_PATH }}
+            echo "IMAGEKIT_PRIVATE_KEY=${{ secrets.STAGING_IMAGEKIT_PRIVATE_KEY }}" >> ${{ secrets.STAGING_ENV_PATH }}
+            echo "IMAGEKIT_URL_ENDPOINT=${{ secrets.STAGING_IMAGEKIT_URL_ENDPOINT }}" >> ${{ secrets.STAGING_ENV_PATH }}
+
+            echo "PAYSTACK_SECRET_KEY=${{ secrets.STAGING_PAYSTACK_SECRET_KEY }}" >> ${{ secrets.STAGING_ENV_PATH }}
+
+            echo "NEW_RELIC_APP_NAME=${{ secrets.STAGING_NEW_RELIC_APP_NAME }}" >> ${{ secrets.STAGING_ENV_PATH }}
+            echo "NEW_RELIC_LICENSE_KEY=${{ secrets.STAGING_NEW_RELIC_LICENSE_KEY }}" >> ${{ secrets.STAGING_ENV_PATH }}
+
+            echo "NODE_ENV=${{ secrets.STAGING_NODE_ENV }}" >> ${{ secrets.STAGING_ENV_PATH }}
+            echo "CLIENT_URL=${{ secrets.STAGING_CLIENT_URL }}" >> ${{ secrets.STAGING_ENV_PATH }}
+            echo "API_BASE_URL=${{ secrets.STAGING_API_BASE_URL }}" >> ${{ secrets.STAGING_ENV_PATH }}
+
+            echo "BCRYPT_SALT_ROUNDS=${{ secrets.STAGING_BCRYPT_SALT_ROUNDS }}" >> ${{ secrets.STAGING_ENV_PATH }}
+            echo "OTP_EXPIRY_MINUTES=${{ secrets.STAGING_OTP_EXPIRY_MINUTES }}" >> ${{ secrets.STAGING_ENV_PATH }}
+            echo "RESET_OTP_EXPIRY_MINUTES=${{ secrets.STAGING_RESET_OTP_EXPIRY_MINUTES }}" >> ${{ secrets.STAGING_ENV_PATH }}
+            echo "MAX_LOGIN_ATTEMPTS=${{ secrets.STAGING_MAX_LOGIN_ATTEMPTS }}" >> ${{ secrets.STAGING_ENV_PATH }}
+            echo "ACCOUNT_LOCKOUT_TIME=${{ secrets.STAGING_ACCOUNT_LOCKOUT_TIME }}" >> ${{ secrets.STAGING_ENV_PATH }}
+
+            echo "RATE_LIMIT_WINDOW_MS=${{ secrets.STAGING_RATE_LIMIT_WINDOW_MS }}" >> ${{ secrets.STAGING_ENV_PATH }}
+            echo "RATE_LIMIT_MAX_REQUESTS=${{ secrets.STAGING_RATE_LIMIT_MAX_REQUESTS }}" >> ${{ secrets.STAGING_ENV_PATH }}
+            echo "AUTH_RATE_LIMIT_MAX=${{ secrets.STAGING_AUTH_RATE_LIMIT_MAX }}" >> ${{ secrets.STAGING_ENV_PATH }}
+            echo "REGISTRATION_RATE_LIMIT_MAX=${{ secrets.STAGING_REGISTRATION_RATE_LIMIT_MAX }}" >> ${{ secrets.STAGING_ENV_PATH }}
+            echo "OTP_RATE_LIMIT_MAX=${{ secrets.STAGING_OTP_RATE_LIMIT_MAX }}" >> ${{ secrets.STAGING_ENV_PATH }}
+
+      - name: Restart Pelbliss Staging Application
+        uses: appleboy/ssh-action@v0.1.10
+        with:
+          host: ${{ secrets.STAGING_SSH_HOST }}
+          username: ${{ secrets.STAGING_SSH_USER }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          port: ${{ secrets.STAGING_SSH_PORT }}
+          script: |
+            export NVM_DIR="$HOME/.nvm"
+            source $NVM_DIR/nvm.sh
+            cd ${{ secrets.STAGING_PROJECT_PATH }}
+
+            mkdir -p logs
+
+
+            # Stop the application if running
+            pm2 stop pelbliss-staging || true
+            pm2 delete pelbliss-staging || true
+
+            # Start using ecosystem file
+            pm2 start stagingEcosystem.config.js --env staging
+
+            # Save PM2 configuration
+            pm2 save
+
+            # Setup PM2 to auto-start on system reboot
+            pm2 startup || true

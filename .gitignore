@@ -6,3 +6,5 @@ dist/
 documents/
 seeders/
 *.pem
+*.txt
+upload-secrets.ps1
