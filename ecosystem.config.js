@@ -1,7 +1,7 @@
 module.exports = {
     apps: [
         {
-            name: 'Pelbliss Backend',
+            name: 'Backend',
             script: './dist/server.js',
             cwd: '/var/www/backend',
             instances: 1,

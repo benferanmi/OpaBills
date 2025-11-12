@@ -225,11 +225,11 @@ jobs:
             mkdir -p logs
 
             # Stop the application if running
-            pm2 stop backend-prod || true
-            pm2 delete backend-prod || true
+            pm2 stop backend || true
+            pm2 delete backend || true
 
             # Start using ecosystem file
-            pm2 start ecosystem.config.js --name backend-prod --env production
+            pm2 start ecosystem.config.js --name backend --env production
 
             # Save PM2 configuration
             pm2 save
