@@ -4,8 +4,6 @@ import { connectDatabase } from "./config/database";
 import { connectRedis } from "./config/redis";
 import app from "./app";
 import logger from "./logger";
-import { initializeFirebase } from "./config/firebase";
-import { runAllSeeders, seedServices } from "./seeders";
 
 const PORT = process.env.PORT || 5000;
 
@@ -16,7 +14,6 @@ const startServer = async () => {
     await connectRedis();
     await connectDatabase();
     // await initializeFirebase();
-    // await runAllSeeders();
 
     // Start Express server
     const server = app.listen(PORT, () => {
