@@ -218,21 +218,21 @@ jobs:
           key: ${{ secrets.PROD_SSH_KEY }}
           port: ${{ secrets.PROD_SSH_PORT }}
           script: |
-            export NVM_DIR="$HOME/.nvm"
-            source $NVM_DIR/nvm.sh
             cd ${{ secrets.PROD_PROJECT_PATH }}
 
-            mkdir -p logs
+            # Ensure log directory exists
+            sudo mkdir -p /var/log/apps/backend
+            sudo chown -R $USER:$USER /var/log/apps/backend
 
             # Stop the application if running
-            pm2 stop backend || true
-            pm2 delete backend || true
+            pm2 stop Backend || true
+            pm2 delete Backend || true
 
-            # Start using ecosystem file
-            pm2 start ecosystem.config.js --name backend --env production
+            # Start using ecosystem file (matches the name in your ecosystem.config.js)
+            pm2 start ecosystem.config.js --env production
 
             # Save PM2 configuration
             pm2 save
 
-            # Setup PM2 to auto-start on system reboot
-            pm2 startup || true
+            # Show status
+            pm2 list
