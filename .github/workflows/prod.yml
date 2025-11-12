@@ -1,4 +1,4 @@
-name: Pelbliss Backend Production Deployment
+name: Backend Production Deployment
 
 on:
   push:
@@ -225,11 +225,11 @@ jobs:
             mkdir -p logs
 
             # Stop the application if running
-            pm2 stop pelbliss-backend-prod || true
-            pm2 delete pelbliss-backend-prod || true
+            pm2 stop backend-prod || true
+            pm2 delete backend-prod || true
 
             # Start using ecosystem file
-            pm2 start ecosystem.config.js --name pelbliss-backend-prod --env production
+            pm2 start ecosystem.config.js --name backend-prod --env production
 
             # Save PM2 configuration
             pm2 save
