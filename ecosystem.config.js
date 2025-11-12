@@ -27,9 +27,9 @@ module.exports = {
             max_memory_restart: '1G',
 
             // Restart policy
-            restart_delay: 4000,
+            restart_delay: 10000,
             max_restarts: 10,
-            min_uptime: '10s',
+            min_uptime: '30s',
 
             // Health monitoring
             kill_timeout: 5000,
