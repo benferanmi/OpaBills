@@ -12,10 +12,10 @@ module.exports = {
                 PORT: 5001
             },
 
-            // Logging
-            error_file: '/var/log/apps/backend/err.log',
-            out_file: '/var/log/apps/backend/out.log',
-            log_file: '/var/log/apps/backend/combined.log',
+            // Logging - Using local logs folder
+            error_file: './logs/err.log',
+            out_file: './logs/out.log',
+            log_file: './logs/combined.log',
 
             log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
 
@@ -33,8 +33,8 @@ module.exports = {
 
             // Health monitoring
             kill_timeout: 5000,
-            wait_ready: true,
-            listen_timeout: 8000,
+            wait_ready: false,  // Changed to false to avoid waiting issues
+            listen_timeout: 3000,
 
             // Source control
             merge_logs: true,
@@ -46,5 +46,4 @@ module.exports = {
             shutdown_with_message: true
         }
     ],
-
 };

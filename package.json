@@ -6,7 +6,7 @@
     "create:superAdmin": "ts-node src/seeders/createSuperAdmin.ts",
     "create:plans": "ts-node src/seeders/createPlans.ts",
     "create:role": "ts-node src/seeders/createSuperAdminRole.ts",
-    "build": "tsc",
+    "build": "tsc && tsc-alias",
     "start": "node -r tsconfig-paths/register dist/server.js"
   },
   "dependencies": {
@@ -46,6 +46,7 @@
     "@types/uuid": "^9.0.0",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
+    "tsc-alias": "^1.8.16",
     "typescript": "^5.3.3"
   }
 }
