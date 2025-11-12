@@ -1,9 +1,7 @@
 import RedisStore from "rate-limit-redis";
 import rateLimit from "express-rate-limit";
-import { CacheService } from "@/services/CacheService";
-import { getRedisClient } from "@/config";
+import { redisClient } from "@/config/redis";
 
-const cacheService = new CacheService();
 export const HTTP_STATUS = {
   OK: 200,
   CREATED: 201,
@@ -53,6 +51,7 @@ export const ERROR_CODES = {
   DATABASE_ERROR: "DATABASE_ERROR",
   NOT_IMPLEMENTED: "NOT_IMPLEMENTED",
   INVALID_PIN: "INVALID_PIN",
+  ACCOUNT_LOCKED: "ACCOUNT_LOCKED",
 } as const;
 
 export const CACHE_KEYS = {
@@ -61,6 +60,45 @@ export const CACHE_KEYS = {
   OTP: (identifier: string) => `otp:${identifier}`,
   TOKEN_BLACKLIST: (token: string) => `token:blacklist:${token}`,
   RATE_LIMIT: (ip: string, route: string) => `ratelimit:${ip}:${route}`,
+  OTP_REGISTRATION: (email: string) => `otp:registration:${email}`,
+  OTP_PASSWORD_RESET: (email: string) => `otp:password_reset:${email}`,
+  VENDOR_PROFILE: (vendorId: string) => `vendor:profile:${vendorId}`,
+  REFRESH_TOKEN: (tokenId: string) => `refresh_token:${tokenId}`,
+  BLACKLISTED_TOKEN: (tokenId: string) => `blacklist:token:${tokenId}`,
+  BLACKLISTED_RESET_TOKEN: (tokenId: string) => `blacklist:token:${tokenId}`,
+  LOGIN_ATTEMPTS: (email: string) => `login_attempts:${email}`,
+  ADMIN_REFRESH_TOKEN: (adminId: string, family: string, generation: number) =>
+    `admin:refresh_token:${adminId}:${family}:${generation}`,
+
+  ADMIN_REFRESH_USED: (tokenId: string) => `admin:refresh_used:${tokenId}`,
+
+  ADMIN_BLACKLIST_FAMILY: (family: string) =>
+    `admin:blacklist_family:${family}`,
+
+  ADMIN_TOKEN_METADATA: (tokenId: string) => `admin:token_meta:${tokenId}`,
+
+  USER_REFRESH_TOKEN: (userId: string, family: string, generation: number) =>
+    `user:refresh_token:${userId}:${family}:${generation}`,
+
+  USER_REFRESH_USED: (tokenId: string) => `user:refresh_used:${tokenId}`,
+
+  USER_BLACKLIST_FAMILY: (family: string) => `user:blacklist_family:${family}`,
+
+  // Rate limiting and security
+  ADMIN_LOGIN_ATTEMPTS: (email: string) => `admin:login:attempts:${email}`,
+  ADMIN_RATE_LIMIT: (adminId: string, action: string) =>
+    `admin:rate:${adminId}:${action}`,
+
+  // Session tracking
+  ADMIN_ACTIVE_SESSIONS: (adminId: string) => `admin:sessions:${adminId}`,
+  ADMIN_LAST_ACTIVITY: (adminId: string) => `admin:activity:${adminId}`,
+
+  // Security alerts and monitoring
+  SECURITY_INCIDENT: (adminId: string, type: string) =>
+    `security:incident:${adminId}:${type}`,
+  SUSPICIOUS_ACTIVITY: (adminId: string) => `security:suspicious:${adminId}`,
+  OTP_ATTEMPTS: (email: string, type: string) =>
+    `otp_attempts:${type}:${email}`,
   IDENTITY_VALIDATION: "identity:validation",
   BANKS: "banks:all",
   PROVIDERS: "providers:all",
@@ -84,6 +122,15 @@ export const CACHE_TTL = {
   ONE_HOUR: 3600,
   ONE_DAY: 86400,
   ONE_WEEK: 604800,
+  OTP: 600, // 10 minutes
+  USER_PROFILE: 1800, // 30 minutes
+  VENDOR_PROFILE: 1800, // 30 minutes
+  REFRESH_TOKEN: 2592000, // 30 days
+  BLACKLISTED_TOKEN: 1800, // 30 minutes
+  RATE_LIMIT: 900, // 15 minutes
+  LOGIN_ATTEMPTS: 900, // 15 minutes
+  OTP_ATTEMPTS: 3600, // 1 hour
+  RESET_TOKEN: 600,
 } as const;
 
 export const TRANSACTION_STATUS = {
@@ -403,13 +450,13 @@ const createRedisRateLimiter = (
     ...config,
     store: new RedisStore({
       sendCommand: async (...args: string[]) => {
-        const redis = getRedisClient();
-        return redis.sendCommand(args);
+        return redisClient.sendCommand(args);
       },
       prefix: `rl:${prefix}:`,
     }),
   });
 };
+
 const rateLimiterCache = new Map<string, any>();
 
 const getRateLimiter = (

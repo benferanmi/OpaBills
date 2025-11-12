@@ -1,7 +1,8 @@
-import { AdminRepository } from "@/repositories/admin/AdminRepository";
-import { RoleRepository } from "@/repositories/admin/RoleRepository";
-import { EmailService } from "@/services/EmailService";
-import { OTPService } from "@/services/OTPService";
+import { AdminRepository } from '@/repositories/admin/AdminRepository';
+import { RoleRepository } from '@/repositories/admin/RoleRepository';
+import { EmailService } from '@/services/EmailService';
+import { OTPService } from '@/services/OTPService';
+import { generateOTP } from '@/utils/cryptography';
 
 export class AdminUserService {
   private adminRepository: AdminRepository;
@@ -29,17 +30,13 @@ export class AdminUserService {
 
     if (filters.search) {
       query.$or = [
-        { firstName: { $regex: filters.search, $options: "i" } },
-        { lastName: { $regex: filters.search, $options: "i" } },
-        { email: { $regex: filters.search, $options: "i" } },
+        { firstName: { $regex: filters.search, $options: 'i' } },
+        { lastName: { $regex: filters.search, $options: 'i' } },
+        { email: { $regex: filters.search, $options: 'i' } },
       ];
     }
 
-    const result = await this.adminRepository.findWithPagination(
-      query,
-      page,
-      limit
-    );
+    const result = await this.adminRepository.findWithPagination(query, page, limit);
 
     return {
       admins: result.data.map((admin) => ({
@@ -68,19 +65,20 @@ export class AdminUserService {
     const existingAdmin = await this.adminRepository.findByEmail(data.email);
 
     if (existingAdmin) {
-      throw new Error("Admin with this email already exists");
+      throw new Error('Admin with this email already exists');
     }
 
-    // const tempPassword = this.otpService.generateOTP(8);
+    const tempPassword = generateOTP(8);
 
     const admin = await this.adminRepository.create({
       ...data,
-      // password: tempPassword,
+      password: tempPassword,
       createdBy,
-      status: "pending_verification",
+      status: 'pending_verification',
     });
 
     // Send welcome email with temporary password
+    //TODO
     // await this.emailService.sendAdminWelcomeEmail(
     //   admin.email,
     //   tempPassword,
@@ -95,7 +93,7 @@ export class AdminUserService {
         lastName: admin.lastName,
         adminLevel: admin.adminLevel,
       },
-      message: "Admin created successfully. Welcome email sent.",
+      message: 'Admin created successfully. Welcome email sent.',
     };
   }
 
@@ -103,7 +101,7 @@ export class AdminUserService {
     const admin = await this.adminRepository.findById(adminId);
 
     if (!admin) {
-      throw new Error("Admin not found");
+      throw new Error('Admin not found');
     }
 
     return {
@@ -131,7 +129,7 @@ export class AdminUserService {
     const admin = await this.adminRepository.findById(adminId);
 
     if (!admin) {
-      throw new Error("Admin not found");
+      throw new Error('Admin not found');
     }
 
     if (data.status) admin.status = data.status;
@@ -143,7 +141,7 @@ export class AdminUserService {
     await admin.save();
 
     return {
-      message: "Admin updated successfully",
+      message: 'Admin updated successfully',
       admin: {
         id: admin._id,
         status: admin.status,
@@ -157,11 +155,11 @@ export class AdminUserService {
     const role = await this.roleRepository.findById(roleId);
 
     if (!admin) {
-      throw new Error("Admin not found");
+      throw new Error('Admin not found');
     }
 
     if (!role) {
-      throw new Error("Role not found");
+      throw new Error('Role not found');
     }
 
     admin.adminLevel = role.name;
@@ -170,7 +168,7 @@ export class AdminUserService {
     await admin.save();
 
     return {
-      message: "Role assigned successfully",
+      message: 'Role assigned successfully',
       admin: {
         id: admin._id,
         adminLevel: admin.adminLevel,

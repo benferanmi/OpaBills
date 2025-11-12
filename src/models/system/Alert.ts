@@ -13,7 +13,7 @@ export interface IAlert extends Document {
   users?: Types.ObjectId[];
   createdAt: Date;
   updatedAt: Date;
-  deletedAt?: Date;
+  deletedAt?: Date | null;
 }
 
 const alertSchema = new Schema<IAlert>(

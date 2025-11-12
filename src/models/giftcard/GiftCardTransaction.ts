@@ -1,15 +1,13 @@
-import mongoose, { Schema, Document, Types } from 'mongoose';
-import { v4 as uuidv4 } from 'uuid';
+import mongoose, { Schema, Document, Types } from "mongoose";
 
 export interface IGiftCardTransaction extends Document {
-  _id: string;
   giftCardType?: string;
   giftCardId?: Types.ObjectId;
   userId: Types.ObjectId;
   parentId?: string;
   transactionId?: string;
   reference: string;
-  tradeType: 'buy' | 'sell';
+  tradeType: "buy" | "sell";
   cardType?: string;
   card?: string;
   pin?: string;
@@ -20,7 +18,7 @@ export interface IGiftCardTransaction extends Document {
   rate?: number;
   payableAmount?: number;
   groupTag?: string;
-  status: 'pending' | 'success' | 'failed' | 'approved' | 'declined';
+  status: "pending" | "success" | "failed" | "approved" | "declined";
   preorder: boolean;
   bankName?: string;
   bankCode?: string;
@@ -30,6 +28,7 @@ export interface IGiftCardTransaction extends Document {
   reviewRate?: number;
   reviewAmount?: number;
   reviewProof?: string;
+  providerReference?: string;
   meta?: any;
   createdAt: Date;
   updatedAt: Date;
@@ -37,14 +36,13 @@ export interface IGiftCardTransaction extends Document {
 
 const GiftCardTransactionSchema = new Schema<IGiftCardTransaction>(
   {
-    _id: { type: String, default: uuidv4 },
     giftCardType: { type: String },
-    giftCardId: { type: Schema.Types.ObjectId, ref: 'GiftCard' },
-    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    giftCardId: { type: Schema.Types.ObjectId, ref: "GiftCard" },
+    userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
     parentId: { type: String },
     transactionId: { type: String },
     reference: { type: String, required: true, unique: true },
-    tradeType: { type: String, enum: ['buy', 'sell'], required: true },
+    tradeType: { type: String, enum: ["buy", "sell"], required: true },
     cardType: { type: String },
     card: { type: String },
     pin: { type: String },
@@ -57,12 +55,12 @@ const GiftCardTransactionSchema = new Schema<IGiftCardTransaction>(
     groupTag: { type: String },
     status: {
       type: String,
-      enum: ['pending', 'success', 'failed', 'approved', 'declined'],
-      default: 'pending',
+      enum: ["pending", "success", "failed", "approved", "declined"],
+      default: "pending",
     },
     preorder: { type: Boolean, default: false },
     bankName: { type: String },
-    bankCode: {type: String},
+    bankCode: { type: String },
     accountName: { type: String },
     accountNumber: { type: String },
     reviewNote: { type: String },
@@ -70,10 +68,10 @@ const GiftCardTransactionSchema = new Schema<IGiftCardTransaction>(
     reviewAmount: { type: Number },
     reviewProof: { type: String },
     meta: { type: Schema.Types.Mixed },
+    providerReference: { type: String },
   },
   {
     timestamps: true,
-    _id: false,
   }
 );
 
@@ -85,6 +83,6 @@ GiftCardTransactionSchema.index({ tradeType: 1 });
 GiftCardTransactionSchema.index({ groupTag: 1 });
 
 export const GiftCardTransaction = mongoose.model<IGiftCardTransaction>(
-  'GiftCardTransaction',
+  "GiftCardTransaction",
   GiftCardTransactionSchema
 );

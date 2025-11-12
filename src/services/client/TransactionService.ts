@@ -141,7 +141,7 @@ export class TransactionService {
       "electricity",
       "tv_subscription",
       "betting",
-      "e_pin",
+      "education",
       "internationalAirtime",
       "internationalData",
       "gift_card",

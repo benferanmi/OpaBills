@@ -34,7 +34,7 @@ export class WalletService {
     userId: string,
     type: "main" | "bonus" | "commission" = "main"
   ): Promise<any> {
-    const wallet = await this.walletRepository.findByUserId(userId, type);
+    const wallet = await this.walletRepository.findByUserId(userId);
     if (!wallet) {
       throw new AppError(
         "Wallet not found",
@@ -67,7 +67,7 @@ export class WalletService {
     reason: string,
     walletType: "main" | "bonus" | "commission" = "main"
   ): Promise<any> {
-    const wallet = await this.walletRepository.findByUserId(userId, walletType);
+    const wallet = await this.walletRepository.findByUserId(userId);
     if (!wallet) {
       throw new AppError(
         "Wallet not found",
@@ -129,7 +129,7 @@ export class WalletService {
     reason: string,
     walletType: "main" | "bonus" | "commission" = "main"
   ): Promise<any> {
-    const wallet = await this.walletRepository.findByUserId(userId, walletType);
+    const wallet = await this.walletRepository.findByUserId(userId);
     if (!wallet) {
       throw new AppError(
         "Wallet not found",
@@ -254,7 +254,7 @@ export class WalletService {
     walletType: "main" | "bonus" | "commission" = "main",
     days: number = 30
   ): Promise<any> {
-    const wallet = await this.walletRepository.findByUserId(userId, walletType);
+    const wallet = await this.walletRepository.findByUserId(userId);
     if (!wallet) {
       throw new AppError(
         "Wallet not found",

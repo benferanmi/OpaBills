@@ -1,7 +1,10 @@
+import { config } from "dotenv";
+config();
 import { connectDatabase } from "./config/database";
 import { connectRedis } from "./config/redis";
 import app from "./app";
 import logger from "./logger";
+import { initializeFirebase } from "./config/firebase";
 import { runAllSeeders, seedServices } from "./seeders";
 
 const PORT = process.env.PORT || 5000;
@@ -9,8 +12,10 @@ const PORT = process.env.PORT || 5000;
 const startServer = async () => {
   try {
     logger.info("Starting server...");
-    await connectDatabase();
+
     await connectRedis();
+    await connectDatabase();
+    // await initializeFirebase();
     // await runAllSeeders();
 
     // Start Express server

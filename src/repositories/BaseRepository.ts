@@ -1,4 +1,11 @@
-import { Model, Document, FilterQuery, UpdateQuery, QueryOptions } from 'mongoose';
+import {
+  Model,
+  Document,
+  FilterQuery,
+  UpdateQuery,
+  QueryOptions,
+  PipelineStage,
+} from "mongoose";
 
 export abstract class BaseRepository<T extends Document> {
   constructor(protected model: Model<T>) {}
@@ -38,8 +45,13 @@ export abstract class BaseRepository<T extends Document> {
     return await this.model.findByIdAndUpdate(id, data, { new: true }).exec();
   }
 
-  async updateOne(filter: FilterQuery<T>, data: UpdateQuery<T>): Promise<T | null> {
-    return await this.model.findOneAndUpdate(filter, data, { new: true }).exec();
+  async updateOne(
+    filter: FilterQuery<T>,
+    data: UpdateQuery<T>
+  ): Promise<T | null> {
+    return await this.model
+      .findOneAndUpdate(filter, data, { new: true })
+      .exec();
   }
 
   async delete(id: string): Promise<T | null> {
@@ -47,14 +59,15 @@ export abstract class BaseRepository<T extends Document> {
   }
 
   async softDelete(id: string): Promise<T | null> {
-    return await this.model.findByIdAndUpdate(
-      id,
-      { deletedAt: new Date() },
-      { new: true }
-    ).exec();
+    return await this.model
+      .findByIdAndUpdate(id, { deletedAt: new Date() }, { new: true })
+      .exec();
   }
 
   async count(filter: FilterQuery<T> = {}): Promise<number> {
     return await this.model.countDocuments(filter).exec();
+  }
+  async aggregate<T = any>(pipeline: PipelineStage[]): Promise<T[]> {
+    return this.model.aggregate<T>(pipeline).exec();
   }
 }

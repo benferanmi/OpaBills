@@ -27,10 +27,6 @@ export const generateVirtualAccountSchema = Joi.object({
 
 export const fundWalletSchema = Joi.object({
   amount: Joi.number().positive().required(),
-  walletType: Joi.string()
-    .valid("main", "bonus", "commission")
-    .optional()
-    .default("main"),
   provider: Joi.string()
     .valid("monnify", "flutterwave", "saveHaven")
     .default("flutterwave"),

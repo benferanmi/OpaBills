@@ -2,7 +2,7 @@ import jwt, { SignOptions } from "jsonwebtoken";
 import { v4 as uuidv4 } from "uuid";
 import { AdminJWTPayload } from "@/types/admin";
 import logger from "@/logger";
-import { CacheService } from "@/services/CacheService";
+import CacheService from "@/services/CacheService";
 export interface AdminRefreshTokenPayload {
   adminId: string;
   tokenId: string;
@@ -30,7 +30,7 @@ interface AdminJWTConfig {
 
 class AdminJWTUtil {
   private config: AdminJWTConfig;
-  private cacheService: CacheService;
+  private cacheService = CacheService;
 
   constructor() {
     this.config = {
@@ -43,7 +43,6 @@ class AdminJWTUtil {
       accessExpiresIn: process.env.JWT_ADMIN_ACCESS_EXPIRES_IN || "15m",
       refreshExpiresIn: process.env.JWT_ADMIN_REFRESH_EXPIRES_IN || "7d",
     };
-    this.cacheService = new CacheService();
   }
 
   generateAccessToken(payload: {

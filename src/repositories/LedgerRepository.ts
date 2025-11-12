@@ -2,6 +2,18 @@ import { BaseRepository } from "./BaseRepository";
 import { Ledger, ILedger } from "@/models/wallet/Ledger";
 import { Types } from "mongoose";
 
+interface CreateLedgerParams {
+  userId: Types.ObjectId | string;
+  walletId: Types.ObjectId | string;
+  type: "debit" | "credit";
+  amount: number;
+  balanceBefore: number;
+  balanceAfter: number;
+  reference: string;
+  description: string;
+  meta?: any;
+}
+
 export class LedgerRepository extends BaseRepository<ILedger> {
   constructor() {
     super(Ledger);
@@ -48,5 +60,22 @@ export class LedgerRepository extends BaseRepository<ILedger> {
       data,
       total,
     };
+  }
+
+  async createLedgerEntry(params: CreateLedgerParams): Promise<ILedger> {
+    return this.create({
+      ledgerableType: "Wallet",
+      ledgerableId: params.walletId as Types.ObjectId,
+      source:
+        params.type === "debit" ? String(params.walletId) : params.reference,
+      destination:
+        params.type === "credit" ? String(params.walletId) : params.reference,
+      oldBalance: params.balanceBefore,
+      newBalance: params.balanceAfter,
+      type: params.type,
+      reason: params.description,
+      amount: params.amount,
+      currencyCode: "NGN",
+    });
   }
 }

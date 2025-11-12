@@ -1,4 +1,4 @@
-import Joi from 'joi';
+import Joi from "joi";
 
 export const createTransactionSchema = Joi.object({
   amount: Joi.number().positive().required(),
@@ -12,4 +12,5 @@ export const createTransactionSchema = Joi.object({
 export const paginationSchema = Joi.object({
   page: Joi.number().integer().min(1).optional(),
   limit: Joi.number().integer().min(1).max(100).optional(),
+  type: Joi.string().valid("both", "sell", "buy").optional(),
 });

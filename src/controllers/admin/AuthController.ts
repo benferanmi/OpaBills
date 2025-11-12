@@ -4,30 +4,75 @@ import { sendSuccessResponse, sendErrorResponse } from "@/utils/helpers";
 import { HTTP_STATUS } from "@/utils/constants";
 import logger from "@/logger";
 import { AdminAuthenticatedRequest } from "@/types/admin/index";
+import adminJwtUtil from "@/config/admin/jwt";
+import { Admin } from "@/models/admin/Admin";
 
 export class AuthController {
   private authService = new AuthService();
 
   login = async (req: Request, res: Response): Promise<void> => {
     try {
+      const authHeader = req.headers.authorization;
+      if (authHeader && authHeader.startsWith("Bearer ")) {
+        const token = authHeader.substring(7);
+
+        try {
+          const decoded = adminJwtUtil.verifyAccessToken(token);
+          if (decoded && !adminJwtUtil.isTokenExpired(token)) {
+            // Check if token is still active in database
+            const admin = await Admin.findById(decoded.adminId).select(
+              "+activeTokenId"
+            );
+            if (admin && admin.activeTokenId === decoded.tokenId) {
+              logger.info("Admin already authenticated", {
+                adminId: decoded.adminId,
+                ip: req.ip,
+              });
+
+              sendSuccessResponse(
+                res,
+                {
+                  admin: {
+                    id: admin._id,
+                    firstName: admin.firstName,
+                    lastName: admin.lastName,
+                    email: admin.email,
+                    adminLevel: admin.adminLevel,
+                    permissions: admin.permissions,
+                    profilePicture: admin.profilePicture,
+                  },
+                  message: "Already authenticated",
+                },
+                "Already logged in"
+              );
+
+              return;
+            }
+          }
+        } catch (error) {
+          logger.debug("Existing token invalid, proceeding with login", {
+            ip: req.ip,
+          });
+        }
+      }
+
       const result = await this.authService.login(
         req.body,
         req.ip,
         req.get("User-Agent")
       );
 
-      if (!result) {
-        sendErrorResponse(
-          res,
-          "Invalid email or password",
-          HTTP_STATUS.UNAUTHORIZED
-        );
-      }
       logger.info("Admin login successful", {
-        adminId: result.admin?.id || "",
+        adminId: result.admin?.id,
+        adminEmail: result.admin?.email,
         ip: req.ip,
       });
-      sendSuccessResponse(res, result, "Login successful");
+
+      if (result.message && !result.tokens) {
+        sendSuccessResponse(res, null, result.message);
+      } else {
+        sendSuccessResponse(res, result, "Login Successful");
+      }
     } catch (error: any) {
       logger.error("Admin login failed", {
         error: error.message,
@@ -42,12 +87,33 @@ export class AuthController {
     }
   };
 
+  verify2FA = async (req: Request, res: Response) => {
+    try {
+      const { email, otp } = req.body;
+      const result = await this.authService.verify2FA(
+        email,
+        otp,
+        req.ip,
+        req.get("User-Agent")
+      );
+
+      sendSuccessResponse(res, result, "Login Successful");
+    } catch (error: any) {
+      logger.error("Verify 2fa OTP error:", error);
+      sendErrorResponse(
+        res,
+        error.message || "Invalid OTP",
+        error.statusCode || HTTP_STATUS.BAD_REQUEST
+      );
+    }
+  };
+
   logout = async (
     req: AdminAuthenticatedRequest,
     res: Response
   ): Promise<void> => {
     try {
-    //   await this.authService.logout(req.get("Authorization"));
+      await this.authService.logout(req.get("Authorization"));
       logger.info("Admin logout successful", { adminId: req.admin?.adminId });
       sendSuccessResponse(res, {}, "Logout successful");
     } catch (error: any) {
@@ -62,8 +128,8 @@ export class AuthController {
 
   refreshToken = async (req: Request, res: Response): Promise<void> => {
     try {
-    //   const result = await this.authService.refreshToken(req.body.refreshToken);
-    //   sendSuccessResponse(res, result, "Token refreshed successfully");
+      const result = await this.authService.refreshToken(req.body.refreshToken);
+      sendSuccessResponse(res, result, "Token refreshed successfully");
     } catch (error: any) {
       logger.error("Admin token refresh failed", { error: error.message });
       sendErrorResponse(
@@ -76,7 +142,7 @@ export class AuthController {
 
   forgotPassword = async (req: Request, res: Response): Promise<void> => {
     try {
-    //   await this.authService.forgotPassword(req.body.email);
+      await this.authService.forgotPassword(req.body.email);
       sendSuccessResponse(res, "Password reset OTP sent successfully");
     } catch (error: any) {
       logger.error("Admin forgot password failed", { error: error.message });
@@ -90,7 +156,7 @@ export class AuthController {
 
   resetPassword = async (req: Request, res: Response): Promise<void> => {
     try {
-    //   await this.authService.resetPassword(req.body);
+      await this.authService.resetPassword(req.body);
       logger.info("Admin password reset successful", { email: req.body.email });
       sendSuccessResponse(res, "Password reset successful");
     } catch (error: any) {
@@ -100,36 +166,6 @@ export class AuthController {
         error.message,
         error.statusCode || HTTP_STATUS.INTERNAL_SERVER_ERROR
       );
-    }
-  };
-
-  getProfile = async (
-    req: AdminAuthenticatedRequest,
-    res: Response,
-    next: NextFunction
-  ) => {
-    try {
-      console.log(req.admin);
-      const adminId = req.admin?.id;
-
-      if (!adminId) {
-        sendErrorResponse(
-          res,
-          "You have to be authenticated to make this request",
-          HTTP_STATUS.UNAUTHORIZED
-        );
-        return;
-      }
-
-    //   const profile = await this.authService.fetchProfile(adminId);
-
-    //   sendSuccessResponse(res, profile, "Profile fetched Successfully");
-    } catch (error: any) {
-      logger.error("Failed to fetch Admin profile", {
-        message: error.message,
-        adminId: req.admin?.id,
-      });
-      next();
     }
   };
 }

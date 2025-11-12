@@ -5,7 +5,7 @@ export interface IPayment extends Document {
   reference: string;
   amount: number;
   amountPaid?: number;
-  status: "pending" | "success" | "failed" | "expired";
+  status: "pending" | "success" | "failed" | "expired" | "processing";
   meta: {
     virtualAccount?: {
       accountNumber: string;
@@ -16,7 +16,17 @@ export interface IPayment extends Document {
       orderReference?: string;
       providerReference?: string;
     };
-    provider?: string;
+
+    // For withdrawals
+    accountNumber?: string;
+    accountName?: string;
+    bankCode?: string;
+    bankName?: string;
+    withdrawalRequestId?: string;
+    transferId?: string;
+    transferStatus?: string;
+    providerReference?: string;
+    provider?: "monnify" | "saveHaven" | "flutterwave";
     verificationData?: any;
     [key: string]: any;
   };
@@ -46,5 +56,6 @@ const PaymentSchema = new Schema<IPayment>(
 PaymentSchema.index({ userId: 1 });
 PaymentSchema.index({ status: 1 });
 PaymentSchema.index({ createdAt: -1 });
+PaymentSchema.index({ "meta.provider": 1 });
 
 export const Payment = mongoose.model<IPayment>("Payment", PaymentSchema);

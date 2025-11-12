@@ -7,11 +7,9 @@ export class WalletRepository extends BaseRepository<IWallet> {
     super(Wallet);
   }
 
-  async findByUserId(
-    userId: string | Types.ObjectId,
-    type: "main" | "bonus" | "commission" = "main"
-  ): Promise<IWallet | null> {
-    return this.model.findOne({ userId, type }).exec();
+  async findByUserId(userId: string | Types.ObjectId): Promise<IWallet | null> {
+    // Now returns the main wallet (type='main') which has all balances
+    return this.model.findOne({ userId, type: "main" }).exec();
   }
 
   async findAllByUserId(userId: string | Types.ObjectId): Promise<IWallet[]> {
@@ -29,21 +27,25 @@ export class WalletRepository extends BaseRepository<IWallet> {
 
   async incrementBalance(
     walletId: string,
-    amount: number
+    amount: number,
+    balanceType: "main" | "bonus" | "commission" = "main"
   ): Promise<IWallet | null> {
+    const field = balanceType === "main" ? "balance" : `${balanceType}Balance`;
     return this.model
-      .findByIdAndUpdate(walletId, { $inc: { balance: amount } }, { new: true })
+      .findByIdAndUpdate(walletId, { $inc: { [field]: amount } }, { new: true })
       .exec();
   }
 
   async decrementBalance(
     walletId: string,
-    amount: number
+    amount: number,
+    balanceType: "main" | "bonus" | "commission" = "main"
   ): Promise<IWallet | null> {
+    const field = balanceType === "main" ? "balance" : `${balanceType}Balance`;
     return this.model
       .findByIdAndUpdate(
         walletId,
-        { $inc: { balance: -amount } },
+        { $inc: { [field]: -amount } },
         { new: true }
       )
       .exec();

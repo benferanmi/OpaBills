@@ -142,7 +142,7 @@ export class ProfileService {
       state: user.state,
       status: user.status,
       authType: user.authType,
-      fcmToken: user.fcmToken,
+      fcmTokens: user.fcmTokens,
       virtualAccount: user.virtualAccount,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,

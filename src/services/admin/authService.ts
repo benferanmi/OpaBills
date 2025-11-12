@@ -4,6 +4,13 @@ import { HTTP_STATUS } from "@/utils/constants";
 import adminJwtUtil from "@/config/admin/jwt";
 import logger from "@/logger";
 import RefreshToken from "@/models/admin/RefreshToken";
+import { EmailService } from "../EmailService";
+import { CacheService } from "../CacheService";
+import {
+  hashPassword,
+  isPasswordInHistory,
+  updatePasswordHistory,
+} from "@/utils/cryptography";
 
 export interface LoginRequest {
   email: string;
@@ -14,9 +21,10 @@ export interface LoginRequestDTO {
   ip?: string;
   userAgent?: string;
 }
-
 export class AuthService {
   private otpService = new OTPService();
+  private emailService = new EmailService();
+  private cacheService = new CacheService();
 
   async login(data: LoginRequest, ip?: string, userAgent?: string) {
     const { email, password } = data;
@@ -81,7 +89,11 @@ export class AuthService {
       admin.activeTokenId = null;
       await admin.save();
 
-    //TODO   this.otpService.generateAndSendOTP(email, "2fa");
+      const otp = await this.otpService.generateAndStore(
+        admin.id.toString(),
+        "2fa"
+      );
+      await this.emailService.send2FAEmail(admin.email, otp, admin.fullName);
       return {
         success: true,
         statusCode: HTTP_STATUS.LOCKED,
@@ -97,6 +109,7 @@ export class AuthService {
       adminLevel: admin.adminLevel,
       deviceInfo: userAgent,
     });
+    console.log("reached2");
 
     // Store refresh token metadata for reuse detection
     await adminJwtUtil.storeRefreshTokenMetadata(
@@ -110,6 +123,7 @@ export class AuthService {
         loginType: "password",
       }
     );
+    console.log("reached");
 
     // Update admin with new active session
     admin.activeTokenId = tokens.tokenId;
@@ -117,18 +131,16 @@ export class AuthService {
     admin.totalLogins = (admin.totalLogins || 0) + 1;
     await admin.save();
 
-    // TODO
-    // await this.saveRefreshToken(
-    //   tokens.tokenId,
-    //   admin._id.toString(),
-    //   "admin",
-    //   tokens.refreshToken,
-    //   ip,
-    //   userAgent,
-    //   tokens.family,
-    //   tokens.generation
-    // );
-
+    await this.saveRefreshToken(
+      tokens.tokenId,
+      admin._id.toString(),
+      "admin",
+      tokens.refreshToken,
+      ip,
+      userAgent,
+      tokens.family,
+      tokens.generation
+    );
     logger.info("New login session created", {
       adminId: admin._id.toString(),
       tokenId: tokens.tokenId,
@@ -156,5 +168,319 @@ export class AuthService {
     };
   }
 
-//   private async saveRefreshToken();
+  async verify2FA(email: string, otp: string, ip?: string, userAgent?: string) {
+    const admin = await Admin.findOne({ email }).select(
+      "+password +activeTokenId"
+    );
+    if (!admin) {
+      throw { message: "Admin not found", statusCode: HTTP_STATUS.NOT_FOUND };
+    }
+
+    await this.otpService.verify(admin.id.toString(), "2fa", otp);
+
+    const tokens = adminJwtUtil.generateTokenPair({
+      adminId: admin._id.toString(),
+      email: admin.email,
+      adminLevel: admin.adminLevel,
+    });
+
+    admin.activeTokenId = tokens.tokenId;
+    admin.lastActiveAt = new Date();
+    admin.totalLogins = (admin.totalLogins || 0) + 1;
+    await admin.save();
+
+    // Save refresh token
+    await this.saveRefreshToken(
+      tokens.tokenId,
+      admin._id.toString(),
+      "admin",
+      tokens.refreshToken,
+      ip,
+      userAgent
+    );
+
+    return {
+      admin: {
+        id: admin._id.toString(),
+        email: admin.email,
+        firstName: admin.firstName,
+        lastName: admin.lastName,
+        adminLevel: admin.adminLevel,
+        twoFactorEnabled: admin.twoFactorEnabled,
+        profilePicture: admin.profilePicture,
+      },
+      tokens: {
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        expiresIn: tokens.expiresIn,
+      },
+    };
+  }
+
+  async logout(authHeader?: string): Promise<void> {
+    if (!authHeader) return;
+
+    const token = adminJwtUtil.extractTokenFromHeader(authHeader);
+    if (!token) return;
+
+    try {
+      const decoded = adminJwtUtil.decodeToken(token);
+
+      if (decoded?.adminId) {
+        await Admin.findByIdAndUpdate(decoded.adminId, {
+          activeTokenId: null,
+          lastActiveAt: new Date(),
+        });
+
+        // Find and invalidate the token family
+        if (decoded.tokenId) {
+          try {
+            const tokenDoc = await RefreshToken.findActiveToken(
+              decoded.tokenId
+            );
+            if (tokenDoc) {
+              const refreshDecoded = adminJwtUtil.decodeToken(tokenDoc.token);
+              if (refreshDecoded?.family) {
+                await adminJwtUtil.invalidateTokenFamily(
+                  refreshDecoded.family,
+                  decoded.adminId
+                );
+              }
+            }
+          } catch (error) {
+            logger.warn("Could not invalidate token family during logout", {
+              error,
+            });
+          }
+
+          await RefreshToken.deactivateAllUserTokens(decoded.adminId, "admin");
+        }
+
+        logger.info("Admin logged out successfully", {
+          adminId: decoded.adminId,
+          tokenId: decoded.tokenId,
+        });
+      }
+
+      await this.cacheService.blacklistToken(token);
+    } catch (error) {
+      logger.error("Logout error:", error);
+      await this.cacheService.blacklistToken(token);
+      throw new Error("Logout failed");
+    }
+  }
+
+  async refreshToken(
+    refreshToken: string,
+    ip?: string,
+    userAgent?: string
+  ): Promise<{ accessToken: string; refreshToken: string; expiresIn: number }> {
+    try {
+      const decoded = adminJwtUtil.verifyRefreshToken(refreshToken);
+
+      const isSuspicious = await adminJwtUtil.detectTokenReuse(decoded);
+      if (isSuspicious) {
+        await adminJwtUtil.handleSuspiciousActivity(decoded);
+        throw {
+          message: "Security violation detected. All sessions invalidated.",
+          statusCode: HTTP_STATUS.UNAUTHORIZED,
+        };
+      }
+
+      const tokenDoc = await RefreshToken.findActiveToken(decoded.tokenId);
+      if (!tokenDoc) {
+        logger.warn("Refresh token not found in database", {
+          adminId: decoded.adminId,
+          tokenId: decoded.tokenId,
+          family: decoded.family,
+        });
+
+        // This could indicate token theft - invalidate the family
+        await adminJwtUtil.invalidateTokenFamily(
+          decoded.family,
+          decoded.adminId
+        );
+
+        throw {
+          message: "Invalid refresh token",
+          statusCode: HTTP_STATUS.UNAUTHORIZED,
+        };
+      }
+
+      // Verify admin
+      const admin = await Admin.findById(decoded.adminId);
+      if (!admin || admin.status !== "active") {
+        throw {
+          message: "Admin not found or inactive",
+          statusCode: HTTP_STATUS.UNAUTHORIZED,
+        };
+      }
+
+      await adminJwtUtil.markTokenAsUsed(decoded.tokenId);
+
+      await tokenDoc.deactivate();
+
+      // Generating new token pair with rotation (same family, incremented generation)
+      const tokens = adminJwtUtil.generateTokenPair({
+        adminId: admin._id.toString(),
+        email: admin.email,
+        adminLevel: admin.adminLevel,
+        family: decoded.family,
+        generation: decoded.generation,
+        deviceInfo: userAgent,
+      });
+
+      await adminJwtUtil.storeRefreshTokenMetadata(
+        tokens.tokenId,
+        admin._id.toString(),
+        tokens.family,
+        tokens.generation,
+        {
+          ip,
+          userAgent,
+          previousTokenId: decoded.tokenId,
+        }
+      );
+
+      await this.saveRefreshToken(
+        tokens.tokenId,
+        admin._id.toString(),
+        "admin",
+        tokens.refreshToken,
+        ip,
+        userAgent,
+        tokens.family,
+        tokens.generation
+      );
+
+      admin.activeTokenId = tokens.tokenId;
+      admin.lastActiveAt = new Date();
+      await admin.save();
+
+      logger.info("Refresh token rotated successfully", {
+        adminId: admin._id.toString(),
+        oldTokenId: decoded.tokenId,
+        newTokenId: tokens.tokenId,
+        family: tokens.family,
+        oldGeneration: decoded.generation,
+        newGeneration: tokens.generation,
+      });
+
+      return {
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+        expiresIn: tokens.expiresIn,
+      };
+    } catch (error: any) {
+      if (
+        error.message?.includes("TOKEN_EXPIRED") ||
+        error.message?.includes("TOKEN_INVALID")
+      ) {
+        try {
+          const decoded = adminJwtUtil.decodeToken(refreshToken);
+          if (decoded?.family && decoded?.adminId) {
+            logger.warn(
+              "Invalid/expired token used - potential security issue",
+              {
+                adminId: decoded.adminId,
+                family: decoded.family,
+              }
+            );
+
+            await adminJwtUtil.invalidateTokenFamily(
+              decoded.family,
+              decoded.adminId
+            );
+          }
+        } catch (decodeError) {
+          logger.warn("Malformed refresh token attempted");
+        }
+      }
+
+      throw error;
+    }
+  }
+
+  async forgotPassword(email: string): Promise<void> {
+    const admin = await Admin.findOne({ email });
+    if (!admin) {
+      throw new Error("Admin Account not found");
+      return;
+    }
+
+    const otp = await this.otpService.generateAndStore(
+      admin._id.toString(),
+      "password_reset"
+    );
+    await this.emailService.send2FAEmail(email, otp, admin.fullName);
+  }
+
+  async resetPassword(data: {
+    email: string;
+    otp: string;
+    newPassword: string;
+  }): Promise<void> {
+    const { email, otp, newPassword } = data;
+
+    const admin = await Admin.findOne({ email }).select(
+      "+password +passwordHistory"
+    );
+    if (!admin) {
+      throw { message: "Admin not found", statusCode: HTTP_STATUS.NOT_FOUND };
+    }
+
+    // Verify OTP
+    await this.otpService.verify(admin._id.toString(), "password_reset", otp);
+
+    // Check password history
+    if (await isPasswordInHistory(newPassword, admin.passwordHistory)) {
+      throw {
+        message: "Cannot reuse recent passwords",
+        statusCode: HTTP_STATUS.BAD_REQUEST,
+      };
+    }
+
+    // Update password
+    const hashedPassword = await hashPassword(newPassword);
+    admin.password = newPassword;
+    admin.passwordHistory = updatePasswordHistory(
+      admin.passwordHistory,
+      hashedPassword
+    );
+    await admin.save();
+
+    // Invalidate all refresh tokens
+    await RefreshToken.deactivateAllUserTokens(admin._id.toString(), "admin");
+  }
+
+  private async saveRefreshToken(
+    tokenId: string,
+    userId: string,
+    userType: string,
+    token: string,
+    ip?: string,
+    userAgent?: string,
+    family?: string,
+    generation?: number
+  ): Promise<void> {
+    const refreshToken = new RefreshToken({
+      tokenId,
+      userId,
+      userType,
+      token,
+      ipAddress: ip,
+      userAgent,
+      family: family || "unknown",
+      generation: generation || 0,
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    });
+
+    await refreshToken.save();
+    await this.cacheService.setRefreshToken(tokenId, {
+      userId,
+      userType,
+      family,
+      generation,
+    });
+  }
 }

@@ -2,7 +2,6 @@ import mongoose, { Schema, Document, Types } from 'mongoose';
 import { v4 as uuidv4 } from 'uuid';
 
 export interface ILedger extends Document {
-  _id: string;
   ledgerableType: 'User' | 'Wallet';
   ledgerableId: Types.ObjectId;
   source: string;
@@ -33,7 +32,6 @@ const LedgerSchema = new Schema<ILedger>(
   },
   {
     timestamps: true,
-    _id: false,
   }
 );
 

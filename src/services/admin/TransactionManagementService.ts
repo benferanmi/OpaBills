@@ -78,103 +78,117 @@ export class TransactionManagementService {
     return transaction;
   }
 
-  // async updateTransactionStatus(transactionId: string, status: string, note?: string) {
-  //   const transaction = await this.transactionRepository.findById(transactionId);
+  async updateTransactionStatus(
+    transactionId: string,
+    status: string,
+    note?: string
+  ) {
+    const transaction = await this.transactionRepository.findById(
+      transactionId
+    );
 
-  //   if (!transaction) {
-  //     throw new Error('Transaction not found');
-  //   }
+    if (!transaction) {
+      throw new Error("Transaction not found");
+    }
 
-  //   if (transaction.status === 'success' || transaction.status === 'reversed') {
-  //     throw new Error('Cannot update completed or reversed transactions');
-  //   }
+    if (transaction.status === "success" || transaction.status === "reversed") {
+      throw new Error("Cannot update completed or reversed transactions");
+    }
 
-  //   transaction.status = status as any;
-  //   if (note) {
-  //     transaction.remark = note;
-  //   }
+    transaction.status = status as any;
+    if (note) {
+      transaction.remark = note;
+    }
 
-  //   await transaction.save();
+    await transaction.save();
 
-  //   // If marking as failed, refund the user
-  //   if (status === 'failed' && transaction.walletId) {
-  //     const wallet = await this.walletRepository.findById(transaction.walletId.toString());
-  //     if (wallet) {
-  //       wallet.mainBalance += transaction.amount;
-  //       await wallet.save();
+    // If marking as failed, refund the user
+    if (status === "failed" && transaction.walletId) {
+      const wallet = await this.walletRepository.findById(
+        transaction.walletId.toString()
+      );
+      if (wallet) {
+        const balanceBefore = wallet.balance;
+        wallet.balance += transaction.amount;
+        await wallet.save();
 
-  //       // Create refund ledger entry
-  //       await this.ledgerRepository.create({
-  //         userId: wallet.userId,
-  //         walletId: wallet._id,
-  //         type: 'credit',
-  //         amount: transaction.amount,
-  //         balanceBefore: wallet.mainBalance - transaction.amount,
-  //         balanceAfter: wallet.mainBalance,
-  //         reference: `REFUND-${transaction.reference}`,
-  //         description: `Refund for failed transaction ${transaction.reference}`,
-  //       });
-  //     }
-  //   }
+        // Create refund ledger entry
+        await this.ledgerRepository.createLedgerEntry({
+          userId: wallet.userId,
+          walletId: wallet.id,
+          type: "credit",
+          amount: transaction.amount,
+          balanceBefore,
+          balanceAfter: wallet.balance,
+          reference: `REFUND-${transaction.reference}`,
+          description: `Refund for failed transaction ${transaction.reference}`,
+        });
+      }
+    }
 
-  //   return {
-  //     message: 'Transaction status updated successfully',
-  //     transaction: {
-  //       id: transaction._id,
-  //       status: transaction.status,
-  //       reference: transaction.reference,
-  //     },
-  //   };
-  // }
+    return {
+      message: "Transaction status updated successfully",
+      transaction: {
+        id: transaction._id,
+        status: transaction.status,
+        reference: transaction.reference,
+      },
+    };
+  }
 
-  // async reverseTransaction(transactionId: string, reason: string) {
-  //   const transaction = await this.transactionRepository.findById(transactionId);
+  async reverseTransaction(transactionId: string, reason: string) {
+    const transaction = await this.transactionRepository.findById(
+      transactionId
+    );
 
-  //   if (!transaction) {
-  //     throw new Error('Transaction not found');
-  //   }
+    if (!transaction) {
+      throw new Error("Transaction not found");
+    }
 
-  //   if (transaction.status !== 'success') {
-  //     throw new Error('Can only reverse successful transactions');
-  //   }
+    if (transaction.status === "reversed") {
+      throw new Error("Transaction already reversed");
+    }
+    
+    if (transaction.status !== "success") {
+      throw new Error("Can only reverse successful transactions");
+    }
 
-  //   if (transaction.status === 'reversed') {
-  //     throw new Error('Transaction already reversed');
-  //   }
+    // Refund the user
+    if (transaction.walletId) {
+      const wallet = await this.walletRepository.findById(
+        transaction.walletId.toString()
+      );
+      if (wallet) {
+        const balanceBefore = wallet.balance;
+        wallet.balance += transaction.amount;
+        await wallet.save();
 
-  //   // Refund the user
-  //   if (transaction.walletId) {
-  //     const wallet = await this.walletRepository.findById(transaction.walletId.toString());
-  //     if (wallet) {
-  //       wallet.mainBalance += transaction.amount;
-  //       await wallet.save();
+        // Create reversal ledger entry
+        await this.ledgerRepository.createLedgerEntry({
+          userId: wallet.userId,
+          walletId: wallet.id,
+          type: "credit",
+          amount: transaction.amount,
+          balanceBefore,
+          balanceAfter: wallet.balance,
+          reference: `REVERSE-${transaction.reference}`,
+          description: `Reversal: ${reason}`,
+        });
+      }
+    }
 
-  //       // Create reversal ledger entry
-  //       await this.ledgerRepository.create({
-  //         userId: wallet.userId,
-  //         walletId: wallet._id,
-  //         type: 'credit',
-  //         amount: transaction.amount,
-  //         balanceBefore: wallet.mainBalance - transaction.amount,
-  //         balanceAfter: wallet.mainBalance,
-  //         reference: `REVERSE-${transaction.reference}`,
-  //         description: `Reversal: ${reason}`,
-  //       });
-  //     }
-  //   }
+    transaction.status = "reversed";
+    transaction.remark = reason;
+    await transaction.save();
 
-  //   transaction.status = 'reversed';
-  //   transaction.remark = reason;
-  //   await transaction.save();
-
-  //   return {
-  //     message: 'Transaction reversed successfully',
-  //     transaction: {
-  //       id: transaction._id,
-  //       status: transaction.status,
-  //       reference: transaction.reference,
-  //       amount: transaction.amount,
-  //     },
-  //   };
-  // }
+    return {
+      message: "Transaction reversed successfully",
+      transaction: {
+        id: transaction._id,
+        status: transaction.status,
+        reference: transaction.reference,
+        amount: transaction.amount,
+      },
+    };
+  }
 }

@@ -5,6 +5,7 @@ import { SMSService } from "../SMSService";
 import { AppError } from "@/middlewares/errorHandler";
 import { HTTP_STATUS, ERROR_CODES } from "@/utils/constants";
 import { Types } from "mongoose";
+import { PushNotificationService } from "./PushNotificationService";
 
 export interface CreateNotificationDTO {
   type: string;
@@ -13,17 +14,20 @@ export interface CreateNotificationDTO {
   data: any;
   sendEmail?: boolean;
   sendSMS?: boolean;
+  sendPush?: boolean;
 }
 
 export class NotificationService {
   private emailService: EmailService;
   private smsService: SMSService;
+  private pushNotificationService: PushNotificationService;
   private notificationRepository: NotificationRepository;
   private userRepository: UserRepository;
 
   constructor() {
     this.emailService = new EmailService();
     this.smsService = new SMSService();
+    this.pushNotificationService = new PushNotificationService();
     this.notificationRepository = new NotificationRepository();
     this.userRepository = new UserRepository();
   }
@@ -68,6 +72,24 @@ export class NotificationService {
       }
     }
 
+    // Send Push Notification if requested
+    if (data.sendPush && data.notifiableType === "User") {
+      try {
+        const user = await this.userRepository.findById(
+          data.notifiableId.toString()
+        );
+        if (user) {
+          await this.sendPushNotification(
+            data.notifiableId.toString(),
+            data.type,
+            data.data
+          );
+        }
+      } catch (error) {
+        console.error("Error sending push notification:", error);
+      }
+    }
+
     return notification;
   }
 
@@ -96,6 +118,24 @@ export class NotificationService {
       case "wallet_debit":
         subject = "Wallet Debited";
         message = `Your wallet has been debited with ₦${data.amount}. New balance: ₦${data.balance}`;
+        break;
+      case "withdrawal_approved":
+        subject = "Withdrawal Approved";
+        message = `Your withdrawal of ₦${data.amount.toLocaleString()} has been approved and is being processed. Reference: ${
+          data.reference
+        }`;
+        break;
+      case "withdrawal_declined":
+        subject = "Withdrawal Declined";
+        message = `Your withdrawal of ₦${data.amount.toLocaleString()} was declined and refunded to your wallet. Reason: ${
+          data.reason
+        }. New balance: ₦${data.balance.toLocaleString()}`;
+        break;
+      case "withdrawal_completed":
+        subject = "Withdrawal Completed";
+        message = `Your withdrawal of ₦${data.amount.toLocaleString()} has been completed successfully. Reference: ${
+          data.reference
+        }`;
         break;
       default:
         message = data.message || "You have a new notification";
@@ -153,11 +193,71 @@ export class NotificationService {
       case "wallet_debit":
         message = `BillPadi: Your wallet has been debited with NGN${data.amount}. Balance: NGN${data.balance}`;
         break;
+      case "withdrawal_approved":
+        message = `BillPadi: Your withdrawal of NGN${data.amount} has been approved. Ref: ${data.reference}`;
+        break;
+      case "withdrawal_declined":
+        message = `BillPadi: Your withdrawal of NGN${data.amount} was declined and refunded. Reason: ${data.reason}`;
+        break;
+      case "withdrawal_completed":
+        message = `BillPadi: Your withdrawal of NGN${data.amount} has been completed. Ref: ${data.reference}`;
+        break;
       default:
         message = data.message || "You have a new notification from BillPadi";
     }
 
     await this.smsService.sendSMS({ to, message });
+  }
+
+  private async sendPushNotification(
+    userId: string,
+    type: string,
+    data: any
+  ): Promise<void> {
+    let title = "BillPadi Notification";
+    let body = "";
+
+    switch (type) {
+      case "transaction_success":
+        title = "Transaction Successful";
+        body = `Your ${data.transactionType} transaction of ₦${data.amount} was successful`;
+        break;
+      case "transaction_failed":
+        title = "Transaction Failed";
+        body = `Your ${data.transactionType} transaction of ₦${data.amount} failed`;
+        break;
+      case "wallet_credit":
+        title = "Wallet Credited";
+        body = `Your wallet has been credited with ₦${data.amount}`;
+        break;
+      case "wallet_debit":
+        title = "Wallet Debited";
+        body = `Your wallet has been debited with ₦${data.amount}`;
+        break;
+      case "withdrawal_approved":
+        title = "Withdrawal Approved";
+        body = `Your withdrawal of ₦${data.amount} has been approved`;
+        break;
+      case "withdrawal_declined":
+        title = "Withdrawal Declined";
+        body = `Your withdrawal of ₦${data.amount} was declined and refunded`;
+        break;
+      case "withdrawal_completed":
+        title = "Withdrawal Completed";
+        body = `Your withdrawal of ₦${data.amount} has been completed`;
+        break;
+      default:
+        body = data.message || "You have a new notification";
+    }
+
+    await this.pushNotificationService.sendToUser(userId, {
+      title,
+      body,
+      data: {
+        type,
+        ...data,
+      },
+    });
   }
 
   async getUserNotifications(

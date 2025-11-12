@@ -1,31 +1,73 @@
-import { Router } from 'express';
-import { GiftCardController } from '@/controllers/client/GiftCardController';
-
-import { authenticate } from '@/middlewares/auth';
-import { serviceCheck } from '@/middlewares/serviceCheck';
-import { walletLock } from '@/middlewares/walletLock';
-import { rateLimiter } from '@/middlewares/rateLimiter';
-import { validateRequest, validateQuery } from '@/middlewares/validation';
-
+import { Router } from "express";
+import { GiftCardController } from "@/controllers/client/GiftCardController";
+import { authenticate } from "@/middlewares/auth";
+import { validateRequest, validateQuery } from "@/middlewares/validation";
+import {
+  buyGiftCardSchema,
+  sellGiftCardSchema,
+  breakdownSchema,
+  giftCardTransactionQuerySchema,
+} from "@/validations/client/giftcardValidation";
+import { paginationSchema } from "@/validations/client/transactionValidation";
+import { checkAndVerifyPin } from "@/middlewares/checkAndVerifyPin";
 
 const router = Router();
-
 const giftCardController = new GiftCardController();
 
-// All routes require authentication and service check
 router.use(authenticate);
-router.use(serviceCheck('giftcard'));
 
-// Get gift cards by type (sell or buy)
-router.get('/:type?', giftCardController.getGiftCards);
+// Categories
+router.get(
+  "/categories",
+  validateQuery(paginationSchema),
+  giftCardController.getCategories
+);
+router.get("/categories/:categoryId", giftCardController.getCategoryById);
 
-// Transaction breakdown
-router.post('/breakdown', giftCardController.getBreakdown);
+// Products
+router.get("/", giftCardController.getGiftCards);
+router.get("/products/:giftCardId", giftCardController.getGiftCardById);
+router.get("/giftcard-rates", giftCardController.getRates);
+router.get("/:type", giftCardController.getGiftCardsByType);
 
-// Create transaction (buy/sell)
-// router.post('/', rateLimiter(10, 60000), walletLock, giftCardController.createGiftCardTransaction);
+// Breakdown
+router.post(
+  "/breakdown",
+  validateRequest(breakdownSchema),
+  giftCardController.getBreakdown
+);
 
-// Get current rates (public endpoint - no auth)
-// router.get('/rates', giftCardController.getGiftCardRates);
+// Transactions
+router.post(
+  "/buy",
+  validateRequest(buyGiftCardSchema),
+  checkAndVerifyPin,
+  giftCardController.buyGiftCard
+);
+router.post(
+  "/sell",
+  validateRequest(sellGiftCardSchema),
+  checkAndVerifyPin,
+  giftCardController.sellGiftCard
+);
+
+// Transaction Management
+router.get(
+  "/transactions/:transactionId/redeem-code",
+  giftCardController.getRedeemCode
+);
+router.get(
+  "/transactions/list",
+  validateQuery(giftCardTransactionQuerySchema),
+  giftCardController.getGiftCardTransactions
+);
+router.get(
+  "/transactions/:transactionId",
+  giftCardController.getGiftCardTransactionById
+);
+router.get(
+  "/transactions/reference/:reference",
+  giftCardController.getGiftCardTransactionByReference
+);
 
 export default router;

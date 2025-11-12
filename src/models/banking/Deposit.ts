@@ -1,12 +1,18 @@
-import mongoose, { Schema, Document, Types } from 'mongoose';
+import mongoose, { Schema, Document, Types } from "mongoose";
 
 export interface IDeposit extends Document {
-  _id: string; // UUID
+  _id: string;
   userId: Types.ObjectId;
+  walletId: Types.ObjectId;
   reference: string;
   provider: string;
   amount: number;
-  status: 'pending' | 'success' | 'failed';
+  status: "pending" | "success" | "failed" | "approved" | "declined";
+  approvedAt?: Date;
+  approvedBy?: string;
+  declinedAt?: Date;
+  declinedBy?: string;
+  declineReason?: string;
   meta?: any;
   createdAt: Date;
   updatedAt: Date;
@@ -20,7 +26,13 @@ const depositSchema = new Schema<IDeposit>(
     },
     userId: {
       type: Schema.Types.ObjectId,
-      ref: 'User',
+      ref: "User",
+      required: true,
+      index: true,
+    },
+    walletId: {
+      type: Schema.Types.ObjectId,
+      ref: "Wallet",
       required: true,
       index: true,
     },
@@ -41,9 +53,24 @@ const depositSchema = new Schema<IDeposit>(
     },
     status: {
       type: String,
-      enum: ['pending', 'success', 'failed'],
-      default: 'pending',
+      enum: ["pending", "success", "failed", "approved", "declined"],
+      default: "pending",
       index: true,
+    },
+    approvedAt: {
+      type: Date,
+    },
+    approvedBy: {
+      type: String,
+    },
+    declinedAt: {
+      type: Date,
+    },
+    declinedBy: {
+      type: String,
+    },
+    declineReason: {
+      type: String,
     },
     meta: Schema.Types.Mixed,
   },
@@ -53,4 +80,8 @@ const depositSchema = new Schema<IDeposit>(
   }
 );
 
-export const Deposit = mongoose.model<IDeposit>('Deposit', depositSchema);
+// Indexes
+depositSchema.index({ status: 1, createdAt: -1 });
+depositSchema.index({ userId: 1, status: 1 });
+
+export const Deposit = mongoose.model<IDeposit>("Deposit", depositSchema);

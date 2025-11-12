@@ -1,5 +1,4 @@
-import { config } from "dotenv";
-config();
+
 import express, { Application } from "express";
 import cors from "cors";
 import helmet from "helmet";

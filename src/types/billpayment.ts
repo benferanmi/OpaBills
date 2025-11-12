@@ -114,8 +114,8 @@ export interface GiftCardOrderData {
   senderName: string;
   recipientEmail?: string;
   recipientPhoneDetails?: {
-    countryCode: string;
-    phoneNumber: string;
+    countryCode?: string;
+    phoneNumber?: string;
   };
   userId?: string;
 }

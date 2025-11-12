@@ -164,11 +164,12 @@ export class WalletController {
   fundWallet = async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       const userId = req.user!.id;
-      const { amount, meta } = req.body;
+      const { amount, method, provider } = req.body;
       const result = await this.paymentService.initializePayment({
         userId,
         amount,
-        meta,
+        method,
+        provider,
       });
       return sendSuccessResponse(
         res,
@@ -318,7 +319,8 @@ export class WalletController {
   ) => {
     try {
       const userId = req.user!.id;
-      const { amount, bankCode, provider, accountNumber, accountName, pin } = req.body;
+      const { amount, bankCode, provider, accountNumber, accountName, pin } =
+        req.body;
       const result = await this.withdrawalService.bankTransferRequest({
         userId,
         amount,
@@ -337,5 +339,4 @@ export class WalletController {
       next(error);
     }
   };
-
 }

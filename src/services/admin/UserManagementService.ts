@@ -91,10 +91,10 @@ export class UserManagementService {
       },
       wallet: wallet
         ? {
-            balance: wallet.balance,
-            // bonusBalance: wallet.bonusBalance,
-            // commissionBalance: wallet.commissionBalance,
-            // lockedAt: wallet.lockedAt,
+            mainBalance: wallet.balance, // balance field is the main balance
+            bonusBalance: wallet.bonusBalance,
+            commissionBalance: wallet.commissionBalance,
+            lockedAt: wallet.lockedAt,
           }
         : null,
     };
@@ -126,7 +126,7 @@ export class UserManagementService {
     // Lock wallet
     const wallet = await this.walletRepository.findByUserId(userId);
     if (wallet) {
-      // wallet.lockedAt = new Date();
+      wallet.lockedAt = new Date();
       await wallet.save();
     }
 
@@ -139,7 +139,7 @@ export class UserManagementService {
   async creditUserWallet(
     userId: string,
     amount: number,
-    type: string,
+    type: "main" | "bonus" | "commission",
     remark: string
   ) {
     const user = await this.userRepository.findById(userId);
@@ -154,48 +154,62 @@ export class UserManagementService {
       throw new Error("Wallet not found");
     }
 
-    // if (wallet.lockedAt) {
-    //   throw new Error('Wallet is locked');
-    // }
+    if (wallet.lockedAt) {
+      throw new Error("Wallet is locked");
+    }
 
     const reference = generateReference("ADM");
+
+    // Get balance before update
+    const balanceBefore =
+      type === "main"
+        ? wallet.balance
+        : type === "bonus"
+        ? wallet.bonusBalance
+        : wallet.commissionBalance;
 
     // Update wallet balance based on type
     if (type === "main") {
       wallet.balance += amount;
     } else if (type === "bonus") {
-      // wallet.bonusBalance += amount;
+      wallet.bonusBalance += amount;
     } else if (type === "commission") {
-      // wallet.commissionBalance += amount;
+      wallet.commissionBalance += amount;
     }
 
     await wallet.save();
 
+    const balanceAfter =
+      type === "main"
+        ? wallet.balance
+        : type === "bonus"
+        ? wallet.bonusBalance
+        : wallet.commissionBalance;
+
     // Create ledger entry
-    await this.ledgerRepository.create({
-      ledgerableId: wallet.userId,
-      ledgerableType: "Wallet",
+    await this.ledgerRepository.createLedgerEntry({
+      userId: wallet.userId,
+      walletId: wallet.id,
       type: "credit",
       amount,
-      oldBalance: wallet.balance - amount,
-      newBalance: wallet.balance,
-      // reference,
-      reason: remark || "Admin credit",
-      // meta: { walletType: type },
+      balanceBefore,
+      balanceAfter,
+      reference,
+      description: remark || "Admin credit",
+      meta: { walletType: type },
     });
 
     return {
       message: "Wallet credited successfully",
       amount,
-      newBalance: type === "main" ? wallet.balance : type === "bonus",
-      // wallet.bonusBalance : wallet.commissionBalance,
+      newBalance: balanceAfter,
     };
   }
 
   async debitUserWallet(
     userId: string,
     amount: number,
-    type: string,
+    type: "main" | "bonus" | "commission",
     remark: string
   ) {
     const user = await this.userRepository.findById(userId);
@@ -210,15 +224,20 @@ export class UserManagementService {
       throw new Error("Wallet not found");
     }
 
-    // if (wallet.lockedAt) {
-    //   throw new Error('Wallet is locked');
-    // }
+    if (wallet.lockedAt) {
+      throw new Error("Wallet is locked");
+    }
 
-    // const currentBalance = type === 'main' ? wallet.balance : type === 'bonus' ? wallet.bonusBalance : wallet.commissionBalance;
+    const currentBalance =
+      type === "main"
+        ? wallet.balance
+        : type === "bonus"
+        ? wallet.bonusBalance
+        : wallet.commissionBalance;
 
-    // if (currentBalance < amount) {
-    //   throw new Error('Insufficient balance');
-    // }
+    if (currentBalance < amount) {
+      throw new Error("Insufficient balance");
+    }
 
     const reference = generateReference("ADM");
 
@@ -226,31 +245,37 @@ export class UserManagementService {
     if (type === "main") {
       wallet.balance -= amount;
     } else if (type === "bonus") {
-      wallet.balance -= amount;
+      wallet.bonusBalance -= amount;
     } else if (type === "commission") {
-      wallet.balance -= amount;
+      wallet.commissionBalance -= amount;
     }
 
     await wallet.save();
 
+    const balanceAfter =
+      type === "main"
+        ? wallet.balance
+        : type === "bonus"
+        ? wallet.bonusBalance
+        : wallet.commissionBalance;
+
     // Create ledger entry
-    await this.ledgerRepository.create({
-      ledgerableId: wallet.userId,
-      ledgerableType: "User",
+    await this.ledgerRepository.createLedgerEntry({
+      userId: wallet.userId,
+      walletId: wallet.id,
       type: "debit",
-      // amount,
-      // oldBalance: currentBalance,
-      // newBalance: currentBalance - amount,
-      // reference,
-      reason: remark || "Admin debit",
-      // meta: { walletType: type },
+      amount,
+      balanceBefore: currentBalance,
+      balanceAfter,
+      reference,
+      description: remark || "Admin debit",
+      meta: { walletType: type },
     });
 
     return {
       message: "Wallet debited successfully",
       amount,
-      newBalance: type === "main" ? wallet.balance : type === "bonus",
-      // ? wallet.bonusBalance : wallet.commissionBalance,
+      newBalance: balanceAfter,
     };
   }
 }

@@ -10,7 +10,6 @@ import { generateReference } from "@/utils/helpers";
 import { Product } from "@/models/reference/Product";
 import { IUser } from "@/models/core/User";
 import { ServiceRepository } from "@/repositories/ServiceRepository";
-import logger from "@/logger";
 
 interface BettingData {
   userId: string;

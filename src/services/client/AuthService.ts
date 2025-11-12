@@ -35,6 +35,7 @@ export interface RegisterDTO {
 export interface LoginDTO {
   email: string;
   password: string;
+  fcmToken?: string;
 }
 
 export interface ForgotPasswordDTO {
@@ -273,6 +274,11 @@ export class AuthService {
       );
     }
 
+    if (data.fcmToken && !user.fcmTokens.includes(data.fcmToken)) {
+      user.fcmTokens.push(data.fcmToken);
+      await user.save();
+    }
+
     // Generate tokens
     const accessToken = generateAccessToken({
       id: user.id.toString(),
@@ -292,7 +298,11 @@ export class AuthService {
     };
   }
 
-  async logout(userId: string, token: string): Promise<void> {
+  async logout(
+    userId: string,
+    token: string,
+    fcmToken?: string
+  ): Promise<void> {
     // Blacklist the token
     await this.cacheService.set(
       CACHE_KEYS.TOKEN_BLACKLIST(token),
@@ -302,6 +312,21 @@ export class AuthService {
 
     // Clear user cache
     await this.cacheService.delete(CACHE_KEYS.USER_PROFILE(userId));
+
+    if (fcmToken) {
+      const user = await this.userRepository.findById(userId);
+
+      if (!user) {
+        throw new AppError(
+          "User not found",
+          HTTP_STATUS.NOT_FOUND,
+          ERROR_CODES.NOT_FOUND
+        );
+      }
+
+      user.fcmTokens = user.fcmTokens.filter((t) => t !== fcmToken);
+      await user.save();
+    }
   }
 
   async refreshToken(refreshToken: string): Promise<any> {
@@ -745,7 +770,7 @@ export class AuthService {
       state: user.state,
       status: user.status,
       authType: user.authType,
-      fcmToken: user.fcmToken || null,
+      fcmTokens: user.fcmTokens || null,
       virtualAccount: user.virtualAccount,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,

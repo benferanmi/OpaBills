@@ -1,7 +1,8 @@
-import { WithdrawalRepository } from '@/repositories/WithdrawalRepository';
-import { WalletRepository } from '@/repositories/WalletRepository';
-import { LedgerRepository } from '@/repositories/LedgerRepository';
-import { NotificationService } from '../client/NotificationService';
+import { WithdrawalRepository } from "@/repositories/WithdrawalRepository";
+import { WalletRepository } from "@/repositories/WalletRepository";
+import { LedgerRepository } from "@/repositories/LedgerRepository";
+import { NotificationService } from "@/services/client/NotificationService";
+import { Types } from "mongoose";
 
 export class WithdrawalManagementService {
   private withdrawalRepository: WithdrawalRepository;
@@ -16,7 +17,11 @@ export class WithdrawalManagementService {
     this.notificationService = new NotificationService();
   }
 
-  async listWithdrawals(page: number = 1, limit: number = 20, filters: any = {}) {
+  async listWithdrawals(
+    page: number = 1,
+    limit: number = 20,
+    filters: any = {}
+  ) {
     const query: any = {};
 
     if (filters.status) {
@@ -36,7 +41,11 @@ export class WithdrawalManagementService {
       if (filters.maxAmount) query.amount.$lte = parseFloat(filters.maxAmount);
     }
 
-    const result = await this.withdrawalRepository.findWithPagination(query, page, limit);
+    const result = await this.withdrawalRepository.findWithPagination(
+      query,
+      page,
+      limit
+    );
 
     return {
       withdrawals: result.data,
@@ -53,7 +62,7 @@ export class WithdrawalManagementService {
     const withdrawal = await this.withdrawalRepository.findById(withdrawalId);
 
     if (!withdrawal) {
-      throw new Error('Withdrawal not found');
+      throw new Error("Withdrawal not found");
     }
 
     return withdrawal;
@@ -63,32 +72,44 @@ export class WithdrawalManagementService {
     const withdrawal = await this.withdrawalRepository.findById(withdrawalId);
 
     if (!withdrawal) {
-      throw new Error('Withdrawal not found');
+      throw new Error("Withdrawal not found");
     }
 
-    if (withdrawal.status !== 'pending') {
-      throw new Error('Can only approve pending withdrawals');
+    if (withdrawal.status !== "pending") {
+      throw new Error("Can only approve pending withdrawals");
     }
 
     // Update withdrawal status
-    withdrawal.status = 'approved';
+    withdrawal.status = "approved";
     withdrawal.approvedAt = new Date();
     withdrawal.approvedBy = approvedBy;
     await withdrawal.save();
 
-    // Send notification
-    // const wallet = await this.walletRepository.findById(withdrawal.walletId.toString());
-    // if (wallet) {
-    //   await this.notificationService.createNotification({
-    //     notifiableId: wallet.userId,
-    //     title: 'Withdrawal Approved',
-    //     message: `Your withdrawal of ₦${withdrawal.amount.toLocaleString()} has been approved and is being processed`,
-    //     type: 'withdrawal',
-    //   });
-    // }
+    // Get the main wallet for notification
+    const wallet = await this.walletRepository.findOne({
+      _id: withdrawal.walletId,
+      type: "main",
+    });
+
+    if (wallet) {
+      await this.notificationService.createNotification({
+        type: "withdrawal_approved",
+        notifiableType: "User",
+        notifiableId: wallet.userId as Types.ObjectId,
+        data: {
+          amount: withdrawal.amount,
+          reference: withdrawal.reference,
+          status: "approved",
+          message: `Your withdrawal of ₦${withdrawal.amount.toLocaleString()} has been approved and is being processed`,
+        },
+        sendEmail: true,
+        sendSMS: true,
+        sendPush: true,
+      });
+    }
 
     return {
-      message: 'Withdrawal approved successfully',
+      message: "Withdrawal approved successfully",
       withdrawal: {
         id: withdrawal._id,
         amount: withdrawal.amount,
@@ -97,57 +118,77 @@ export class WithdrawalManagementService {
     };
   }
 
-  async declineWithdrawal(withdrawalId: string, reason: string, declinedBy: string) {
+  async declineWithdrawal(
+    withdrawalId: string,
+    reason: string,
+    declinedBy: string
+  ) {
     const withdrawal = await this.withdrawalRepository.findById(withdrawalId);
 
     if (!withdrawal) {
-      throw new Error('Withdrawal not found');
+      throw new Error("Withdrawal not found");
     }
 
-    if (withdrawal.status !== 'pending') {
-      throw new Error('Can only decline pending withdrawals');
+    if (withdrawal.status !== "pending") {
+      throw new Error("Can only decline pending withdrawals");
     }
 
-    // const wallet = await this.walletRepository.findById(withdrawal.walletId.toString());
+    // Get the main wallet
+    const wallet = await this.walletRepository.findOne({
+      _id: withdrawal.walletId,
+      type: "main",
+    });
 
-    // if (!wallet) {
-    //   throw new Error('Wallet not found');
-    // }
+    if (!wallet) {
+      throw new Error("Wallet not found");
+    }
 
     // Refund the amount back to wallet
-    // const previousBalance = wallet.balance;
-    // wallet.balance += withdrawal.amount;
-    // await wallet.save();
+    const previousBalance = wallet.balance;
+    wallet.balance += withdrawal.amount;
+    await wallet.save();
 
-    // // Create ledger entry for refund
-    // await this.ledgerRepository.create({
-    //   ledgerableId: wallet.userId,
-    //   ledgerableType: wallet.id,
-    //   type: 'credit',
-    //   amount: withdrawal.amount,
-    //   oldBalance: previousBalance,
-    //   newBalance: wallet.balance,
-    //   // reference: `REFUND-${withdrawal.reference}`,
-    //   reason: `Withdrawal declined: ${reason}`,
-    // });
+    // Create ledger entry for refund
+    await this.ledgerRepository.create({
+      ledgerableType: "Wallet",
+      ledgerableId: wallet.id,
+      source: "SYSTEM",
+      destination: wallet.userId.toString(),
+      oldBalance: previousBalance,
+      newBalance: wallet.balance,
+      type: "credit",
+      reason: `Withdrawal declined: ${reason}`,
+      amount: withdrawal.amount,
+      currencyCode: "NGN",
+    });
 
     // Update withdrawal status
-    withdrawal.status = 'declined';
+    withdrawal.status = "declined";
     withdrawal.declinedAt = new Date();
     withdrawal.declinedBy = declinedBy;
     withdrawal.declineReason = reason;
     await withdrawal.save();
 
     // Send notification
-    // await this.notificationService.createNotification({
-    //   userId: wallet.userId.toString(),
-    //   title: 'Withdrawal Declined',
-    //   message: `Your withdrawal of ₦${withdrawal.amount.toLocaleString()} was declined and refunded. Reason: ${reason}`,
-    //   type: 'withdrawal',
-    // });
+    await this.notificationService.createNotification({
+      type: "withdrawal_declined",
+      notifiableType: "User",
+      notifiableId: wallet.userId as Types.ObjectId,
+      data: {
+        amount: withdrawal.amount,
+        reference: withdrawal.reference,
+        status: "declined",
+        reason: reason,
+        balance: wallet.balance,
+        message: `Your withdrawal of ₦${withdrawal.amount.toLocaleString()} was declined and refunded. Reason: ${reason}`,
+      },
+      sendEmail: true,
+      sendSMS: true,
+      sendPush: true,
+    });
 
     return {
-      message: 'Withdrawal declined and amount refunded',
+      message: "Withdrawal declined and amount refunded",
       withdrawal: {
         id: withdrawal._id,
         amount: withdrawal.amount,
@@ -157,36 +198,54 @@ export class WithdrawalManagementService {
     };
   }
 
-  async processWithdrawal(withdrawalId: string, provider: string, transactionId: string) {
+  async processWithdrawal(
+    withdrawalId: string,
+    provider: "monnify" | "saveHaven" | "flutterwave",
+    transactionId: string
+  ) {
     const withdrawal = await this.withdrawalRepository.findById(withdrawalId);
 
     if (!withdrawal) {
-      throw new Error('Withdrawal not found');
+      throw new Error("Withdrawal not found");
     }
 
-    if (withdrawal.status !== 'approved') {
-      throw new Error('Can only process approved withdrawals');
+    if (withdrawal.status !== "approved") {
+      throw new Error("Can only process approved withdrawals");
     }
 
-    withdrawal.status = 'approved';
-    // withdrawal.processedAt = new Date();
+    withdrawal.status = "completed";
+    withdrawal.processedAt = new Date();
     withdrawal.provider = provider;
-    // withdrawal.providerReference = transactionId;
+    withdrawal.providerReference = transactionId;
     await withdrawal.save();
 
-    // Send notification
-    // const wallet = await this.walletRepository.findById(withdrawal.walletId.toString());
-    // if (wallet) {
-      // await this.notificationService.createNotification({
-      //   userId: wallet.userId.toString(),
-      //   title: 'Withdrawal Completed',
-      //   message: `Your withdrawal of ₦${withdrawal.amount.toLocaleString()} has been completed`,
-      //   type: 'withdrawal',
-      // });
-    // }
+    // Get the main wallet for notification
+    const wallet = await this.walletRepository.findOne({
+      _id: withdrawal.walletId,
+      type: "main",
+    });
+
+    if (wallet) {
+      await this.notificationService.createNotification({
+        type: "withdrawal_completed",
+        notifiableType: "User",
+        notifiableId: wallet.userId as Types.ObjectId,
+        data: {
+          amount: withdrawal.amount,
+          reference: withdrawal.reference,
+          provider: provider,
+          providerReference: transactionId,
+          status: "completed",
+          message: `Your withdrawal of ₦${withdrawal.amount.toLocaleString()} has been completed`,
+        },
+        sendEmail: true,
+        sendSMS: true,
+        sendPush: true,
+      });
+    }
 
     return {
-      message: 'Withdrawal processed successfully',
+      message: "Withdrawal processed successfully",
       withdrawal: {
         id: withdrawal._id,
         amount: withdrawal.amount,

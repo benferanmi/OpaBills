@@ -43,3 +43,8 @@ npm start
 - `/src/routes` - API routes
 - `/src/utils` - Utility functions
 - `/src/validations` - Request validation schemas
+
+
+//TODO
+
+use cron job to update all thrid party products that may be in the database especially giftcards

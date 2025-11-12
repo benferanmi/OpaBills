@@ -1,5 +1,11 @@
 import mongoose, { Schema, Document, Types } from "mongoose";
 
+export interface IFCMToken {
+  token: string;
+  deviceType: "ios" | "android";
+  deviceId: string;
+  lastUsedAt: Date;
+}
 export interface IUser extends Document {
   firstname: string;
   lastname: string;
@@ -24,7 +30,7 @@ export interface IUser extends Document {
   transactionBiometricEnabled?: boolean;
   password: string;
   status: "active" | "inactive" | "suspended";
-  fcmToken?: string;
+  fcmTokens: string[];
   authType: "password" | "biometric" | "social";
   pin?: string;
   otp?: string;
@@ -70,7 +76,7 @@ export interface IUserResponse {
   loginBiometricEnabled?: boolean;
   transactionBiometricEnabled?: boolean;
 
-  fcmToken?: string | null;
+  fcmTokens: string[];
   virtualAccount?: any | null;
   createdAt?: Date | null;
   updatedAt?: Date | null;
@@ -113,7 +119,10 @@ const UserSchema = new Schema<IUser>(
       enum: ["active", "inactive", "suspended"],
       default: "active",
     },
-    fcmToken: { type: String },
+    fcmTokens: {
+      type: [String],
+      default: [],
+    },
     authType: {
       type: String,
       enum: ["password", "biometric", "social"],

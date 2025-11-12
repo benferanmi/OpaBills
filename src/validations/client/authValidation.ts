@@ -12,8 +12,17 @@ export const registerSchema = Joi.object({
 });
 
 export const loginSchema = Joi.object({
-  email: Joi.string().email().required(),
-  password: Joi.string().required(),
+  email: Joi.string().email().required().messages({
+    "any.required": "Email is required",
+    "string.empty": "Email is required",
+  }),
+  password: Joi.string().required().messages({
+    "any.required": "Password is required",
+    "string.empty": "Password is required",
+  }),
+  fcmToken: Joi.string().optional().messages({
+    "any.required": "FCM token is required",
+  }),
 });
 
 export const refreshTokenSchema = Joi.object({
@@ -70,4 +79,3 @@ export const verifyPinSchema = Joi.object({
 export const toggle2FASchema = Joi.object({
   enable: Joi.boolean().required(),
 });
-
