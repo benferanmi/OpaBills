@@ -23,6 +23,7 @@ export class ProfileService {
 
   async getProfile(userId: string): Promise<any> {
     // Check cache first
+    // await this.cacheService.delete(CACHE_KEYS.USER_PROFILE(userId));
     const cached = await this.cacheService.get(CACHE_KEYS.USER_PROFILE(userId));
     if (cached) {
       return cached;
@@ -37,7 +38,7 @@ export class ProfileService {
       );
     }
 
-    const profile = this.formatUserDetails(user);
+    const profile = await this.formatUserDetails(user);
     // Cache profile
     await this.cacheService.set(CACHE_KEYS.USER_PROFILE(userId), profile);
 
@@ -131,28 +132,31 @@ export class ProfileService {
       firstname: user.firstname,
       lastname: user.lastname,
       email: user.email,
-      phone: user.phone,
-      phoneCode: user.phoneCode,
-      username: user.username,
-      gender: user.gender,
-      refCode: user.refCode,
-      referredBy: user.referredBy,
-      avatar: user.avatar,
-      country: user.country,
-      state: user.state,
+      phone: user.phone || null,
+      phoneCode: user.phoneCode || null,
+      username: user.username || null,
+      gender: user.gender || null,
+      refCode: user.refCode || null,
+      referredBy: user.referredBy || null,
+      avatar: user.avatar || null,
+      country: user.country || null,
+      state: user.state || null,
       status: user.status,
       authType: user.authType,
       fcmTokens: user.fcmTokens,
-      virtualAccount: user.virtualAccount,
+      virtualAccount: user.virtualAccount || null,
+      dateOfBirth: user.dateOfBirth || null,
+      bvnVerified: user.bvnVerified,
+      bvnValidated: user.bvnValidated,
+      loginBiometricEnabled: user.loginBiometricEnabled || false,
+      transactionBiometricEnabled: user.transactionBiometricEnabled || false,
+      twofactorEnabled: user.twofactorEnabled || false,
+      emailVerifiedAt: user.emailVerifiedAt || null,
+      phoneVerifiedAt: user.phoneVerifiedAt || null,
+      pinActivatedAt: user.pinActivatedAt || null,
+      twoFactorEnabledAt: user.twoFactorEnabledAt || null,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
-      loginBiometricEnabled: user.loginBiometricEnabled,
-      transactionBiometricEnabled: user.transactionBiometricEnabled,
-      twofactorEnabled: user.twofactorEnabled,
-      // emailVerifiedAt: user.emailVerifiedAt,
-      // phoneVerifiedAt: user.phoneVerifiedAt,
-      // pinActivatedAt: user.pinActivatedAt,
-      // twoFactorEnabledAt: user.twoFactorEnabledAt,
     };
   }
 }

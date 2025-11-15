@@ -6,6 +6,7 @@
     "create:superAdmin": "ts-node src/seeders/createSuperAdmin.ts",
     "create:plans": "ts-node src/seeders/createPlans.ts",
     "create:role": "ts-node src/seeders/createSuperAdminRole.ts",
+    "seed:location": "ts-node src/scripts/seedReferenceData.ts",
     "build": "tsc && tsc-alias",
     "start": "node dist/server.js"
   },

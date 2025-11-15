@@ -1,30 +1,35 @@
-import mongoose, { Schema, Document, Types } from 'mongoose';
+import mongoose, { Schema, Document } from "mongoose";
 
 export interface IState extends Document {
-  countryId: Types.ObjectId;
+  id: number;
   name: string;
-  code?: string;
-  longitude?: string;
-  latitude?: string;
-  createdAt: Date;
-  updatedAt: Date;
+  country_id: number;
+  country_code: string;
+  iso2: string;
+  longitude: string;
+  latitude: string;
 }
 
 const StateSchema = new Schema<IState>(
   {
-    countryId: { type: Schema.Types.ObjectId, ref: 'Country', required: true },
-    name: { type: String, required: true },
-    code: { type: String },
+    id: { type: Number, required: true, unique: true, index: true },
+    name: { type: String, required: true, index: true },
+    country_id: { type: Number, required: true, index: true },
+    country_code: {
+      type: String,
+      required: true,
+      uppercase: true,
+      index: true,
+    },
+    iso2: { type: String, required: true, uppercase: true, index: true },
     longitude: { type: String },
     latitude: { type: String },
   },
-  {
-    timestamps: true,
-  }
+  { timestamps: true }
 );
 
-// Indexes
-StateSchema.index({ countryId: 1 });
-StateSchema.index({ name: 1 });
+// Compound and text indexes
+StateSchema.index({ country_id: 1, name: 1 });
+StateSchema.index({ name: "text" });
 
-export const State = mongoose.model<IState>('State', StateSchema);
+export const State = mongoose.model<IState>("State", StateSchema);

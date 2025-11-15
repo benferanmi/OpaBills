@@ -5,6 +5,9 @@ dist/
 .DS_Store
 documents/
 seeders/
+scripts/
 *.pem
 *.txt
 upload-secrets.ps1
+cleanstate.html
+citycleaner.html
