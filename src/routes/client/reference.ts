@@ -15,11 +15,11 @@ router.get('/countries/search', referenceDataController.searchCountries);
 router.get('/countries/:id', referenceDataController.getCountryById);
 
 // States
-router.get('/countries/:countryId/states', referenceDataController.getStatesByCountry);
+router.get('/states/:countryId', referenceDataController.getStatesByCountry);
 router.get('/states/:id', referenceDataController.getStateById);
 
 // Cities
-router.get('/states/:stateId/cities', referenceDataController.getCitiesByState);
+router.get('/cities/:stateId', referenceDataController.getCitiesByState);
 router.get('/cities/:id', referenceDataController.getCityById);
 
 // Providers

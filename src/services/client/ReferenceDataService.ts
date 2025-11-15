@@ -17,7 +17,7 @@ export class ReferenceDataService {
   private serviceRepository: ServiceRepository;
   private productRepository: ProductRepository;
   private bankAccountRepository: BankAccountRepository;
-private saveHavenService: SaveHavenService
+  private saveHavenService: SaveHavenService;
   constructor() {
     this.countryRepository = new CountryRepository();
     this.stateRepository = new StateRepository();
@@ -26,7 +26,7 @@ private saveHavenService: SaveHavenService
     this.serviceRepository = new ServiceRepository();
     this.productRepository = new ProductRepository();
     this.bankAccountRepository = new BankAccountRepository();
-    this.saveHavenService = new SaveHavenService()
+    this.saveHavenService = new SaveHavenService();
   }
 
   // Countries
@@ -80,7 +80,7 @@ private saveHavenService: SaveHavenService
     limit: number = 50
   ): Promise<any> {
     const { data, total } = await this.stateRepository.findWithPagination(
-      { countryId },
+      { country_id: countryId },
       page,
       limit,
       { name: 1 }
@@ -126,7 +126,7 @@ private saveHavenService: SaveHavenService
     limit: number = 50
   ): Promise<any> {
     const { data, total } = await this.cityRepository.findWithPagination(
-      { stateId },
+      { state_id: stateId },
       page,
       limit,
       { name: 1 }
