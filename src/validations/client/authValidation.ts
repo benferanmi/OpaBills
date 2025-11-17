@@ -52,6 +52,8 @@ export const changePasswordSchema = Joi.object({
 export const verifyOTPSchema = Joi.object({
   otp: Joi.string().length(6).required(),
   email: Joi.string().email().optional(),
+  phone: Joi.string().optional(),
+  phoneCode: Joi.string().optional(),
 });
 
 export const phoneNumberVerificationSchema = Joi.object({

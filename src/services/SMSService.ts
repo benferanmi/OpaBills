@@ -18,26 +18,54 @@ export class SMSService {
     this.senderId = smsConfig.termii.senderId;
   }
 
+  // async sendSMS(options: SMSOptions): Promise<void> {
+  //   try {
+  //     console.log(this.baseUrl, this.apiKey, this.senderId);
+
+  //     const url = `${this.baseUrl}/sms/number/send`;
+  //     console.log(url);
+
+  //     const response = await axios.post(`${this.baseUrl}/sms/number/send`, {
+  //       to: options.to,
+  //       // from: this.senderId,
+  //       sms: options.message,
+  //       // type: "plain",
+  //       // channel: "generic",
+  //       api_key: this.apiKey,
+  //     });
+
+  //     console.log(response);
+
+  //     logger.info(`SMS sent successfully to ${options.to}`, response.data);
+  //   } catch (error: any) {
+  //     console.log(error);
+  //     logger.error("SMS sending failed:", error.data);
+  //     throw error?.response?.data || error?.data || error;
+  //   }
+  // }
+
   async sendSMS(options: SMSOptions): Promise<void> {
     try {
-      console.log(this.baseUrl, this.apiKey, this.senderId);
+      // Use the standard Messaging API endpoint instead
+      const url = `${this.baseUrl}/sms/send`;
 
-      const url = `${this.baseUrl}/sms/number/send`;
-      console.log(url);
-
-      const response = await axios.post(`${this.baseUrl}/sms/number/send`, {
-        to: options.to,
-        from: this.senderId,
+      const payload = {
+        to: options.to.replace(/^\+/, ""),
+        from: this.senderId, // Use your approved sender ID
         sms: options.message,
         type: "plain",
-        channel: "generic",
+        channel: "generic", // or "dnd" for DND numbers
         api_key: this.apiKey,
-      });
+      };
 
-      logger.info(`SMS sent successfully to ${options.to}`, response.data);
+      logger.info(`Sending SMS via Messaging API to ${options.to}`);
+      const response = await axios.post(url, payload);
+
+      logger.info(`SMS sent successfully`, response.data);
     } catch (error: any) {
-      logger.error("SMS sending failed:", error.data);
-      throw error?.response?.data || error?.data || error;
+      const errorData = error.response?.data || error.message;
+      logger.error("SMS sending failed:", errorData);
+      throw new Error(`SMS sending failed: ${JSON.stringify(errorData)}`);
     }
   }
 

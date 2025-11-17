@@ -56,6 +56,8 @@ export interface ChangePasswordDTO {
 
 export interface VerifyPhoneDTO {
   userId: string;
+  phone: number;
+  phoneCode: string;
   otp: string;
 }
 
@@ -595,7 +597,7 @@ export class AuthService {
 
     // Verify OTP from Redis
     const isValid = await this.otpService.verify(
-      data.userId,
+      data.userId.toString(),
       "phone_verification",
       data.otp
     );
@@ -608,7 +610,11 @@ export class AuthService {
     }
 
     // Mark phone as verified
-    await this.userRepository.verifyPhone(data.userId);
+    await this.userRepository.verifyPhone(
+      data.userId,
+      data.phone,
+      data.phoneCode
+    );
   }
 
   async updatePin(data: UpdatePinDTO): Promise<void> {
