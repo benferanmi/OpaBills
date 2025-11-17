@@ -16,7 +16,6 @@ module.exports = {
             error_file: './logs/err.log',
             out_file: './logs/out.log',
             log_file: './logs/combined.log',
-
             log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
 
             // Auto restart configuration
@@ -27,23 +26,25 @@ module.exports = {
             max_memory_restart: '1G',
 
             // Restart policy
-            restart_delay: 10000,
-            max_restarts: 10,
-            min_uptime: '30s',
+            autorestart: true,
+            restart_delay: 4000,        // Wait 4s before restart
+            max_restarts: 15,            // Allow more restarts
+            min_uptime: '10s',           // Lower uptime requirement
 
             // Health monitoring
-            kill_timeout: 5000,
-            wait_ready: false,  // Changed to false to avoid waiting issues
-            listen_timeout: 3000,
+            kill_timeout: 5000,      
+            wait_ready: false,
+            listen_timeout: 10000,
+
+            // Graceful start/shutdown
+            shutdown_with_message: true,
 
             // Source control
             merge_logs: true,
-
-            // Advanced PM2 features
             instance_var: 'INSTANCE_ID',
 
-            // Graceful start/shutdown
-            shutdown_with_message: true
+            // Error handling - important!
+            exp_backoff_restart_delay: 100,
         }
     ],
 };

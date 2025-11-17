@@ -33,7 +33,9 @@ class RedisConfig {
               return new Error("Redis reconnection failed");
             }
             const delay = Math.min(retries * 50, 1000);
-            logger.warn(`Redis reconnecting in ${delay}ms (attempt ${retries})`);
+            logger.warn(
+              `Redis reconnecting in ${delay}ms (attempt ${retries})`
+            );
             return delay;
           },
         },
@@ -198,21 +200,6 @@ class RedisConfig {
       this.isConnected = false;
       logger.info("Redis client connection ended");
     });
-
-    // Handle process termination
-    const shutdown = async () => {
-      try {
-        await this.disconnect();
-        logger.info("Redis connection closed through app termination");
-        process.exit(0);
-      } catch (error) {
-        logger.error("Error closing Redis connection:", error);
-        process.exit(1);
-      }
-    };
-
-    process.on("SIGINT", shutdown);
-    process.on("SIGTERM", shutdown);
   }
 
   private parseRedisInfo(info: string): any {
