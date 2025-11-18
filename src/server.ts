@@ -32,6 +32,8 @@ const startServer = async () => {
         return;
       }
 
+      
+
       isShuttingDown = true;
       logger.info(`Received ${signal} signal, closing server gracefully...`);
 
