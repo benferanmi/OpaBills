@@ -7,6 +7,7 @@
     "create:plans": "ts-node src/seeders/createPlans.ts",
     "create:role": "ts-node src/seeders/createSuperAdminRole.ts",
     "seed:location": "ts-node src/scripts/seedReferenceData.ts",
+    "update:countries": "ts-node src/scripts/updateCountryWithFlag.ts",
     "build": "tsc && tsc-alias",
     "start": "node dist/server.js"
   },

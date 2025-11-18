@@ -43,26 +43,9 @@ export const buyGiftCardSchema = Joi.object({
     "number.positive": "Unit price must be positive",
     "any.required": "Unit price is required",
   }),
-  // recipientEmail: Joi.string().email().optional().messages({
-  //   "string.email": "Recipient email must be a valid email address",
-  // }),
-  // recipientPhone: Joi.object({
-  //   countryCode: Joi.string().required().messages({
-  //     "string.empty": "Country code is required",
-  //     "any.required": "Country code is required",
-  //   }),
-  //   number: Joi.string().required().messages({
-  //     "string.empty": "Phone number is required",
-  //     "any.required": "Phone number is required",
-  //   }),
-  // }).optional(),
 });
-// .or("recipientEmail", "recipientPhone")
-// .messages({
-//   "object.missing": "Either recipient email or phone is required",
-// });
 
-// Sell gift card validation (for future use)
+// Sell gift card validation (UPDATED for manual flow)
 export const sellGiftCardSchema = Joi.object({
   giftCardId: Joi.string().required().messages({
     "string.empty": "Gift card ID is required",
@@ -72,10 +55,6 @@ export const sellGiftCardSchema = Joi.object({
     "number.base": "Amount must be a number",
     "number.positive": "Amount must be positive",
     "any.required": "Amount is required",
-  }),
-  pin: Joi.number().required().messages({
-    "number.base": "Pin must be a number",
-    "any.required": "Pin is required",
   }),
   quantity: Joi.number().integer().min(1).required().messages({
     "number.base": "Quantity must be a number",
@@ -87,11 +66,15 @@ export const sellGiftCardSchema = Joi.object({
     "any.only": 'Card type must be either "physical" or "ecode"',
     "any.required": "Card type is required",
   }),
-  card: Joi.string().required().messages({
-    "string.empty": "Card details are required",
-    "any.required": "Card details are required",
+  cards: Joi.array().items(Joi.string().uri()).min(1).required().messages({
+    "array.base": "Cards must be an array",
+    "array.min": "At least one card image/code is required",
+    "any.required": "Card images/codes are required",
   }),
-  comment: Joi.string().max(500).optional().messages({
+  pin: Joi.string().optional().allow("", null).messages({
+    "string.base": "Pin must be a string",
+  }),
+  comment: Joi.string().max(500).optional().allow("", null).messages({
     "string.max": "Comment must not exceed 500 characters",
   }),
   bankAccountId: Joi.string().required().messages({
@@ -124,7 +107,16 @@ export const giftCardTransactionQuerySchema = Joi.object({
   limit: Joi.number().integer().min(1).max(100).optional().default(10),
   tradeType: Joi.string().valid("buy", "sell").optional(),
   status: Joi.string()
-    .valid("pending", "success", "failed", "processing")
+    .valid(
+      "pending",
+      "processing",
+      "success",
+      "failed",
+      "approved",
+      "declined",
+      "multiple",
+      "s.approved"
+    )
     .optional(),
   startDate: Joi.date().iso().optional(),
   endDate: Joi.date().iso().min(Joi.ref("startDate")).optional().messages({

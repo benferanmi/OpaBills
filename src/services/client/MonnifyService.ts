@@ -228,7 +228,12 @@ export class MonnifyService {
   async verifyBankAccount(
     accountNumber: string,
     bankCode: string
-  ): Promise<{ account_name: string; account_number: string }> {
+  ): Promise<{
+    accountName: string;
+    accountNumber: string;
+    account_name: string;
+    account_number: string;
+  }> {
     try {
       const response = await this.makeAuthenticatedRequest(
         "GET",
@@ -247,6 +252,8 @@ export class MonnifyService {
       return {
         account_name: response.responseBody.accountName,
         account_number: accountNumber,
+        accountName: response.responseBody.accountName,
+        accountNumber: accountNumber,
       };
     } catch (error: any) {
       logger.error("Monnify: Error verifying bank account:", error);
@@ -333,7 +340,7 @@ export class MonnifyService {
         payload
       );
 
-      console.log(response)
+      console.log(response);
 
       if (!response.requestSuccessful) {
         throw new AppError(

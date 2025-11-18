@@ -106,6 +106,7 @@ export class AuthService {
   private userRepository: UserRepository;
   private walletRepository: WalletRepository;
   private cacheService: CacheService;
+
   constructor() {
     this.otpService = new OTPService();
     this.emailService = new EmailService();
@@ -185,28 +186,7 @@ export class AuthService {
       user.firstname
     );
 
-    // Generate tokens
-    // const accessToken = generateAccessToken({
-    //   id: user.id.toString(),
-    //   email: user.email,
-    // });
-    // const refreshToken = generateRefreshToken({
-    //   id: user.id.toString(),
-    //   email: user.email,
-    // });
-
     return {
-      // user: {
-      //   id: user._id,
-      //   firstname: user.firstname,
-      //   lastname: user.lastname,
-      //   email: user.email,
-      //   username: user.username,
-      //   refCode: user.refCode,
-      //   emailVerified: false,
-      // },
-      // accessToken,
-      // refreshToken,
       message:
         "Registration successful. Please check your email for verification code.",
     };
@@ -293,6 +273,14 @@ export class AuthService {
 
     const formattedUser = await this.formatUserDetails(user);
 
+    // Update cache with latest user data
+    if (formattedUser) {
+      await this.cacheService.set(
+        CACHE_KEYS.USER_PROFILE(user.id.toString()),
+        formattedUser
+      );
+    }
+
     return {
       user: formattedUser,
       accessToken,
@@ -312,9 +300,6 @@ export class AuthService {
       CACHE_TTL.ONE_DAY
     );
 
-    // Clear user cache
-    await this.cacheService.delete(CACHE_KEYS.USER_PROFILE(userId));
-
     if (fcmToken) {
       const user = await this.userRepository.findById(userId);
 
@@ -328,6 +313,18 @@ export class AuthService {
 
       user.fcmTokens = user.fcmTokens.filter((t) => t !== fcmToken);
       await user.save();
+
+      // Update cache with latest user data
+      const userDetails = await this.formatUserDetails(user);
+      if (userDetails) {
+        await this.cacheService.set(
+          CACHE_KEYS.USER_PROFILE(userId),
+          userDetails
+        );
+      }
+    } else {
+      // Only delete cache if no fcmToken update was made
+      await this.cacheService.delete(CACHE_KEYS.USER_PROFILE(userId));
     }
   }
 
@@ -447,16 +444,12 @@ export class AuthService {
 
     const hashedPassword = await hashPassword(data.newPassword);
     await this.userRepository.updatePassword(data.userId, hashedPassword);
-
-    // Clear user cache
-    await this.cacheService.delete(CACHE_KEYS.USER_PROFILE(data.userId));
   }
 
   async verifyEmail(
     otp: string,
     email: string
   ): Promise<AuthResponseDTO | null> {
-    console.log(email);
     const user = await this.userRepository.findByEmail(email);
     if (!user) {
       throw new AppError(
@@ -491,18 +484,33 @@ export class AuthService {
     // Mark email as verified
     await this.userRepository.verifyEmail(user.id.toString());
 
-    const data = await this.formatUserDetails(user);
+    // Fetch updated user data
+    const updatedUser = await this.userRepository.findById(user.id.toString());
+    if (!updatedUser) {
+      throw new AppError(
+        "User not found after verification",
+        HTTP_STATUS.NOT_FOUND,
+        ERROR_CODES.NOT_FOUND
+      );
+    }
+
+    const data = await this.formatUserDetails(updatedUser);
     const accessToken = generateAccessToken({
-      id: user.id.toString(),
-      email: user.email,
+      id: updatedUser.id.toString(),
+      email: updatedUser.email,
     });
     const refreshToken = generateRefreshToken({
-      id: user.id.toString(),
-      email: user.email,
+      id: updatedUser.id.toString(),
+      email: updatedUser.email,
     });
 
-    // Clear user cache
-    await this.cacheService.delete(CACHE_KEYS.USER_PROFILE(user.id.toString()));
+    // Update cache with verified user data
+    if (data) {
+      await this.cacheService.set(
+        CACHE_KEYS.USER_PROFILE(updatedUser.id.toString()),
+        data
+      );
+    }
 
     return { user: data, accessToken, refreshToken };
   }
@@ -538,9 +546,6 @@ export class AuthService {
       user.firstname
     );
 
-    // Clear user cache
-    await this.cacheService.delete(CACHE_KEYS.USER_PROFILE(user.id.toString()));
-
     return;
   }
 
@@ -575,6 +580,15 @@ export class AuthService {
     // Send SMS via Termii
     const fullPhone = `${user.phoneCode || ""}${user.phone}`;
     await this.smsService.sendPhoneVerificationOTP(fullPhone, otp);
+
+    // Update cache with new phone data
+    const userDetails = await this.formatUserDetails(user);
+    if (userDetails) {
+      await this.cacheService.set(
+        CACHE_KEYS.USER_PROFILE(data.userId),
+        userDetails
+      );
+    }
   }
 
   async verifyPhone(data: VerifyPhoneDTO): Promise<void> {
@@ -615,6 +629,18 @@ export class AuthService {
       data.phone,
       data.phoneCode
     );
+
+    // Fetch updated user and update cache
+    const updatedUser = await this.userRepository.findById(data.userId);
+    if (updatedUser) {
+      const userDetails = await this.formatUserDetails(updatedUser);
+      if (userDetails) {
+        await this.cacheService.set(
+          CACHE_KEYS.USER_PROFILE(data.userId),
+          userDetails
+        );
+      }
+    }
   }
 
   async updatePin(data: UpdatePinDTO): Promise<void> {
@@ -645,8 +671,17 @@ export class AuthService {
       pinActivatedAt: new Date(),
     });
 
-    // Clear user cache
-    await this.cacheService.delete(CACHE_KEYS.USER_PROFILE(data.userId));
+    // Fetch updated user and update cache
+    const updatedUser = await this.userRepository.findById(data.userId);
+    if (updatedUser) {
+      const userDetails = await this.formatUserDetails(updatedUser);
+      if (userDetails) {
+        await this.cacheService.set(
+          CACHE_KEYS.USER_PROFILE(data.userId),
+          userDetails
+        );
+      }
+    }
   }
 
   async setPin(data: SetPinDTO): Promise<void> {
@@ -667,8 +702,18 @@ export class AuthService {
       pinActivatedAt: new Date(),
     });
 
-    // Clear user cache
-    await this.cacheService.delete(CACHE_KEYS.USER_PROFILE(data.userId));
+    // Fetch updated user and update cache
+    const updatedUser = await this.userRepository.findById(data.userId);
+    if (updatedUser) {
+      const userDetails = await this.formatUserDetails(updatedUser);
+      if (userDetails) {
+        await this.cacheService.set(
+          CACHE_KEYS.USER_PROFILE(data.userId),
+          userDetails
+        );
+      }
+    }
+
     return;
   }
 
@@ -708,6 +753,15 @@ export class AuthService {
     user.twoFactorEnabledAt = data.enable ? new Date() : undefined;
     await user.save();
 
+    // Update cache with 2FA status
+    const userDetails = await this.formatUserDetails(user);
+    if (userDetails) {
+      await this.cacheService.set(
+        CACHE_KEYS.USER_PROFILE(data.userId),
+        userDetails
+      );
+    }
+
     return;
   }
 
@@ -733,8 +787,7 @@ export class AuthService {
         ERROR_CODES.INVALID_TOKEN
       );
     }
-    // Clear user cache
-    await this.cacheService.delete(CACHE_KEYS.USER_PROFILE(user.id));
+
     const userDetails = await this.formatUserDetails(user);
     if (!userDetails) {
       throw new AppError(
@@ -743,6 +796,9 @@ export class AuthService {
         ERROR_CODES.INTERNAL_ERROR
       );
     }
+
+    // Update cache with user data
+    await this.cacheService.set(CACHE_KEYS.USER_PROFILE(user.id), userDetails);
 
     // Generate tokens
     const accessToken = generateAccessToken({

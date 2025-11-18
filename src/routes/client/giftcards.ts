@@ -10,6 +10,7 @@ import {
 } from "@/validations/client/giftcardValidation";
 import { paginationSchema } from "@/validations/client/transactionValidation";
 import { checkAndVerifyPin } from "@/middlewares/checkAndVerifyPin";
+import { walletLock } from "@/middlewares/walletLock";
 
 const router = Router();
 const giftCardController = new GiftCardController();
@@ -42,6 +43,7 @@ router.post(
   "/buy",
   validateRequest(buyGiftCardSchema),
   checkAndVerifyPin,
+  walletLock,
   giftCardController.buyGiftCard
 );
 router.post(

@@ -11,3 +11,4 @@ scripts/
 upload-secrets.ps1
 cleanstate.html
 citycleaner.html
+addcountryflag.html

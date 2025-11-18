@@ -3,6 +3,7 @@ import {
   GiftCardCategoryRepository,
   GiftCardTransactionRepository,
 } from "@/repositories/GiftCardRepository";
+import { BankAccountRepository } from "@/repositories/BankAccountRepository";
 import { TransactionRepository } from "@/repositories/TransactionRepository";
 import { NotificationRepository } from "@/repositories/NotificationRepository";
 import { WalletService } from "./WalletService";
@@ -19,6 +20,7 @@ export class GiftCardService {
   private giftCardRepository: GiftCardRepository;
   private giftCardCategoryRepository: GiftCardCategoryRepository;
   private giftCardTransactionRepository: GiftCardTransactionRepository;
+  private bankAccountRepository: BankAccountRepository;
   private transactionRepository: TransactionRepository;
   private walletService: WalletService;
   private reloadlyService: ReloadlyService;
@@ -28,6 +30,7 @@ export class GiftCardService {
     this.giftCardRepository = new GiftCardRepository();
     this.giftCardCategoryRepository = new GiftCardCategoryRepository();
     this.giftCardTransactionRepository = new GiftCardTransactionRepository();
+    this.bankAccountRepository = new BankAccountRepository();
     this.transactionRepository = new TransactionRepository();
     this.walletService = new WalletService();
     this.reloadlyService = new ReloadlyService();
@@ -63,45 +66,12 @@ export class GiftCardService {
    * GIFTCARD PRODUCTS METHODS
    */
   async getGiftCards(filters: any = {}, page: number = 1, limit: number = 10) {
-    // if (filters.categoryId) {
-    //   return this.giftCardRepository.findByCategory(
-    //     filters.categoryId,
-    //     page,
-    //     limit
-    //   );
-    // }
-    // if (filters.countryId) {
-    //   return this.giftCardRepository.findByCountry(
-    //     filters.countryId,
-    //     page,
-    //     limit
-    //   );
-    // }
-    // if (filters.search) {
-    //   return this.giftCardRepository.searchGiftCards(
-    //     filters.search,
-    //     page,
-    //     limit
-    //   );
-    // }
-    // return this.giftCardRepository.findWithPagination(
-    //   { status: "active" },
-    //   page,
-    //   limit
-    // );
-
-    //TODO: population of category and country
     const result = await this.giftCardRepository.findAll(filters, page, limit);
     return result;
   }
 
-  /**
-   * Gets available denominations for a gift card
-   */
   async getAvailableDenominations(giftCardId: string) {
     const giftCard = await this.getGiftCardById(giftCardId);
-
-    console.log(giftCard);
 
     if (giftCard.denominationType === "FIXED") {
       const priceList =
@@ -112,7 +82,6 @@ export class GiftCardService {
       const denominations = priceList.map((amount: number, index: number) => {
         let ngnAmount: number | null = null;
 
-        // Try to get NGN amount from various sources
         if (ngnPriceList[index]) {
           ngnAmount = ngnPriceList[index];
         } else if (
@@ -142,7 +111,6 @@ export class GiftCardService {
         denominations,
       };
     } else {
-      // Return range information
       return {
         type: "RANGE" as const,
         currency: giftCard.currency,
@@ -190,7 +158,6 @@ export class GiftCardService {
   }
 
   async getGiftCardRates() {
-    console.log("called");
     const giftCards = await this.giftCardRepository.findWithPagination(
       { status: "active" },
       1,
@@ -234,7 +201,6 @@ export class GiftCardService {
       );
     }
 
-    // Check if trade type is activated
     if (data.tradeType === "buy" && !category.purchaseActivated) {
       throw new AppError(
         "Purchase not activated for this gift card",
@@ -251,7 +217,6 @@ export class GiftCardService {
       );
     }
 
-    // Validate amount based on denomination type
     this.validateAmount(giftCard, data.amount, data.tradeType);
 
     let rate: number;
@@ -261,7 +226,6 @@ export class GiftCardService {
     };
 
     if (data.tradeType === "buy") {
-      // For FIXED denominations, try to get exact rate from stored mapping
       if (giftCard.denominationType === "FIXED") {
         const fixedRate = this.getFixedDenominationRate(giftCard, data.amount);
 
@@ -269,7 +233,6 @@ export class GiftCardService {
           rate = fixedRate;
           metadata.rateSource = "stored_fixed_denomination";
         } else {
-          // Fetch real-time rate if stored rate not found
           try {
             const productDetails =
               await this.reloadlyService.getGiftCardProductById(
@@ -287,7 +250,6 @@ export class GiftCardService {
           }
         }
       } else {
-        // For RANGE denominations, fetch real-time rate
         try {
           const productDetails =
             await this.reloadlyService.getGiftCardProductById(
@@ -305,7 +267,6 @@ export class GiftCardService {
         }
       }
     } else {
-      // Sell rate
       if (!giftCard.sellRate) {
         throw new AppError(
           "Sell rate not available for this gift card",
@@ -317,10 +278,8 @@ export class GiftCardService {
       metadata.rateSource = "stored_sell_rate";
     }
 
-    // Calculate service charge (can be fetched from settings)
-    const serviceCharge = 1000; //TODO: get from admin or env
+    const serviceCharge = data.tradeType === "buy" ? 1000 : 0;
 
-    // Calculate payable amount
     let payableAmount: number;
     if (data.tradeType === "buy") {
       const subtotal = data.amount * rate * data.quantity;
@@ -366,7 +325,7 @@ export class GiftCardService {
   }
 
   /**
-   * BUY GIFTCARD
+   * BUY GIFTCARD (Automated via Reloadly)
    */
   async buyGiftCard(data: {
     userId: string;
@@ -486,7 +445,6 @@ export class GiftCardService {
         senderName: data.user.firstname || "Customer",
         recipientEmail: data.user.email,
         recipientPhoneDetails: {
-          //TODO: get the country code using the user country
           countryCode: "NG",
           phoneNumber: data.user.phone,
         },
@@ -591,23 +549,23 @@ export class GiftCardService {
   }
 
   /**
-   * SELL GIFTCARD
+   * SELL GIFTCARD (Manual - Pending Admin Review)
    */
   async sellGiftCard(data: {
     userId: string;
     giftCardId: string;
     amount: number;
     quantity: number;
-    cardType: string;
-    card: string;
-    pin?: string;
+    cardType: "physical" | "ecode";
+    cards: string[]; // Array of card images
     comment?: string;
     bankAccountId: string;
   }) {
     const reference = generateReference("GIFTCARD_SELL_");
+    const groupTag = generateReference("GP");
 
     const giftCard = await this.getGiftCardById(data.giftCardId);
-
+    //TODO: instead of running a new query for the category i can just populate the giftcard's category in the getGiftCardById method
     const category = await this.giftCardCategoryRepository.findById(
       giftCard.categoryId.toString()
     );
@@ -619,6 +577,7 @@ export class GiftCardService {
       );
     }
 
+    // Validate amount
     if (giftCard.sellMinAmount && data.amount < giftCard.sellMinAmount) {
       throw new AppError(
         `Minimum sell amount is ${giftCard.sellMinAmount}`,
@@ -634,30 +593,109 @@ export class GiftCardService {
       );
     }
 
+    // Validate bank account
+    const bankAccount = await this.bankAccountRepository.findById(
+      data.bankAccountId
+    );
+
+    if (!bankAccount || bankAccount.userId.toString() !== data.userId) {
+      throw new AppError(
+        "Invalid bank account",
+        HTTP_STATUS.BAD_REQUEST,
+        ERROR_CODES.VALIDATION_ERROR
+      );
+    }
+
     const rate = giftCard.sellRate || 1;
     const payableAmount = data.amount * rate * data.quantity;
 
+    // Check if user has existing pending transactions for this gift card
+    const existingPendingTransactions =
+      await this.giftCardTransactionRepository.findPendingSellByUserAndGiftCard(
+        data.userId,
+        data.giftCardId
+      );
+
+    let parentTransaction = null;
+
+    // If there are existing pending transactions, find or create parent
+    if (existingPendingTransactions.length > 0) {
+      // Check if a parent already exists
+      parentTransaction = existingPendingTransactions.find(
+        (txn) => txn.status === "multiple" && !txn.parentId
+      );
+
+      // If no parent exists, convert the first transaction to parent
+      if (!parentTransaction) {
+        const firstTransaction = existingPendingTransactions[0];
+
+        await this.giftCardTransactionRepository.update(
+          firstTransaction.id.toString(),
+          {
+            status: "multiple",
+            groupTag: firstTransaction.groupTag || generateReference("GP"),
+          }
+        );
+
+        parentTransaction = await this.giftCardTransactionRepository.findById(
+          firstTransaction.id.toString()
+        );
+      }
+    }
+
+    // Create the new sell transaction
     const giftCardTransaction = await this.giftCardTransactionRepository.create(
       {
-        _id: uuidv4(),
-        giftCardId: giftCard.id,
+        giftCardId: new Types.ObjectId(data.giftCardId),
         userId: new Types.ObjectId(data.userId),
+        parentId: parentTransaction ? parentTransaction.id : undefined,
         reference,
         tradeType: "sell",
         cardType: data.cardType,
-        card: data.card,
-        pin: data.pin,
+        cards: data.cards,
         comment: data.comment,
         amount: data.amount,
         quantity: data.quantity,
         rate,
         payableAmount,
+        originalRate: rate,
+        originalAmount: payableAmount,
         status: "pending",
         preorder: false,
+        groupTag: parentTransaction?.groupTag || groupTag,
+        bankAccountId: new Types.ObjectId(data.bankAccountId),
+        bankId: bankAccount.bankId as Types.ObjectId,
+        bankCode: bankAccount.bankCode,
+        accountName: bankAccount.accountName,
+        accountNumber: bankAccount.accountNumber,
+        meta: {
+          cardImages: data.cards,
+        },
       }
     );
 
-    return giftCardTransaction;
+    // Send notification
+    if (this.notificationRepository) {
+      await this.notificationRepository.create({
+        type: "giftcard_sell_submitted",
+        notifiableType: "User",
+        notifiableId: new Types.ObjectId(data.userId),
+        data: {
+          transactionType: "Gift Card Sale",
+          amount: payableAmount,
+          reference,
+          giftCardName: giftCard.name,
+          status: "pending_review",
+        },
+      });
+    }
+
+    return {
+      transaction: giftCardTransaction,
+      message: "Gift card submitted for review successfully",
+      status: "pending",
+      hasMultipleTransactions: !!parentTransaction,
+    };
   }
 
   /**
@@ -773,13 +811,11 @@ export class GiftCardService {
   }
 
   private calculateRateFromProduct(product: any): number {
-    // Use fixed denominations map (most accurate)
     if (
       product.fixedRecipientToSenderDenominationsMap &&
       typeof product.fixedRecipientToSenderDenominationsMap === "object" &&
       Object.keys(product.fixedRecipientToSenderDenominationsMap).length > 0
     ) {
-      // Get the first denomination mapping
       const firstKey = Object.keys(
         product.fixedRecipientToSenderDenominationsMap
       )[0];
@@ -792,15 +828,12 @@ export class GiftCardService {
       }
     }
 
-    // Fallback: Use exchange rate with fees
     let rate = product.recipientCurrencyToSenderCurrencyExchangeRate || 1;
 
-    // Apply sender fee percentage if present
     if (product.senderFeePercentage && product.senderFeePercentage > 0) {
       rate = rate * (1 + product.senderFeePercentage / 100);
     }
 
-    // Apply discount percentage if present
     if (product.discountPercentage && product.discountPercentage > 0) {
       rate = rate * (1 - product.discountPercentage / 100);
     }
@@ -808,16 +841,12 @@ export class GiftCardService {
     return rate;
   }
 
-  /**
-   * Validates amount based on denomination type
-   */
   private validateAmount(
     giftCard: any,
     amount: number,
     tradeType: "buy" | "sell"
   ): void {
     if (tradeType === "sell") {
-      // Sell validation
       if (giftCard.sellMinAmount && amount < giftCard.sellMinAmount) {
         throw new AppError(
           `Minimum sell amount is ${giftCard.sellMinAmount}`,
@@ -835,7 +864,6 @@ export class GiftCardService {
       return;
     }
 
-    // Buy validation
     if (giftCard.denominationType === "FIXED") {
       const priceList =
         giftCard.priceList || giftCard.fixedRecipientDenominations || [];
@@ -858,7 +886,6 @@ export class GiftCardService {
         );
       }
     } else {
-      // For RANGE type, validate min/max
       if (giftCard.buyMinAmount && amount < giftCard.buyMinAmount) {
         throw new AppError(
           `Minimum purchase amount is ${giftCard.buyMinAmount} ${giftCard.currency}`,
@@ -876,9 +903,6 @@ export class GiftCardService {
     }
   }
 
-  /**
-   * Gets exact rate for fixed denomination
-   */
   private getFixedDenominationRate(
     giftCard: any,
     amount: number
@@ -889,7 +913,6 @@ export class GiftCardService {
 
     const numAmount = Number(amount);
 
-    // Try mappedPriceList first
     if (
       giftCard.mappedPriceList &&
       giftCard.mappedPriceList[numAmount.toFixed(1)]
@@ -898,7 +921,6 @@ export class GiftCardService {
       return ngnAmount / amount;
     }
 
-    // Try fixedRecipientToSenderDenominationsMap
     if (giftCard.fixedRecipientToSenderDenominationsMap) {
       const key = numAmount.toFixed(2);
       if (giftCard.fixedRecipientToSenderDenominationsMap[key]) {
@@ -907,7 +929,6 @@ export class GiftCardService {
       }
     }
 
-    // Try matching indexes in parallel arrays
     const recipientDenoms =
       giftCard.priceList || giftCard.fixedRecipientDenominations || [];
     const senderDenoms =

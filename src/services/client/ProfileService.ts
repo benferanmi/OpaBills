@@ -23,7 +23,6 @@ export class ProfileService {
 
   async getProfile(userId: string): Promise<any> {
     // Check cache first
-    // await this.cacheService.delete(CACHE_KEYS.USER_PROFILE(userId));
     const cached = await this.cacheService.get(CACHE_KEYS.USER_PROFILE(userId));
     if (cached) {
       return cached;
@@ -55,8 +54,6 @@ export class ProfileService {
       );
     }
 
-    // Invalidate cache
-    await this.cacheService.delete(CACHE_KEYS.USER_PROFILE(userId));
     const userDetails = await this.formatUserDetails(user);
     if (!userDetails) {
       throw new AppError(
@@ -65,6 +62,10 @@ export class ProfileService {
         ERROR_CODES.NOT_FOUND
       );
     }
+
+    // Update cache with new data
+    await this.cacheService.set(CACHE_KEYS.USER_PROFILE(userId), userDetails);
+
     return { userDetails };
   }
 
@@ -91,9 +92,6 @@ export class ProfileService {
     // Save changes
     await user.save();
 
-    // Invalidate cache
-    await this.cacheService.delete(CACHE_KEYS.USER_PROFILE(userId));
-
     const userDetails = await this.formatUserDetails(user);
     if (!userDetails) {
       throw new AppError(
@@ -102,6 +100,9 @@ export class ProfileService {
         ERROR_CODES.NOT_FOUND
       );
     }
+
+    // Update cache with new data
+    await this.cacheService.set(CACHE_KEYS.USER_PROFILE(userId), userDetails);
 
     return { ...userDetails };
   }
@@ -120,7 +121,32 @@ export class ProfileService {
     user.deletedAt = new Date();
     await user.save();
 
-    // Invalidate cache
+    // Invalidate cache for deactivated account
+    await this.cacheService.delete(CACHE_KEYS.USER_PROFILE(userId));
+  }
+
+  /**
+   * Utility method to refresh user cache after updates in other services
+   * Call this method from other services after updating user data
+   */
+  async refreshUserCache(userId: string): Promise<void> {
+    const user = await this.userRepository.findById(userId);
+    if (!user) {
+      // Invalidate cache if user doesn't exist
+      await this.cacheService.delete(CACHE_KEYS.USER_PROFILE(userId));
+      return;
+    }
+
+    const userDetails = await this.formatUserDetails(user);
+    if (userDetails) {
+      await this.cacheService.set(CACHE_KEYS.USER_PROFILE(userId), userDetails);
+    }
+  }
+
+  /**
+   * Utility method to invalidate user cache
+   */
+  async invalidateUserCache(userId: string): Promise<void> {
     await this.cacheService.delete(CACHE_KEYS.USER_PROFILE(userId));
   }
 

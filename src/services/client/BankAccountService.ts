@@ -3,6 +3,7 @@ import { AppError } from "@/middlewares/errorHandler";
 import { HTTP_STATUS, ERROR_CODES } from "@/utils/constants";
 import { Types } from "mongoose";
 import { SaveHavenService } from "./SaveHavenService";
+import { MonnifyService } from "./MonnifyService";
 
 export interface CreateBankAccountDTO {
   userId: Types.ObjectId;
@@ -16,9 +17,11 @@ export interface CreateBankAccountDTO {
 export class BankAccountService {
   private bankAccountRepository: BankAccountRepository;
   private saveHavenService: SaveHavenService;
+  private monnifyService: MonnifyService;
   constructor() {
     this.bankAccountRepository = new BankAccountRepository();
     this.saveHavenService = new SaveHavenService();
+    this.monnifyService = new MonnifyService();
   }
 
   async createBankAccount(data: CreateBankAccountDTO): Promise<any> {
@@ -35,8 +38,14 @@ export class BankAccountService {
       );
     }
 
-    // Validating account details
-    const result = await this.saveHavenService.nameEnquiry(
+    // Validating account details with msavehaven
+    // const result = await this.saveHavenService.nameEnquiry(
+    //   data.accountNumber,
+    //   data.bankCode
+    // );
+
+    // Validating account details with monnify
+    const result = await this.monnifyService.verifyBankAccount(
       data.accountNumber,
       data.bankCode
     );

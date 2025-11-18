@@ -16,6 +16,7 @@ export interface ICountry extends Document {
   currency_symbol: string;
   longitude: string;
   latitude: string;
+  flag: string;
 }
 
 const CountrySchema = new Schema<ICountry>(
@@ -35,6 +36,7 @@ const CountrySchema = new Schema<ICountry>(
     currency_symbol: { type: String },
     longitude: { type: String },
     latitude: { type: String },
+    flag: { type: String },
   },
   { timestamps: true }
 );

@@ -27,12 +27,11 @@ router.post("/verify", billPaymentController.verifyPhone);
 router.post(
   "/:type",
   rateLimiter(10, 60000),
+  validateRequest(dataPurchaseSchema),
   checkAndVerifyPin,
   walletLock,
-  validateRequest(dataPurchaseSchema),
   billPaymentController.purchaseData
 );
 router.get("/history", billPaymentController.getDataHistory);
-
 
 export default router;

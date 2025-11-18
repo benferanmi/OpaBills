@@ -17,9 +17,9 @@ export class GiftCardController {
     next: NextFunction
   ) => {
     try {
-      const page = parseInt(req.params.page as string) || 1;
-      const limit = parseInt(req.params.limit as string) || 10;
-      const type = req.params.type as "both" | "sell" | "buy";
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 10;
+      const type = req.query.type as "both" | "sell" | "buy";
       const result = await this.giftCardService.getCategories(
         page,
         limit,
@@ -60,24 +60,16 @@ export class GiftCardController {
     next: NextFunction
   ) => {
     try {
-      console.log("called");
-      const page = parseInt(req.params.page as string) || 1;
-      const limit = parseInt(req.params.limit as string) || 10;
+      const page = parseInt(req.query.page as string) || 1;
+      const limit = parseInt(req.query.limit as string) || 10;
 
-      const { categoryId, countryId, search, type } = req.body;
+      const { categoryId, countryId, search, type } = req.query;
 
-      let filters = {};
-      if (categoryId) filters = { ...filters, categoryId };
-      if (countryId) filters = { ...filters, countryId };
-      if (search) filters = { ...filters, search };
-      if (type) filters = { ...filters, type };
-
-      const filter = {
-        categoryId,
-        countryId,
-        search,
-        type,
-      };
+      let filters: any = {};
+      if (categoryId) filters.categoryId = categoryId;
+      if (countryId) filters.countryId = countryId;
+      if (search) filters.search = search;
+      if (type) filters.type = type;
 
       const result = await this.giftCardService.getGiftCards(
         filters,
@@ -218,14 +210,32 @@ export class GiftCardController {
   ) => {
     try {
       const userId = req.user!.id;
+
+      const {
+        giftCardId,
+        amount,
+        quantity,
+        cardType,
+        cards,
+        comment,
+        bankAccountId,
+      } = req.body;
+
       const result = await this.giftCardService.sellGiftCard({
-        ...req.body,
         userId,
+        giftCardId,
+        amount,
+        quantity,
+        cardType,
+        cards,
+        comment,
+        bankAccountId,
       });
+
       return sendSuccessResponse(
         res,
         result,
-        "Gift card sale submitted for approval",
+        "Gift card submitted for review successfully",
         HTTP_STATUS.CREATED
       );
     } catch (error) {

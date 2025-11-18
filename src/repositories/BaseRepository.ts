@@ -27,19 +27,31 @@ export abstract class BaseRepository<T extends Document> {
     return await this.model.find(filter).exec();
   }
 
-  async findWithPagination(
-    filter: FilterQuery<T>,
-    page: number = 1,
-    limit: number = 10,
-    sort: any = { createdAt: -1 }
-  ): Promise<{ data: T[]; total: number }> {
-    const skip = (page - 1) * limit;
-    const [data, total] = await Promise.all([
-      this.model.find(filter).sort(sort).skip(skip).limit(limit).exec(),
-      this.model.countDocuments(filter).exec(),
-    ]);
-    return { data, total };
+async findWithPagination(
+  filter: FilterQuery<T>,
+  page: number = 1,
+  limit: number = 10,
+  sort: any = { createdAt: -1 },
+  populate?: Array<{ path: string; select?: string }>
+): Promise<{ data: T[]; total: number }> {
+  const skip = (page - 1) * limit;
+  
+  let query = this.model.find(filter).sort(sort).skip(skip).limit(limit);
+  
+  // Apply populate if provided
+  if (populate && populate.length > 0) {
+    populate.forEach(pop => {
+      query = query.populate(pop);
+    });
   }
+  
+  const [data, total] = await Promise.all([
+    query.exec(),
+    this.model.countDocuments(filter).exec(),
+  ]);
+  
+  return { data, total };
+}
 
   async update(id: string, data: UpdateQuery<T>): Promise<T | null> {
     return await this.model.findByIdAndUpdate(id, data, { new: true }).exec();

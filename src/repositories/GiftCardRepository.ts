@@ -89,7 +89,11 @@ export class GiftCardTransactionRepository extends BaseRepository<IGiftCardTrans
   async findByReference(
     reference: string
   ): Promise<IGiftCardTransaction | null> {
-    return this.model.findOne({ reference }).exec();
+    return this.model
+      .findOne({ reference })
+      .populate("giftCardId")
+      .populate("userId", "firstname lastname email phone")
+      .exec();
   }
 
   async findByUserId(
@@ -98,16 +102,65 @@ export class GiftCardTransactionRepository extends BaseRepository<IGiftCardTrans
     page: number = 1,
     limit: number = 10
   ) {
-    return this.findWithPagination({ userId, ...filters }, page, limit);
+    return this.findWithPagination(
+      { userId, ...filters },
+      page,
+      limit,
+      { createdAt: -1 },
+      [
+        { path: "giftCardId", select: "name logo currency" },
+        { path: "parentId", select: "reference groupTag status" },
+      ]
+    );
   }
 
   async findByGroupTag(groupTag: string): Promise<IGiftCardTransaction[]> {
-    return this.model.find({ groupTag }).exec();
+    return this.model
+      .find({ groupTag })
+      .populate("giftCardId", "name logo currency")
+      .populate("userId", "firstname lastname email phone")
+      .sort({ createdAt: -1 })
+      .exec();
   }
 
+  /**
+   * Find pending sell transactions for a specific user and gift card
+   * Used to determine if we need to create/update parent transaction
+   */
+  async findPendingSellByUserAndGiftCard(
+    userId: string,
+    giftCardId: string
+  ): Promise<IGiftCardTransaction[]> {
+    return this.model
+      .find({
+        userId: new Types.ObjectId(userId),
+        giftCardId: new Types.ObjectId(giftCardId),
+        tradeType: "sell",
+        status: { $in: ["pending", "multiple"] },
+      })
+      .sort({ createdAt: -1 })
+      .exec();
+  }
+
+  /**
+   * Find all children of a parent transaction
+   */
+  async findChildrenByParentId(
+    parentId: string
+  ): Promise<IGiftCardTransaction[]> {
+    return this.model
+      .find({ parentId: new Types.ObjectId(parentId) })
+      .populate("giftCardId", "name logo currency")
+      .sort({ createdAt: -1 })
+      .exec();
+  }
+
+  /**
+   * Update transaction status with optional review data
+   */
   async updateStatus(
     transactionId: string,
-    status: "pending" | "success" | "failed" | "approved" | "declined",
+    status: "pending" | "processing" | "success" | "failed" | "approved" | "declined" | "multiple" | "s.approved",
     reviewData?: any
   ): Promise<IGiftCardTransaction | null> {
     return this.model
@@ -117,5 +170,31 @@ export class GiftCardTransactionRepository extends BaseRepository<IGiftCardTrans
         { new: true }
       )
       .exec();
+  }
+
+  /**
+   * Count pending transactions for a user and gift card
+   */
+  async countPendingSellByUserAndGiftCard(
+    userId: string,
+    giftCardId: string
+  ): Promise<number> {
+    return this.model.countDocuments({
+      userId: new Types.ObjectId(userId),
+      giftCardId: new Types.ObjectId(giftCardId),
+      tradeType: "sell",
+      status: { $in: ["pending", "multiple"] },
+    });
+  }
+}
+
+export class BankAccountRepository extends BaseRepository<any> {
+  constructor() {
+    // Assuming you have a BankAccount model
+    super(require("@/models/BankAccount").BankAccount);
+  }
+
+  async findByUserId(userId: string): Promise<any[]> {
+    return this.model.find({ userId: new Types.ObjectId(userId) }).exec();
   }
 }

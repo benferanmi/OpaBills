@@ -6,7 +6,7 @@ export interface IBank extends Document {
   flutterwaveCode?: string;
   monnifyCode?: string;
   savehavenCode?: string;
-  universalCode?: string; // optional fallback code
+  universalCode?: string;
   icon?: string;
   country?: string;
   currency?: string;
