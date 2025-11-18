@@ -297,6 +297,14 @@ export class BillPaymentService {
     const networkMatches =
       detectedNetwork.toUpperCase() === networkCode.toUpperCase();
 
+    if (!networkMatches) {
+      throw new AppError(
+        `Phone number does not match network: ${network}`,
+        HTTP_STATUS.BAD_REQUEST,
+        ERROR_CODES.VALIDATION_ERROR
+      );
+    }
+
     return isValid && networkMatches;
   }
 
