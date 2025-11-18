@@ -1,7 +1,7 @@
 module.exports = {
     apps: [
         {
-            name: 'Backend',
+            name: 'backend-prod',
             script: './dist/server.js',
             cwd: '/var/www/backend',
             instances: 1,
