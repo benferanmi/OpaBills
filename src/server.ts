@@ -9,6 +9,7 @@ import mongoose from "mongoose";
 const PORT = process.env.PORT || 5000;
 
 let server: any = null;
+let isShuttingDown = false;
 
 const startServer = async () => {
   try {
@@ -26,21 +27,18 @@ const startServer = async () => {
 
     // Graceful shutdown
     const gracefulShutdown = async (signal: string) => {
-      logger.info(`Received ${signal} signal, closing server gracefully...`);
-
-      let isShuttingDown = false;
-
       if (isShuttingDown) {
         logger.warn("Shutdown already in progress, ignoring duplicate signal");
         return;
       }
 
       isShuttingDown = true;
+      logger.info(`Received ${signal} signal, closing server gracefully...`);
 
       const forceShutdownTimer = setTimeout(() => {
-        logger.error("Forced shutdown after 10s timeout");
+        logger.error("Forced shutdown after 5s timeout");
         process.exit(1);
-      }, 10000);
+      }, 5000);
 
       try {
         // 1. Stop accepting new connections
@@ -94,13 +92,12 @@ const startServer = async () => {
 // Handle unhandled promise rejections
 process.on("unhandledRejection", (reason, promise) => {
   logger.error("Unhandled Rejection at:", promise, "reason:", reason);
-  console.error("Unhandled error:", reason);
 });
 
 // Handle uncaught exceptions
 process.on("uncaughtException", (error) => {
   logger.error("Uncaught Exception:", error);
-  console.error("Unhandled error:", error);
+  process.exit(1);
 });
 
 startServer();

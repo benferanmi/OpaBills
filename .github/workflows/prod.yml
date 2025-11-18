@@ -223,37 +223,18 @@ jobs:
             # Ensure log directory exists
             mkdir -p ./logs
 
-            # Kill any process owned by current user on port 5001
-            PID=$(lsof -ti:5001 -sTCP:LISTEN 2>/dev/null)
-            if [ ! -z "$PID" ]; then
-              echo "Found process $PID on port 5001, killing it..."
-              kill -9 $PID 2>/dev/null || true
-              sleep 3
-            fi
+            # Stop the application if running (PM2 handles graceful shutdown)
+            pm2 stop backend-prod || true
+            pm2 delete backend-prod || true
 
-            # Force delete PM2 process to ensure clean state
-            pm2 delete Backend 2>/dev/null || true
-
-            # Wait for process to fully terminate
-            sleep 2
-
-            # Verify port is free
-            if lsof -Pi :5001 -sTCP:LISTEN -t >/dev/null 2>&1 ; then
-              echo "ERROR: Port 5001 is still in use after cleanup!"
-              lsof -i :5001
-              exit 1
-            fi
-
-            # Start fresh
-            echo "Starting Backend application..."
-            pm2 start ecosystem.config.js --env production
+            # Start using ecosystem file with specific name
+            pm2 start ecosystem.config.js --name backend-prod --env production
 
             # Save PM2 configuration
             pm2 save
 
+            # Setup PM2 to auto-start on system reboot
+            pm2 startup || true
+
             # Show status
             pm2 list
-
-            # Wait a bit and check if it's running
-            sleep 3
-            pm2 describe Backend

@@ -7,13 +7,7 @@ module.exports = {
             instances: 1,
             exec_mode: 'fork',
 
-            // Default environment
-            env: {
-                NODE_ENV: 'development',
-                PORT: 5001
-            },
-
-            // Production environment (explicitly defined)
+            // Production environment
             env_production: {
                 NODE_ENV: 'production',
                 PORT: 5001
@@ -39,13 +33,11 @@ module.exports = {
             max_restarts: 10,
             min_uptime: '10s',
 
-            kill_timeout: 10000,         // Give 10 seconds for graceful shutdown
-            wait_ready: false,           // Don't wait for ready signal
-            listen_timeout: 5000,        // Timeout for listening
-            shutdown_with_message: true, // Enable shutdown messages
-
-            // Restart backoff
-            exp_backoff_restart_delay: 100,
+            // Graceful shutdown settings
+            kill_timeout: 5000,        // Give 5 seconds for graceful shutdown
+            wait_ready: false,         // Don't wait for ready signal
+            listen_timeout: 5000,
+            shutdown_with_message: true,
 
             // Instance variable
             instance_var: 'INSTANCE_ID',
