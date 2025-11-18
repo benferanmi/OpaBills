@@ -3,8 +3,15 @@ import { AppError } from "@/middlewares/errorHandler";
 import { HTTP_STATUS, ERROR_CODES } from "@/utils/constants";
 import logger from "@/logger";
 import { PROVIDERS } from "@/config";
-import { AirtimeData, ProviderResponse, DataDataDTO, CableTvData, EducationData, ElectricityData, BettingData } from "@/types";
-
+import {
+  AirtimeData,
+  ProviderResponse,
+  DataDataDTO,
+  CableTvData,
+  EducationData,
+  ElectricityData,
+  BettingData,
+} from "@/types";
 
 export class VTPassService {
   private client: AxiosInstance;
@@ -24,9 +31,11 @@ export class VTPassService {
   // AIRTIME PURCHASE
   async purchaseAirtime(data: AirtimeData): Promise<ProviderResponse> {
     try {
+      const networkCode = this.getNetworkCode(data.network);
+
       const response = await this.client.post("/pay", {
         request_id: data.reference,
-        serviceID: data.network,
+        serviceID: networkCode || data.network,
         amount: data.amount,
         phone: data.phone,
       });
@@ -225,6 +234,8 @@ export class VTPassService {
   // DATA PURCHASE
   async purchaseData(data: DataDataDTO): Promise<ProviderResponse> {
     try {
+      const networkCode = this.getNetworkCode(data.serviceCode);
+
       const response = await this.client.post("/pay", {
         request_id: data.reference,
         serviceID: data.serviceCode,
@@ -772,5 +783,40 @@ export class VTPassService {
       HTTP_STATUS.BAD_REQUEST,
       ERROR_CODES.PROVIDER_ERROR
     );
+  }
+
+  private getNetworkCode(network: string | undefined): string {
+    if (!network) {
+      throw new AppError(
+        `Network is required`,
+        HTTP_STATUS.BAD_REQUEST,
+        ERROR_CODES.VALIDATION_ERROR
+      );
+    }
+    const networkMap: { [key: string]: string } = {
+      "mtn-airtime": "mtn",
+      "glo-airtime": "glo",
+      "9mobile-airtime": "9mobile",
+      "etisalat-airtime": "etisalat",
+      "airtel-airtime": "airtel",
+
+      "mtn-data": "mtn",
+      "glo-data": "glo",
+      "9mobile-data": "9mobile",
+      "etisalat-data": "etisalat",
+      "airtel-data": "airtel",
+    };
+
+    const code = networkMap[network.toLowerCase()];
+
+    if (!code) {
+      throw new AppError(
+        `Unsupported network: ${network}`,
+        HTTP_STATUS.BAD_REQUEST,
+        ERROR_CODES.VALIDATION_ERROR
+      );
+    }
+
+    return code;
   }
 }

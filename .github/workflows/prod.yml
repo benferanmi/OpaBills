@@ -224,15 +224,24 @@ jobs:
             sudo mkdir -p /var/log/apps/backend
             sudo chown -R $USER:$USER /var/log/apps/backend
 
-            # Stop the application if running
-            pm2 stop Backend || true
-            pm2 delete Backend || true
+            # Kill any process using port 5001 (nuclear option if things are stuck)
+            sudo lsof -ti:5001 | xargs -r sudo kill -9 || true
 
-            # Start using ecosystem file (matches the name in your ecosystem.config.js)
-            pm2 start ecosystem.config.js --env production
+            # Wait for port to be released
+            sleep 2
+
+            # Check if PM2 process exists
+            if pm2 describe Backend > /dev/null 2>&1; then
+              echo "Backend process exists, reloading..."
+              pm2 reload ecosystem.config.js --env production --update-env
+            else
+              echo "Backend process doesn't exist, starting fresh..."
+              pm2 start ecosystem.config.js --env production
+            fi
 
             # Save PM2 configuration
             pm2 save
 
             # Show status
             pm2 list
+            pm2 logs Backend --lines 50 --nostream

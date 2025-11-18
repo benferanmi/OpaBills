@@ -4,9 +4,17 @@ import { AppError } from "@/middlewares/errorHandler";
 import { HTTP_STATUS, ERROR_CODES } from "@/utils/constants";
 import logger from "@/logger";
 import { PROVIDERS } from "@/config";
-import { AirtimeData, ProviderResponse, DataDataDTO, CableTvData, ElectricityData, BettingData, AirtimeEPINData, DataEPINData, EducationEPINData } from "@/types";
-
-
+import {
+  AirtimeData,
+  ProviderResponse,
+  DataDataDTO,
+  CableTvData,
+  ElectricityData,
+  BettingData,
+  AirtimeEPINData,
+  DataEPINData,
+  EducationEPINData,
+} from "@/types";
 
 export class ClubKonnectService {
   private client: AxiosInstance;
@@ -1101,11 +1109,17 @@ export class ClubKonnectService {
 
   private getNetworkCode(network: string): string {
     const networkMap: { [key: string]: string } = {
-      mtn: "01",
-      glo: "02",
-      "9mobile": "03",
-      etisalat: "03",
-      airtel: "04",
+      "mtn-airtime": "01",
+      "glo-airtime": "02",
+      "9mobile-airtime": "03",
+      "etisalat-airtime": "03",
+      "airtel-airtime": "04",
+
+      "mtn-data": "01",
+      "glo-data": "02",
+      "9mobile-data": "03",
+      "etisalat-data": "03",
+      "airtel-data": "04",
     };
 
     const code = networkMap[network.toLowerCase()];
