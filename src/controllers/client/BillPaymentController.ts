@@ -185,6 +185,27 @@ export class BillPaymentController {
     }
   };
 
+  verifyPhoneWithNetwork = async (
+    req: AuthRequest,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const { phone, network } = req.body;
+      const isValid = await this.billPaymentService.verifyPhoneWithNetwork(
+        phone,
+        network
+      );
+      return sendSuccessResponse(
+        res,
+        { isValid },
+        "Phone and network verification completed"
+      );
+    } catch (error) {
+      next(error);
+    }
+  };
+
   getAirtimeHistory = async (
     req: AuthRequest,
     res: Response,

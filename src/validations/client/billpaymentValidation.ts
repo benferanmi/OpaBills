@@ -188,6 +188,7 @@ export const verifyPhoneNumberSchema = Joi.object({
       "any.required": "Phone number is required",
       "string.pattern.base": "Invalid phone number",
     }),
+  network: Joi.string().optional(),
 });
 
 export const bettingPurchaseSchema = Joi.object({

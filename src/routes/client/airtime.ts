@@ -6,7 +6,10 @@ import { walletLock } from "@/middlewares/walletLock";
 import { serviceCheck } from "@/middlewares/serviceCheck";
 import { rateLimiter } from "@/middlewares/rateLimiter";
 import { validateRequest } from "@/middlewares/validation";
-import { airtimePurchaseSchema, verifyPhoneNumberSchema } from "@/validations/client/billpaymentValidation";
+import {
+  airtimePurchaseSchema,
+  verifyPhoneNumberSchema,
+} from "@/validations/client/billpaymentValidation";
 import { checkAndVerifyPin } from "@/middlewares/checkAndVerifyPin";
 
 const router = Router();
@@ -22,6 +25,11 @@ router.post(
   "/verify",
   validateRequest(verifyPhoneNumberSchema),
   billPaymentController.verifyPhone
+);
+router.post(
+  "/verify-number",
+  validateRequest(verifyPhoneNumberSchema),
+  billPaymentController.verifyPhoneWithNetwork
 );
 router.post(
   "/",

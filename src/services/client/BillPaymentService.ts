@@ -175,41 +175,129 @@ export class BillPaymentService {
   }
 
   async verifyPhone(phone: string) {
-    // Detect network from phone number
-    const firstDigit = phone.replace(/\D/g, "").substring(0, 4);
+    const cleaned = phone.replace(/\D/g, "");
+
+    const prefix = cleaned.substring(0, 4);
+
     const networkMap: { [key: string]: string } = {
       "0803": "MTN",
       "0806": "MTN",
+      "0703": "MTN",
+      "0706": "MTN",
       "0810": "MTN",
       "0813": "MTN",
       "0814": "MTN",
       "0816": "MTN",
       "0903": "MTN",
       "0906": "MTN",
+      "0913": "MTN",
+      "0916": "MTN",
+      "0704": "MTN",
+
+      // GLO
       "0805": "GLO",
       "0807": "GLO",
-      "0811": "GLO",
+      "0705": "GLO",
       "0815": "GLO",
+      "0811": "GLO",
       "0905": "GLO",
+      "0915": "GLO",
+
+      // AIRTEL
       "0802": "AIRTEL",
       "0808": "AIRTEL",
+      "0708": "AIRTEL",
       "0812": "AIRTEL",
-      "0901": "AIRTEL",
+      "0701": "AIRTEL",
       "0902": "AIRTEL",
+      "0901": "AIRTEL",
+      "0904": "AIRTEL",
+      "0907": "AIRTEL",
+      "0912": "AIRTEL",
+
       "0809": "9MOBILE",
       "0817": "9MOBILE",
       "0818": "9MOBILE",
       "0908": "9MOBILE",
       "0909": "9MOBILE",
+      // "0901": "9MOBILE",
     };
 
-    const network = networkMap[firstDigit] || "UNKNOWN";
+    const network = networkMap[prefix] || "UNKNOWN";
+
+    const isValid = cleaned.length === 11 && cleaned.startsWith("0");
 
     return {
-      valid: phone.length >= 11,
-      phone,
+      valid: isValid,
+      phone: cleaned,
       network,
     };
+  }
+
+  async verifyPhoneWithNetwork(
+    phone: string,
+    network: string
+  ): Promise<boolean> {
+    const networkCode = this.getNetworkCode(network);
+    const cleaned = phone.replace(/\D/g, "");
+
+    // Extract first 4 digits for matching
+    const prefix = cleaned.substring(0, 4);
+
+    const networkMap: { [key: string]: string } = {
+      // MTN (more comprehensive)
+      "0803": "MTN",
+      "0806": "MTN",
+      "0703": "MTN",
+      "0706": "MTN",
+      "0810": "MTN",
+      "0813": "MTN",
+      "0814": "MTN",
+      "0816": "MTN",
+      "0903": "MTN",
+      "0906": "MTN",
+      "0913": "MTN",
+      "0916": "MTN",
+      "0704": "MTN",
+
+      // GLO
+      "0805": "GLO",
+      "0807": "GLO",
+      "0705": "GLO",
+      "0815": "GLO",
+      "0811": "GLO",
+      "0905": "GLO",
+      "0915": "GLO",
+
+      // AIRTEL
+      "0802": "AIRTEL",
+      "0808": "AIRTEL",
+      "0708": "AIRTEL",
+      "0812": "AIRTEL",
+      "0701": "AIRTEL",
+      "0902": "AIRTEL",
+      "0901": "AIRTEL",
+      "0904": "AIRTEL",
+      "0907": "AIRTEL",
+      "0912": "AIRTEL",
+
+      // 9MOBILE (formerly Etisalat)
+      "0809": "9MOBILE",
+      "0817": "9MOBILE",
+      "0818": "9MOBILE",
+      "0908": "9MOBILE",
+      "0909": "9MOBILE",
+      // "0901": "9MOBILE",
+    };
+
+    const detectedNetwork = networkMap[prefix] || "UNKNOWN";
+
+    const isValid = cleaned.length === 11 && cleaned.startsWith("0");
+
+    const networkMatches =
+      detectedNetwork.toUpperCase() === networkCode.toUpperCase();
+
+    return isValid && networkMatches;
   }
 
   async getAirtimeHistory(
@@ -1418,5 +1506,40 @@ export class BillPaymentService {
     }
 
     return this.transactionRepository.findWithPagination(query, page, limit);
+  }
+
+  private getNetworkCode(network: string | undefined): string {
+    if (!network) {
+      throw new AppError(
+        `Network is required`,
+        HTTP_STATUS.BAD_REQUEST,
+        ERROR_CODES.VALIDATION_ERROR
+      );
+    }
+    const networkMap: { [key: string]: string } = {
+      "mtn-airtime": "mtn",
+      "glo-airtime": "glo",
+      "9mobile-airtime": "9mobile",
+      "etisalat-airtime": "etisalat",
+      "airtel-airtime": "airtel",
+
+      "mtn-data": "mtn",
+      "glo-data": "glo",
+      "9mobile-data": "9mobile",
+      "etisalat-data": "etisalat",
+      "airtel-data": "airtel",
+    };
+
+    const code = networkMap[network.toLowerCase()];
+
+    if (!code) {
+      throw new AppError(
+        `Unsupported network: ${network}`,
+        HTTP_STATUS.BAD_REQUEST,
+        ERROR_CODES.VALIDATION_ERROR
+      );
+    }
+
+    return code;
   }
 }
