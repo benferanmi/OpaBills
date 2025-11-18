@@ -69,6 +69,8 @@ export class ProfileService {
     return { userDetails };
   }
 
+  
+
   async toogleBiometric(
     userId: string,
     enable: boolean,
