@@ -25,17 +25,12 @@ jobs:
 
       - name: Build Application
         env:
-          # Database Configuration
           MONGODB_URI: ${{ secrets.MONGODB_URI }}
           REDIS_URL: ${{ secrets.REDIS_URL }}
-
-          # JWT Configuration
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
           JWT_EXPIRES_IN: ${{ secrets.JWT_EXPIRES_IN }}
           JWT_REFRESH_SECRET: ${{ secrets.JWT_REFRESH_SECRET }}
           JWT_REFRESH_EXPIRES_IN: ${{ secrets.JWT_REFRESH_EXPIRES_IN }}
-
-          # Email Service Configuration
           EMAIL_TRANSPORT: ${{ secrets.EMAIL_TRANSPORT }}
           EMAIL_SERVICE: ${{ secrets.EMAIL_SERVICE }}
           EMAIL_USER: ${{ secrets.EMAIL_USER }}
@@ -44,49 +39,33 @@ jobs:
           EMAIL_FROM_NAME: ${{ secrets.EMAIL_FROM_NAME }}
           ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
-
-          # SMS Service Configuration
           TERMII_API_KEY: ${{ secrets.TERMII_API_KEY }}
           TERMII_SENDER_ID: ${{ secrets.TERMII_SENDER_ID }}
           TERMII_BASE_URL: ${{ secrets.TERMII_BASE_URL }}
           TERMII_SECRET_KET: ${{ secrets.TERMII_SECRET_KET }}
-
-          # VTPass Configuration
           VTPASS_BASE_URL: ${{ secrets.VTPASS_BASE_URL }}
           VTPASS_API_KEY: ${{ secrets.VTPASS_API_KEY }}
           VTPASS_SECRET_KEY: ${{ secrets.VTPASS_SECRET_KEY }}
           VTPASS_PUBLIC_KEY: ${{ secrets.VTPASS_PUBLIC_KEY }}
-
-          # MySIMHosting Configuration
           MYSIMHOSTING_BASE_URL: ${{ secrets.MYSIMHOSTING_BASE_URL }}
           MYSIMHOSTING_API_KEY: ${{ secrets.MYSIMHOSTING_API_KEY }}
-
-          # ClubKonnect Configuration
           CLUBKONNECT_BASE_URL: ${{ secrets.CLUBKONNECT_BASE_URL }}
           CLUBKONNECT_USER_ID: ${{ secrets.CLUBKONNECT_USER_ID }}
           CLUBKONNECT_API_KEY: ${{ secrets.CLUBKONNECT_API_KEY }}
-
-          # Reloadly Configuration
           RELOADLY_BASE_URL: ${{ secrets.RELOADLY_BASE_URL }}
           RELOADLY_CLIENT_ID: ${{ secrets.RELOADLY_CLIENT_ID }}
           RELOADLY_CLIENT_SECRET: ${{ secrets.RELOADLY_CLIENT_SECRET }}
           RELOADLY_AUDIENCE: ${{ secrets.RELOADLY_AUDIENCE }}
           RELOADLY_SANDBOX: ${{ secrets.RELOADLY_SANDBOX }}
-
-          # Flutterwave Configuration
           FLUTTERWAVE_BASE_URL: ${{ secrets.FLUTTERWAVE_BASE_URL }}
           FLUTTERWAVE_SECRET_KEY: ${{ secrets.FLUTTERWAVE_SECRET_KEY }}
           FLUTTERWAVE_PUBLIC_KEY: ${{ secrets.FLUTTERWAVE_PUBLIC_KEY }}
           FLUTTERWAVE_ENCRYPTION_KEY: ${{ secrets.FLUTTERWAVE_ENCRYPTION_KEY }}
-
-          # Monnify Configuration
           MONNIFY_BASE_URL: ${{ secrets.MONNIFY_BASE_URL }}
           MONNIFY_API_KEY: ${{ secrets.MONNIFY_API_KEY }}
           MONNIFY_SECRET_KEY: ${{ secrets.MONNIFY_SECRET_KEY }}
           MONNIFY_CONTRACT_CODE: ${{ secrets.MONNIFY_CONTRACT_CODE }}
           MONNIFY_WALLET_ACCOUNT_NUMBER: ${{ secrets.MONNIFY_WALLET_ACCOUNT_NUMBER }}
-
-          # SafeHaven Configuration
           SAFEHAVEN_BASE_URL: ${{ secrets.SAFEHAVEN_BASE_URL }}
           SAFEHAVEN_API_URL: ${{ secrets.SAFEHAVEN_API_URL }}
           SAFEHAVEN_CLIENT_ID: ${{ secrets.SAFEHAVEN_CLIENT_ID }}
@@ -94,14 +73,10 @@ jobs:
           SAFEHAVEN_SWEEP_ACCOUNT: ${{ secrets.SAFEHAVEN_SWEEP_ACCOUNT }}
           SAFEHAVEN_BANK_NAME: ${{ secrets.SAFEHAVEN_BANK_NAME }}
           SAFEHAVEN_BANK_CODE: ${{ secrets.SAFEHAVEN_BANK_CODE }}
-
-          # Super Admin Configuration
           SUPER_ADMIN_EMAIL: ${{ secrets.SUPER_ADMIN_EMAIL }}
           SUPER_ADMIN_PASSWORD: ${{ secrets.SUPER_ADMIN_PASSWORD }}
           SUPER_ADMIN_FIRST_NAME: ${{ secrets.SUPER_ADMIN_FIRST_NAME }}
           SUPER_ADMIN_LAST_NAME: ${{ secrets.SUPER_ADMIN_LAST_NAME }}
-
-          # Application Configuration
           PORT: ${{ secrets.PORT }}
           NODE_ENV: ${{ secrets.NODE_ENV }}
           APP_NAME: ${{ secrets.APP_NAME }}
@@ -127,24 +102,16 @@ jobs:
           port: ${{ secrets.PROD_SSH_PORT }}
           script: |
             rm -rf ${{ secrets.PROD_ENV_PATH }}
-
-            # Application Configuration
             echo "NODE_ENV=${{ secrets.NODE_ENV }}" >> ${{ secrets.PROD_ENV_PATH }}
             echo "PORT=${{ secrets.PORT }}" >> ${{ secrets.PROD_ENV_PATH }}
             echo "APP_NAME=${{ secrets.APP_NAME }}" >> ${{ secrets.PROD_ENV_PATH }}
             echo "APP_URL=${{ secrets.APP_URL }}" >> ${{ secrets.PROD_ENV_PATH }}
-
-            # Database Configuration
             echo "MONGODB_URI=${{ secrets.MONGODB_URI }}" >> ${{ secrets.PROD_ENV_PATH }}
             echo "REDIS_URL=${{ secrets.REDIS_URL }}" >> ${{ secrets.PROD_ENV_PATH }}
-
-            # JWT Configuration
             echo "JWT_SECRET=${{ secrets.JWT_SECRET }}" >> ${{ secrets.PROD_ENV_PATH }}
             echo "JWT_EXPIRES_IN=${{ secrets.JWT_EXPIRES_IN }}" >> ${{ secrets.PROD_ENV_PATH }}
             echo "JWT_REFRESH_SECRET=${{ secrets.JWT_REFRESH_SECRET }}" >> ${{ secrets.PROD_ENV_PATH }}
             echo "JWT_REFRESH_EXPIRES_IN=${{ secrets.JWT_REFRESH_EXPIRES_IN }}" >> ${{ secrets.PROD_ENV_PATH }}
-
-            # Email Service Configuration
             echo "EMAIL_TRANSPORT=${{ secrets.EMAIL_TRANSPORT }}" >> ${{ secrets.PROD_ENV_PATH }}
             echo "EMAIL_SERVICE=${{ secrets.EMAIL_SERVICE }}" >> ${{ secrets.PROD_ENV_PATH }}
             echo "EMAIL_USER=${{ secrets.EMAIL_USER }}" >> ${{ secrets.PROD_ENV_PATH }}
@@ -153,49 +120,33 @@ jobs:
             echo "EMAIL_FROM_NAME=${{ secrets.EMAIL_FROM_NAME }}" >> ${{ secrets.PROD_ENV_PATH }}
             echo "ADMIN_EMAIL=${{ secrets.ADMIN_EMAIL }}" >> ${{ secrets.PROD_ENV_PATH }}
             echo "RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}" >> ${{ secrets.PROD_ENV_PATH }}
-
-            # SMS Service Configuration
             echo "TERMII_API_KEY=${{ secrets.TERMII_API_KEY }}" >> ${{ secrets.PROD_ENV_PATH }}
             echo "TERMII_SENDER_ID=${{ secrets.TERMII_SENDER_ID }}" >> ${{ secrets.PROD_ENV_PATH }}
             echo "TERMII_BASE_URL=${{ secrets.TERMII_BASE_URL }}" >> ${{ secrets.PROD_ENV_PATH }}
             echo "TERMII_SECRET_KET=${{ secrets.TERMII_SECRET_KET }}" >> ${{ secrets.PROD_ENV_PATH }}
-
-            # VTPass Configuration
             echo "VTPASS_BASE_URL=${{ secrets.VTPASS_BASE_URL }}" >> ${{ secrets.PROD_ENV_PATH }}
             echo "VTPASS_API_KEY=${{ secrets.VTPASS_API_KEY }}" >> ${{ secrets.PROD_ENV_PATH }}
             echo "VTPASS_SECRET_KEY=${{ secrets.VTPASS_SECRET_KEY }}" >> ${{ secrets.PROD_ENV_PATH }}
             echo "VTPASS_PUBLIC_KEY=${{ secrets.VTPASS_PUBLIC_KEY }}" >> ${{ secrets.PROD_ENV_PATH }}
-
-            # MySIMHosting Configuration
             echo "MYSIMHOSTING_BASE_URL=${{ secrets.MYSIMHOSTING_BASE_URL }}" >> ${{ secrets.PROD_ENV_PATH }}
             echo "MYSIMHOSTING_API_KEY=${{ secrets.MYSIMHOSTING_API_KEY }}" >> ${{ secrets.PROD_ENV_PATH }}
-
-            # ClubKonnect Configuration
             echo "CLUBKONNECT_BASE_URL=${{ secrets.CLUBKONNECT_BASE_URL }}" >> ${{ secrets.PROD_ENV_PATH }}
             echo "CLUBKONNECT_USER_ID=${{ secrets.CLUBKONNECT_USER_ID }}" >> ${{ secrets.PROD_ENV_PATH }}
             echo "CLUBKONNECT_API_KEY=${{ secrets.CLUBKONNECT_API_KEY }}" >> ${{ secrets.PROD_ENV_PATH }}
-
-            # Reloadly Configuration
             echo "RELOADLY_BASE_URL=${{ secrets.RELOADLY_BASE_URL }}" >> ${{ secrets.PROD_ENV_PATH }}
             echo "RELOADLY_CLIENT_ID=${{ secrets.RELOADLY_CLIENT_ID }}" >> ${{ secrets.PROD_ENV_PATH }}
             echo "RELOADLY_CLIENT_SECRET=${{ secrets.RELOADLY_CLIENT_SECRET }}" >> ${{ secrets.PROD_ENV_PATH }}
             echo "RELOADLY_AUDIENCE=${{ secrets.RELOADLY_AUDIENCE }}" >> ${{ secrets.PROD_ENV_PATH }}
             echo "RELOADLY_SANDBOX=${{ secrets.RELOADLY_SANDBOX }}" >> ${{ secrets.PROD_ENV_PATH }}
-
-            # Flutterwave Configuration
             echo "FLUTTERWAVE_BASE_URL=${{ secrets.FLUTTERWAVE_BASE_URL }}" >> ${{ secrets.PROD_ENV_PATH }}
             echo "FLUTTERWAVE_SECRET_KEY=${{ secrets.FLUTTERWAVE_SECRET_KEY }}" >> ${{ secrets.PROD_ENV_PATH }}
             echo "FLUTTERWAVE_PUBLIC_KEY=${{ secrets.FLUTTERWAVE_PUBLIC_KEY }}" >> ${{ secrets.PROD_ENV_PATH }}
             echo "FLUTTERWAVE_ENCRYPTION_KEY=${{ secrets.FLUTTERWAVE_ENCRYPTION_KEY }}" >> ${{ secrets.PROD_ENV_PATH }}
-
-            # Monnify Configuration
             echo "MONNIFY_BASE_URL=${{ secrets.MONNIFY_BASE_URL }}" >> ${{ secrets.PROD_ENV_PATH }}
             echo "MONNIFY_API_KEY=${{ secrets.MONNIFY_API_KEY }}" >> ${{ secrets.PROD_ENV_PATH }}
             echo "MONNIFY_SECRET_KEY=${{ secrets.MONNIFY_SECRET_KEY }}" >> ${{ secrets.PROD_ENV_PATH }}
             echo "MONNIFY_CONTRACT_CODE=${{ secrets.MONNIFY_CONTRACT_CODE }}" >> ${{ secrets.PROD_ENV_PATH }}
             echo "MONNIFY_WALLET_ACCOUNT_NUMBER=${{ secrets.MONNIFY_WALLET_ACCOUNT_NUMBER }}" >> ${{ secrets.PROD_ENV_PATH }}
-
-            # SafeHaven Configuration
             echo "SAFEHAVEN_BASE_URL=${{ secrets.SAFEHAVEN_BASE_URL }}" >> ${{ secrets.PROD_ENV_PATH }}
             echo "SAFEHAVEN_API_URL=${{ secrets.SAFEHAVEN_API_URL }}" >> ${{ secrets.PROD_ENV_PATH }}
             echo "SAFEHAVEN_CLIENT_ID=${{ secrets.SAFEHAVEN_CLIENT_ID }}" >> ${{ secrets.PROD_ENV_PATH }}
@@ -203,8 +154,6 @@ jobs:
             echo "SAFEHAVEN_SWEEP_ACCOUNT=${{ secrets.SAFEHAVEN_SWEEP_ACCOUNT }}" >> ${{ secrets.PROD_ENV_PATH }}
             echo "SAFEHAVEN_BANK_NAME=${{ secrets.SAFEHAVEN_BANK_NAME }}" >> ${{ secrets.PROD_ENV_PATH }}
             echo "SAFEHAVEN_BANK_CODE=${{ secrets.SAFEHAVEN_BANK_CODE }}" >> ${{ secrets.PROD_ENV_PATH }}
-
-            # Super Admin Configuration
             echo "SUPER_ADMIN_EMAIL=${{ secrets.SUPER_ADMIN_EMAIL }}" >> ${{ secrets.PROD_ENV_PATH }}
             echo "SUPER_ADMIN_PASSWORD=${{ secrets.SUPER_ADMIN_PASSWORD }}" >> ${{ secrets.PROD_ENV_PATH }}
             echo "SUPER_ADMIN_FIRST_NAME=${{ secrets.SUPER_ADMIN_FIRST_NAME }}" >> ${{ secrets.PROD_ENV_PATH }}
@@ -219,22 +168,20 @@ jobs:
           port: ${{ secrets.PROD_SSH_PORT }}
           script: |
             cd ${{ secrets.PROD_PROJECT_PATH }}
+            mkdir -p logs
 
-            # Ensure log directory exists
-            mkdir -p ./logs
+            # Clean slate - delete ALL PM2 processes
+            pm2 delete all || true
+            sleep 3
 
-            # Stop the application if running (PM2 handles graceful shutdown)
-            pm2 stop backend-prod || true
-            pm2 delete backend-prod || true
+            # Double check port is free
+            if lsof -Pi :5001 -sTCP:LISTEN -t >/dev/null 2>&1; then
+              kill -9 $(lsof -ti:5001) || true
+              sleep 2
+            fi
 
-            # Start using ecosystem file with specific name
-            pm2 start ecosystem.config.js --name backend-prod --env production
-
-            # Save PM2 configuration
+            # Start fresh from ecosystem file
+            pm2 start ecosystem.config.js --env production
             pm2 save
-
-            # Setup PM2 to auto-start on system reboot
             pm2 startup || true
-
-            # Show status
             pm2 list
