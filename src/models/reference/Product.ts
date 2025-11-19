@@ -18,6 +18,7 @@ export interface IProduct extends Document {
     | "giftcard";
   name: string;
   code: string;
+  logo: string;
   providerAmount: number;
   amount: number;
   validity?: string;
@@ -96,6 +97,7 @@ const ProductSchema = new Schema<IProduct>(
     amount: { type: Number, required: true },
     validity: { type: String },
     description: { type: String },
+    logo: { type: String, default: "" },
 
     // Flexible attributes field
     attributes: {

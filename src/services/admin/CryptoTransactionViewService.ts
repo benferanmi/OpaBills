@@ -81,7 +81,7 @@ export class CryptoTransactionViewService {
 
     const stats = {
       totalTransactions: transactions.length,
-      totalVolume: transactions.reduce((sum, t) => sum + (t.amount || 0), 0),
+      totalVolume: transactions.reduce((sum, t) => sum + (t.cryptoAmount || 0), 0),
       byStatus: transactions.reduce((acc, t) => {
         acc[t.status] = (acc[t.status] || 0) + 1;
         return acc;

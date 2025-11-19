@@ -426,14 +426,52 @@ export class VTPassService {
   // EDUCATION/E-PIN PURCHASE
   async purchaseEducation(data: EducationData): Promise<ProviderResponse> {
     try {
-      const response = await this.client.post("/pay", {
+      const basePayload = {
         request_id: data.reference,
-        serviceID: "jamb",
-        billersCode: data.profileId,
-        variation_code: data.variationCode,
-        amount: data.amount,
+        serviceID: data.serviceCode,
         phone: data.phone,
-      });
+      };
+
+      let payload: any;
+
+      switch (data.serviceCode) {
+        case "jamb":
+          payload = {
+            ...basePayload,
+            variation_code: data.variationCode,
+            billersCode: data.profileId, 
+            amount: data.amount, 
+          };
+          break;
+
+        case "waec-registration":
+          payload = {
+            ...basePayload,
+            variation_code: data.variationCode,
+            amount: data.amount, 
+            quantity: data.quantity || 1, 
+          };
+          break;
+
+        case "waec":
+          payload = {
+            ...basePayload,
+            variation_code: data.variationCode,
+            amount: data.amount, 
+            quantity: data.quantity || 1, 
+          };
+          break;
+
+        default:
+          payload = {
+            ...basePayload,
+            variation_code: data.variationCode,
+            billersCode: data.profileId,
+            amount: data.amount,
+          };
+      }
+
+      const response = await this.client.post("/pay", payload);
 
       const result = this.handleTransactionResponse(
         response.data,

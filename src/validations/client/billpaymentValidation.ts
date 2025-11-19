@@ -105,7 +105,7 @@ export const verifyEPinSchema = Joi.object({
 });
 
 export const purchaseEpinSchema = Joi.object({
-  number: Joi.number().required().messages({
+  number: Joi.number().optional().messages({
     "any.required": "Number is required",
     "string.empty": "Number is not allowed to be empty",
   }),

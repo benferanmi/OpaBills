@@ -83,6 +83,8 @@ export interface EducationData {
   variationCode: string;
   amount: number;
   reference: string;
+  serviceCode?: string;
+  quantity?: number;
 }
 
 export interface InternationalAirtimeData {

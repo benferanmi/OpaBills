@@ -116,7 +116,7 @@ export class CryptoTransactionRepository extends BaseRepository<ICryptoTransacti
 
   async getTotalVolume(filters: any = {}): Promise<number> {
     const transactions = await this.model.find(filters).exec();
-    return transactions.reduce((sum, t) => sum + (t.amount || 0), 0);
+    return transactions.reduce((sum, t) => sum + (t.cryptoAmount || 0), 0);
   }
 
   async getTransactionStats(filters: any = {}): Promise<{
@@ -131,7 +131,7 @@ export class CryptoTransactionRepository extends BaseRepository<ICryptoTransacti
 
     const totalTransactions = transactions.length;
     const totalVolume = transactions.reduce(
-      (sum, t) => sum + (t.amount || 0),
+      (sum, t) => sum + (t.cryptoAmount || 0),
       0
     );
     const averageAmount =

@@ -999,7 +999,6 @@ export class BillPaymentService {
     const service = await this.serviceRepository.findByIdAndPopulateType(
       data.providerId
     );
-    // console.log(service);
     const serviceType = service?.serviceTypeId as any;
 
     if (!service || !service.isActive || !serviceType.isActive) {
@@ -1385,6 +1384,7 @@ export class BillPaymentService {
         phone: data.user.phone!,
         amount: product.amount,
         reference,
+        serviceCode: service.code,
       });
 
       let status: "success" | "pending" | "failed";

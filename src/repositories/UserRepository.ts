@@ -7,6 +7,7 @@ export class UserRepository extends BaseRepository<IUser> {
   }
 
   async findByEmail(email: string): Promise<IUser | null> {
+    if (!email) return null;
     return this.model.findOne({ email: email.toLowerCase() }).exec();
   }
 
@@ -46,9 +47,17 @@ export class UserRepository extends BaseRepository<IUser> {
       .exec();
   }
 
-  async verifyPhone(userId: string, phone?: number, phoneCode?: string): Promise<IUser | null> {
+  async verifyPhone(
+    userId: string,
+    phone?: number,
+    phoneCode?: string
+  ): Promise<IUser | null> {
     return this.model
-      .findByIdAndUpdate(userId, { phoneVerifiedAt: new Date(), phone, phoneCode }, { new: true })
+      .findByIdAndUpdate(
+        userId,
+        { phoneVerifiedAt: new Date(), phone, phoneCode },
+        { new: true }
+      )
       .exec();
   }
 

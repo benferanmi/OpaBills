@@ -605,6 +605,8 @@ export class ClubKonnectService {
     try {
       const bettingCompanyCode = this.getBettingCompanyCode(provider);
 
+      console.log(bettingCompanyCode)
+
       const response = await this.client.get("/APIVerifyBettingV1.asp", {
         params: {
           UserID: this.provider.userId,
