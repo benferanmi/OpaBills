@@ -203,7 +203,6 @@ export class AuthController {
 
   verify2FA = async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
-      console.log("called");
       const result = await this.authService.verify2FA({ ...req.body });
       return sendSuccessResponse(res, result, "2FA verified successfully");
     } catch (error) {
@@ -213,8 +212,8 @@ export class AuthController {
 
   resend2FA = async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
-      const userId = req.user!.id;
-      await this.authService.resend2FA(userId);
+      const { email } = req.body;
+      await this.authService.resend2FA(email);
       return sendSuccessResponse(res, null, "2FA code resent successfully");
     } catch (error) {
       next(error);

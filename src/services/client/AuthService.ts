@@ -813,14 +813,15 @@ export class AuthService {
     return { user: userDetails, accessToken, refreshToken };
   }
 
-  async resend2FA(userId: string): Promise<void> {
-    const user = await this.userRepository.findById(userId);
+  async resend2FA(email: string): Promise<void> {
+    const user = await this.userRepository.findByEmail(email);
     if (!user) {
-      throw new AppError(
-        "User not found",
-        HTTP_STATUS.NOT_FOUND,
-        ERROR_CODES.NOT_FOUND
-      );
+      // throw new AppError(
+      //   "User not found",
+      //   HTTP_STATUS.NOT_FOUND,
+      //   ERROR_CODES.NOT_FOUND
+      // );
+      return
     }
 
     const otp = await this.otpService.generateAndStore(
