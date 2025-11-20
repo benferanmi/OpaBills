@@ -111,4 +111,10 @@ router.post(
   authController.verify2FA
 );
 
+router.post(
+  "/2fa/resend",
+  authenticate,
+  authController.resend2FA
+);
+
 export default router;

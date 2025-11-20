@@ -54,7 +54,7 @@ export const sellCryptoSchema = Joi.object({
       "any.required": "Bank account is required",
     }),
 
-  proof: Joi.string().required().uri().messages({
+  proof: Joi.string().optional().uri().messages({
     "string.uri": "Proof must be a valid URL",
     "any.required": "Transaction proof is required",
   }),

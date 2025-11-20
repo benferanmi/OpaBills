@@ -26,7 +26,7 @@ interface SellCryptoData {
   cryptoAmount: number; // Amount of crypto user is selling
   networkId: string;
   comment?: string;
-  proof: string; // Screenshot/txHash proof
+  proof?: string; // Screenshot/txHash proof
   bankAccountId: string;
 }
 
@@ -82,7 +82,16 @@ export class CryptoService {
    */
   async getCryptoNetworks(cryptoId: string) {
     const crypto = await this.getCryptoById(cryptoId);
-    return crypto.networks || [];
+    return (
+      crypto.networks.map((n: any) => ({
+        networkId: n.networkId,
+        name: n.name,
+        code: n.code,
+        platformDepositAddress: n.platformDepositAddress,
+        depositEnabled: n.depositEnabled,
+        withdrawalEnabled: n.withdrawalEnabled,
+      })) || []
+    );
   }
 
   /**
@@ -311,6 +320,7 @@ export class CryptoService {
       transactableId: cryptoTransaction.id,
       reference,
       amount: breakdown.totalAmount,
+      direction: "DEBIT",
       type: "crypto_purchase",
       provider: "internal",
       remark: `Buy ${breakdown.cryptoAmount} ${crypto.code} via ${network.name}`,
@@ -467,7 +477,7 @@ export class CryptoService {
       totalAmount: breakdown.totalAmount,
       status: "pending",
       comment: data.comment,
-      proof: data.proof,
+      proof: data.proof || "",
       bankId: bankAccount.bankId,
       bankCode: bankAccount.bankCode,
       accountName: bankAccount.accountName,
@@ -493,7 +503,7 @@ export class CryptoService {
           accountName: bankAccount.accountName,
           accountNumber: bankAccount.accountNumber,
         },
-        proof: data.proof,
+        proof: data.proof || "",
       },
     });
 
@@ -646,15 +656,15 @@ export class CryptoService {
       icon: crypto.icon,
       buyRate: crypto.buyRate,
       sellRate: crypto.sellRate,
-      saleActivated: crypto.saleActivated,
-      purchaseActivated: crypto.purchaseActivated,
-      networks: crypto.networks?.map((n: any) => ({
-        networkId: n.networkId,
-        name: n.name,
-        code: n.code,
-        depositEnabled: n.depositEnabled,
-        withdrawalEnabled: n.withdrawalEnabled,
-      })),
+      // saleActivated: crypto.saleActivated,
+      // purchaseActivated: crypto.purchaseActivated,
+      // networks: crypto.networks?.map((n: any) => ({
+      //   networkId: n.networkId,
+      //   name: n.name,
+      //   code: n.code,
+      //   depositEnabled: n.depositEnabled,
+      //   withdrawalEnabled: n.withdrawalEnabled,
+      // })),
     }));
   }
 

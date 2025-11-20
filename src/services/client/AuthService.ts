@@ -813,6 +813,26 @@ export class AuthService {
     return { user: userDetails, accessToken, refreshToken };
   }
 
+  async resend2FA(userId: string): Promise<void> {
+    const user = await this.userRepository.findById(userId);
+    if (!user) {
+      throw new AppError(
+        "User not found",
+        HTTP_STATUS.NOT_FOUND,
+        ERROR_CODES.NOT_FOUND
+      );
+    }
+
+    const otp = await this.otpService.generateAndStore(
+      user.id.toString(),
+      "2fa"
+    );
+
+    await this.emailService.send2FAEmail(user.email, otp, user.firstname);
+
+    return;
+  }
+
   private async formatUserDetails(user: IUser): Promise<IUserResponse | null> {
     if (!user) return null;
 
