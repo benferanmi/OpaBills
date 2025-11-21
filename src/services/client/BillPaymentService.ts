@@ -56,6 +56,15 @@ export class BillPaymentService {
       );
     }
 
+    const service = await this.serviceRepository.findByCode(data.network);
+    if (!service) {
+      throw new AppError(
+        "Service Not Found",
+        HTTP_STATUS.NOT_FOUND,
+        ERROR_CODES.NOT_FOUND
+      );
+    }
+
     if (wallet.balance < data.amount) {
       throw new AppError(
         "Insufficient wallet balance",
@@ -85,6 +94,9 @@ export class BillPaymentService {
       meta: {
         phone: data.phone,
         network: data.network,
+        serviceCode: service.code,
+        serviceName: service.name,
+        logo: service.logo || "",
       },
     });
 
@@ -575,6 +587,7 @@ export class BillPaymentService {
         productName: product.name,
         serviceCode: service.code,
         serviceName: service.name,
+        logo: service.logo || "",
       },
     });
 
@@ -902,6 +915,7 @@ export class BillPaymentService {
         productName: product.name,
         serviceCode: service.code,
         serviceName: service.name,
+        logo: service.logo || "",
         subscriptionType: data.type,
       },
     });
@@ -1048,6 +1062,7 @@ export class BillPaymentService {
         meterType: data.meterType,
         serviceCode: service.code,
         serviceName: service.name,
+        logo: service.logo || ""
       },
     });
 
@@ -1370,6 +1385,7 @@ export class BillPaymentService {
         productName: product.name,
         serviceCode: service.code,
         serviceName: service.name,
+        logo: service.logo || "",
         profileId: data.profileId,
         phone: data.user.phone,
       },

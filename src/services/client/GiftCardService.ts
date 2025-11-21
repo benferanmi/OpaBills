@@ -16,6 +16,22 @@ import { generateReference } from "@/utils/helpers";
 import { IUser } from "@/models/core/User";
 import logger from "@/logger";
 
+export interface GiftCardTransactionFilters {
+  tradeType?: "buy" | "sell";
+  status?: string;
+  cardType?: "physical" | "ecode";
+  giftCardType?: string;
+  giftCardId?: string;
+  reference?: string;
+  groupTag?: string;
+  preorder?: boolean;
+  startDate?: string;
+  endDate?: string;
+  startAmount?: number;
+  endAmount?: number;
+  startRate?: number;
+  endRate?: number;
+}
 export class GiftCardService {
   private giftCardRepository: GiftCardRepository;
   private giftCardCategoryRepository: GiftCardCategoryRepository;
@@ -746,24 +762,156 @@ export class GiftCardService {
     return redeemCode;
   }
 
-  /**
-   * TRANSACTION HISTORY
-   */
-  async getGiftCardTransactions(
+  async getUserTransactions(
     userId: string,
-    filters: any = {},
+    filters: GiftCardTransactionFilters = {},
     page: number = 1,
-    limit: number = 10
-  ) {
-    const query: any = {};
+    limit: number = 20
+  ): Promise<any> {
+    const query: any = { userId };
 
+    // Trade type filter
     if (filters.tradeType) {
       query.tradeType = filters.tradeType;
     }
 
+    // Status filter
     if (filters.status) {
       query.status = filters.status;
     }
+
+    // Card type filter
+    if (filters.cardType) {
+      query.cardType = filters.cardType;
+    }
+
+    // Gift card type filter
+    if (filters.giftCardType) {
+      query.giftCardType = filters.giftCardType;
+    }
+
+    // Gift card ID filter
+    if (filters.giftCardId) {
+      query.giftCardId = filters.giftCardId;
+    }
+
+    // Reference filter (partial match)
+    if (filters.reference) {
+      query.reference = { $regex: filters.reference, $options: "i" };
+    }
+
+    // Group tag filter
+    if (filters.groupTag) {
+      query.groupTag = filters.groupTag;
+    }
+
+    // Preorder filter
+    if (filters.preorder !== undefined) {
+      query.preorder = filters.preorder;
+    }
+
+    // Date range filter
+    if (filters.startDate || filters.endDate) {
+      query.createdAt = {};
+      if (filters.startDate) {
+        query.createdAt.$gte = new Date(filters.startDate);
+      }
+      if (filters.endDate) {
+        // Set to end of day
+        const endDate = new Date(filters.endDate);
+        endDate.setHours(23, 59, 59, 999);
+        query.createdAt.$lte = endDate;
+      }
+    }
+
+    // Amount range filter
+    if (filters.startAmount !== undefined || filters.endAmount !== undefined) {
+      query.amount = {};
+      if (filters.startAmount !== undefined) {
+        query.amount.$gte = filters.startAmount;
+      }
+      if (filters.endAmount !== undefined) {
+        query.amount.$lte = filters.endAmount;
+      }
+    }
+
+    // Rate range filter
+    if (filters.startRate !== undefined || filters.endRate !== undefined) {
+      query.rate = {};
+      if (filters.startRate !== undefined) {
+        query.rate.$gte = filters.startRate;
+      }
+      if (filters.endRate !== undefined) {
+        query.rate.$lte = filters.endRate;
+      }
+    }
+
+    return this.giftCardTransactionRepository.findWithFilters(
+      query,
+      page,
+      limit
+    );
+  }
+
+  async getTransaction(reference: string, userId: string): Promise<any> {
+    const transaction =
+      await this.giftCardTransactionRepository.findByReference(reference);
+
+    if (!transaction) {
+      throw new AppError(
+        "Gift card transaction not found",
+        HTTP_STATUS.NOT_FOUND,
+        ERROR_CODES.NOT_FOUND
+      );
+    }
+
+    // Verify ownership
+    if (transaction.userId?.toString() !== userId) {
+      throw new AppError(
+        "Unauthorized access to gift card transaction",
+        HTTP_STATUS.FORBIDDEN,
+        ERROR_CODES.UNAUTHORIZED
+      );
+    }
+
+    return transaction;
+  }
+
+  async getTransactionWithChildren(
+    reference: string,
+    userId: string
+  ): Promise<any> {
+    const transaction = await this.getTransaction(reference, userId);
+
+    // If status is 'multiple', fetch child transactions
+    if (transaction.status === "multiple" && transaction._id) {
+      const children =
+        await this.giftCardTransactionRepository.findChildTransactions(
+          transaction._id
+        );
+      return {
+        ...transaction.toObject(),
+        children,
+      };
+    }
+
+    return transaction;
+  }
+
+  async exportTransactions(
+    userId: string,
+    filters: GiftCardTransactionFilters = {}
+  ): Promise<string> {
+    const query: any = { userId };
+
+    // Apply same filters as getUserTransactions
+    if (filters.tradeType) query.tradeType = filters.tradeType;
+    if (filters.status) query.status = filters.status;
+    if (filters.cardType) query.cardType = filters.cardType;
+    if (filters.giftCardType) query.giftCardType = filters.giftCardType;
+    if (filters.giftCardId) query.giftCardId = filters.giftCardId;
+    if (filters.groupTag) query.groupTag = filters.groupTag;
+    if (filters.preorder !== undefined) query.preorder = filters.preorder;
 
     if (filters.startDate || filters.endDate) {
       query.createdAt = {};
@@ -771,43 +919,155 @@ export class GiftCardService {
         query.createdAt.$gte = new Date(filters.startDate);
       }
       if (filters.endDate) {
-        query.createdAt.$lte = new Date(filters.endDate);
+        const endDate = new Date(filters.endDate);
+        endDate.setHours(23, 59, 59, 999);
+        query.createdAt.$lte = endDate;
       }
     }
 
-    return this.giftCardTransactionRepository.findByUserId(
-      userId,
+    const result = await this.giftCardTransactionRepository.findWithFilters(
       query,
-      page,
-      limit
+      1,
+      10000
     );
+
+    // Generate CSV
+    const headers = [
+      "Reference",
+      "Trade Type",
+      "Gift Card Type",
+      "Card Type",
+      "Amount",
+      "Quantity",
+      "Rate",
+      "Payable Amount",
+      "Service Charge",
+      "Status",
+      "Preorder",
+      "Bank Account",
+      "Group Tag",
+      "Review Note",
+      "Date",
+    ];
+
+    const rows = result.data.map((t: any) => [
+      t.reference,
+      t.tradeType || "",
+      t.giftCardType || "",
+      t.cardType || "",
+      t.amount,
+      t.quantity,
+      t.rate || "",
+      t.payableAmount || "",
+      t.serviceCharge || 0,
+      t.status,
+      t.preorder ? "Yes" : "No",
+      t.accountNumber || "",
+      t.groupTag || "",
+      t.reviewNote || "",
+      new Date(t.createdAt).toISOString(),
+    ]);
+
+    // Escape CSV values that contain commas or quotes
+    const escapeCsvValue = (value: any): string => {
+      const strValue = String(value);
+      if (
+        strValue.includes(",") ||
+        strValue.includes('"') ||
+        strValue.includes("\n")
+      ) {
+        return `"${strValue.replace(/"/g, '""')}"`;
+      }
+      return strValue;
+    };
+
+    const csv = [
+      headers.join(","),
+      ...rows.map((row: any[]) => row.map(escapeCsvValue).join(",")),
+    ].join("\n");
+
+    return csv;
   }
 
-  async getGiftCardTransactionById(transactionId: string) {
-    const transaction = await this.giftCardTransactionRepository.findById(
-      transactionId
-    );
-    if (!transaction) {
-      throw new AppError(
-        "Transaction not found",
-        HTTP_STATUS.NOT_FOUND,
-        ERROR_CODES.RESOURCE_NOT_FOUND
-      );
-    }
-    return transaction;
-  }
-
-  async getGiftCardTransactionByReference(reference: string) {
+  async generateReceipt(reference: string, userId: string): Promise<any> {
     const transaction =
       await this.giftCardTransactionRepository.findByReference(reference);
+
     if (!transaction) {
       throw new AppError(
-        "Transaction not found",
+        "Gift card transaction not found",
         HTTP_STATUS.NOT_FOUND,
-        ERROR_CODES.RESOURCE_NOT_FOUND
+        ERROR_CODES.NOT_FOUND
       );
     }
-    return transaction;
+
+    // Verify ownership
+    if (transaction.userId?.toString() !== userId) {
+      throw new AppError(
+        "Unauthorized access to gift card transaction",
+        HTTP_STATUS.FORBIDDEN,
+        ERROR_CODES.UNAUTHORIZED
+      );
+    }
+
+    // Only generate receipts for successful or approved transactions
+    if (!["success", "approved", "s.approved"].includes(transaction.status)) {
+      throw new AppError(
+        "Receipt can only be generated for successful or approved transactions",
+        HTTP_STATUS.BAD_REQUEST,
+        ERROR_CODES.BAD_REQUEST
+      );
+    }
+
+    return {
+      receiptNumber: `GC-RCP-${transaction.reference}`,
+      reference: transaction.reference,
+      providerReference: transaction.providerReference,
+      tradeType: transaction.tradeType,
+      giftCardType: transaction.giftCardType,
+      cardType: transaction.cardType,
+      amount: transaction.amount,
+      quantity: transaction.quantity,
+      rate: transaction.rate,
+      payableAmount: transaction.payableAmount,
+      serviceCharge: transaction.serviceCharge,
+      status: transaction.status,
+      bankDetails: transaction.accountNumber
+        ? {
+            accountName: transaction.accountName,
+            accountNumber: transaction.accountNumber,
+            bankCode: transaction.bankCode,
+          }
+        : null,
+      reviewNote: transaction.reviewNote,
+      meta: transaction.meta,
+      transactionDate: transaction.createdAt,
+      generatedAt: new Date(),
+    };
+  }
+
+  async getGroupedTransactions(
+    groupTag: string,
+    userId: string
+  ): Promise<any[]> {
+    // First verify user owns at least one transaction in this group
+    const query = { groupTag, userId };
+    const result = await this.giftCardTransactionRepository.findWithFilters(
+      query,
+      1,
+      1
+    );
+
+    if (result.total === 0) {
+      throw new AppError(
+        "No transactions found in this group",
+        HTTP_STATUS.NOT_FOUND,
+        ERROR_CODES.NOT_FOUND
+      );
+    }
+
+    // Fetch all transactions in the group
+    return this.giftCardTransactionRepository.findByGroupTag(groupTag);
   }
 
   private calculateRateFromProduct(product: any): number {

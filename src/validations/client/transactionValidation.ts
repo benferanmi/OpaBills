@@ -12,16 +12,7 @@ export const createTransactionSchema = Joi.object({
 export const paginationSchema = Joi.object({
   page: Joi.number().integer().min(1).optional(),
   limit: Joi.number().integer().min(1).max(100).optional(),
-  type: Joi.string().valid("both", "sell", "buy").optional(),
-  status: Joi.string()
-    .valid("pending", "success", "failed", "reversed")
-    .optional(),
-  date: Joi.date().optional(),
-  startDate: Joi.date().optional(),
-  endDate: Joi.date().optional(),
-  reference: Joi.string().optional(),
-  direction: Joi.string().valid("DEBIT", "CREDIT").optional(),
-  purpose: Joi.string()
+  type: Joi.string()
     .valid(
       "airtime",
       "data",
@@ -39,6 +30,15 @@ export const paginationSchema = Joi.object({
       "withdrawal"
     )
     .optional(),
+  status: Joi.string()
+    .valid("pending", "success", "failed", "reversed")
+    .optional(),
+  date: Joi.date().optional(),
+  startDate: Joi.date().optional(),
+  endDate: Joi.date().optional(),
+  reference: Joi.string().optional(),
+  direction: Joi.string().valid("DEBIT", "CREDIT").optional(),
+  purpose: Joi.string().optional(),
   startPrice: Joi.number().positive().optional(),
   endPrice: Joi.number().positive().optional(),
 });

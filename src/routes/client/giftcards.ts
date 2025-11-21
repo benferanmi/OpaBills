@@ -53,23 +53,4 @@ router.post(
   giftCardController.sellGiftCard
 );
 
-// Transaction Management
-router.get(
-  "/transactions/:transactionId/redeem-code",
-  giftCardController.getRedeemCode
-);
-router.get(
-  "/transactions/list",
-  validateQuery(giftCardTransactionQuerySchema),
-  giftCardController.getGiftCardTransactions
-);
-router.get(
-  "/transactions/:transactionId",
-  giftCardController.getGiftCardTransactionById
-);
-router.get(
-  "/transactions/reference/:reference",
-  giftCardController.getGiftCardTransactionByReference
-);
-
 export default router;

@@ -13,8 +13,8 @@ const router = Router();
 const billPaymentController = new BillPaymentController();
 
 // All routes require authentication and service check
-// router.use(authenticate);
-// router.use(serviceCheck("data"));
+router.use(authenticate);
+router.use(serviceCheck("data"));
 
 // Get data services by type (SME, GIFTING, DIRECT)
 router.get("/providers", billPaymentController.getDataProviders);

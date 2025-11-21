@@ -123,10 +123,8 @@ export class GiftCardTransactionRepository extends BaseRepository<IGiftCardTrans
       .exec();
   }
 
-  /**
-   * Find pending sell transactions for a specific user and gift card
-   * Used to determine if we need to create/update parent transaction
-   */
+  // Find pending sell transactions for a specific user and gift card
+  // Used to determine if we need to create/update parent transaction
   async findPendingSellByUserAndGiftCard(
     userId: string,
     giftCardId: string
@@ -142,9 +140,7 @@ export class GiftCardTransactionRepository extends BaseRepository<IGiftCardTrans
       .exec();
   }
 
-  /**
-   * Find all children of a parent transaction
-   */
+  // Find all children of a parent transaction
   async findChildrenByParentId(
     parentId: string
   ): Promise<IGiftCardTransaction[]> {
@@ -155,12 +151,17 @@ export class GiftCardTransactionRepository extends BaseRepository<IGiftCardTrans
       .exec();
   }
 
-  /**
-   * Update transaction status with optional review data
-   */
   async updateStatus(
     transactionId: string,
-    status: "pending" | "processing" | "success" | "failed" | "approved" | "declined" | "multiple" | "s.approved",
+    status:
+      | "pending"
+      | "processing"
+      | "success"
+      | "failed"
+      | "approved"
+      | "declined"
+      | "multiple"
+      | "s.approved",
     reviewData?: any
   ): Promise<IGiftCardTransaction | null> {
     return this.model
@@ -172,9 +173,6 @@ export class GiftCardTransactionRepository extends BaseRepository<IGiftCardTrans
       .exec();
   }
 
-  /**
-   * Count pending transactions for a user and gift card
-   */
   async countPendingSellByUserAndGiftCard(
     userId: string,
     giftCardId: string
@@ -185,6 +183,59 @@ export class GiftCardTransactionRepository extends BaseRepository<IGiftCardTrans
       tradeType: "sell",
       status: { $in: ["pending", "multiple"] },
     });
+  }
+
+  async findByGiftCardId(
+    giftCardId: string | Types.ObjectId,
+    page: number = 1,
+    limit: number = 10
+  ) {
+    return this.findWithPagination({ giftCardId }, page, limit);
+  }
+
+  async findByStatus(status: string, page: number = 1, limit: number = 10) {
+    return this.findWithPagination({ status }, page, limit);
+  }
+
+  async findByTradeType(
+    tradeType: "buy" | "sell",
+    page: number = 1,
+    limit: number = 10
+  ) {
+    return this.findWithPagination({ tradeType }, page, limit);
+  }
+
+  async findChildTransactions(parentId: string | Types.ObjectId) {
+    return this.model.find({ parentId }).sort({ createdAt: -1 }).lean().exec();
+  }
+
+  async findWithFilters(
+    query: any,
+    page: number = 1,
+    limit: number = 20
+  ): Promise<{ data: any[]; total: number }> {
+    const skip = (page - 1) * limit;
+
+    const [data, total] = await Promise.all([
+      this.model
+        .find(query)
+        .populate("giftCardId", "name category country")
+        .populate("userId", "firstName lastName email")
+        .populate("bankAccountId", "bankName accountName accountNumber")
+        .populate("reviewedBy", "firstName lastName")
+        .populate("secondApprovalBy", "firstName lastName")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean()
+        .exec(),
+      this.model.countDocuments(query).exec(),
+    ]);
+
+    return {
+      data,
+      total,
+    };
   }
 }
 

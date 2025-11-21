@@ -236,11 +236,20 @@ export class VTPassService {
     try {
       const networkCode = this.getNetworkCode(data.serviceCode);
 
+      console.log({
+        request_id: data.reference,
+        serviceID: data.serviceCode,
+        billersCode: data.phone,
+        variation_code: data.productCode,
+        amount: data.amount,
+        phone: data.phone,
+      });
+
       const response = await this.client.post("/pay", {
         request_id: data.reference,
         serviceID: data.serviceCode,
         billersCode: data.phone,
-        variation_code: data.variationCode,
+        variation_code: data.productCode,
         amount: data.amount,
         phone: data.phone,
       });
@@ -439,8 +448,8 @@ export class VTPassService {
           payload = {
             ...basePayload,
             variation_code: data.variationCode,
-            billersCode: data.profileId, 
-            amount: data.amount, 
+            billersCode: data.profileId,
+            amount: data.amount,
           };
           break;
 
@@ -448,8 +457,8 @@ export class VTPassService {
           payload = {
             ...basePayload,
             variation_code: data.variationCode,
-            amount: data.amount, 
-            quantity: data.quantity || 1, 
+            amount: data.amount,
+            quantity: data.quantity || 1,
           };
           break;
 
@@ -457,8 +466,8 @@ export class VTPassService {
           payload = {
             ...basePayload,
             variation_code: data.variationCode,
-            amount: data.amount, 
-            quantity: data.quantity || 1, 
+            amount: data.amount,
+            quantity: data.quantity || 1,
           };
           break;
 

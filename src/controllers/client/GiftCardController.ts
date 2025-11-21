@@ -265,7 +265,7 @@ export class GiftCardController {
     }
   };
 
-  getGiftCardTransactions = async (
+  getUserTransactions = async (
     req: AuthRequest,
     res: Response,
     next: NextFunction
@@ -274,18 +274,41 @@ export class GiftCardController {
       const userId = req.user!.id;
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 10;
+
       const filters = {
-        tradeType: req.query.tradeType,
-        status: req.query.status,
-        startDate: req.query.startDate,
-        endDate: req.query.endDate,
+        tradeType: req.query.tradeType as "buy" | "sell",
+        status: req.query.status as string,
+        cardType: req.query.cardType as "physical" | "ecode",
+        giftCardType: req.query.giftCardType as string,
+        giftCardId: req.query.giftCardId as string,
+        reference: req.query.reference as string,
+        groupTag: req.query.groupTag as string,
+        preorder: req.query.preorder
+          ? req.query.preorder === "true"
+          : undefined,
+        startDate: req.query.startDate as string,
+        endDate: req.query.endDate as string,
+        startAmount: req.query.startAmount
+          ? parseFloat(req.query.startAmount as string)
+          : undefined,
+        endAmount: req.query.endAmount
+          ? parseFloat(req.query.endAmount as string)
+          : undefined,
+        startRate: req.query.startRate
+          ? parseFloat(req.query.startRate as string)
+          : undefined,
+        endRate: req.query.endRate
+          ? parseFloat(req.query.endRate as string)
+          : undefined,
       };
-      const result = await this.giftCardService.getGiftCardTransactions(
+
+      const result = await this.giftCardService.getUserTransactions(
         userId,
         filters,
         page,
         limit
       );
+
       return sendPaginatedResponse(
         res,
         result.data,
@@ -297,39 +320,120 @@ export class GiftCardController {
     }
   };
 
-  getGiftCardTransactionById = async (
-    req: AuthRequest,
-    res: Response,
-    next: NextFunction
-  ) => {
-    try {
-      const { transactionId } = req.params;
-      const transaction = await this.giftCardService.getGiftCardTransactionById(
-        transactionId
-      );
-      return sendSuccessResponse(
-        res,
-        transaction,
-        "Transaction retrieved successfully"
-      );
-    } catch (error) {
-      next(error);
-    }
-  };
-
-  getGiftCardTransactionByReference = async (
+  getTransaction = async (
     req: AuthRequest,
     res: Response,
     next: NextFunction
   ) => {
     try {
       const { reference } = req.params;
-      const transaction =
-        await this.giftCardService.getGiftCardTransactionByReference(reference);
+      const userId = req.user!.id;
+      const includeChildren = req.query.includeChildren === "true";
+
+      const transaction = includeChildren
+        ? await this.giftCardService.getTransactionWithChildren(
+            reference,
+            userId
+          )
+        : await this.giftCardService.getTransaction(
+            reference,
+            userId
+          );
+
       return sendSuccessResponse(
         res,
         transaction,
-        "Transaction retrieved successfully"
+        "Gift card transaction retrieved successfully"
+      );
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getGroupedTransactions = async (
+    req: AuthRequest,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const { groupTag } = req.params;
+      const userId = req.user!.id;
+
+      const transactions =
+        await this.giftCardService.getGroupedTransactions(
+          groupTag,
+          userId
+        );
+
+      return sendSuccessResponse(
+        res,
+        transactions,
+        "Grouped transactions retrieved successfully"
+      );
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  exportTransactions = async (
+    req: AuthRequest,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const userId = req.user!.id;
+
+      const filters = {
+        tradeType: req.query.tradeType as "buy" | "sell",
+        status: req.query.status as string,
+        cardType: req.query.cardType as "physical" | "ecode",
+        giftCardType: req.query.giftCardType as string,
+        giftCardId: req.query.giftCardId as string,
+        groupTag: req.query.groupTag as string,
+        preorder: req.query.preorder
+          ? req.query.preorder === "true"
+          : undefined,
+        startDate: req.query.startDate as string,
+        endDate: req.query.endDate as string,
+      };
+
+      const csvData = await this.giftCardService.exportTransactions(
+        userId,
+        filters
+      );
+
+      res.setHeader("Content-Type", "text/csv");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename=giftcard_transactions_${
+          new Date().toISOString().split("T")[0]
+        }.csv`
+      );
+
+      return res.send(csvData);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  generateReceipt = async (
+    req: AuthRequest,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const { reference } = req.params;
+      const userId = req.user!.id;
+
+      const receipt = await this.giftCardService.generateReceipt(
+        reference,
+        userId
+      );
+
+      return sendSuccessResponse(
+        res,
+        receipt,
+        "Receipt generated successfully"
       );
     } catch (error) {
       next(error);
