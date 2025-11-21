@@ -49,9 +49,7 @@ export class CryptoService {
     this.notificationRepository = new NotificationRepository();
   }
 
-  /**
-   * Get list of available cryptos with filters
-   */
+  // Get list of available cryptos with filters
   async getCryptos(filters: any = {}, page: number = 1, limit: number = 10) {
     const query: any = { deletedAt: null, isActive: true };
 
@@ -62,9 +60,7 @@ export class CryptoService {
     return this.cryptoRepository.findWithPagination(query, page, limit);
   }
 
-  /**
-   * Get single crypto by ID
-   */
+  // Get single crypto by ID
   async getCryptoById(cryptoId: string) {
     const crypto = await this.cryptoRepository.findById(cryptoId);
     if (!crypto || crypto.deletedAt) {
@@ -77,9 +73,7 @@ export class CryptoService {
     return crypto;
   }
 
-  /**
-   * Get networks for a specific crypto
-   */
+  // Get networks for a specific crypto
   async getCryptoNetworks(cryptoId: string) {
     const crypto = await this.getCryptoById(cryptoId);
     return (
@@ -94,9 +88,7 @@ export class CryptoService {
     );
   }
 
-  /**
-   * Validate and get network from crypto
-   */
+  // Validate and get network from crypto
   private getNetwork(crypto: any, networkId: string) {
     const network = crypto.networks?.find(
       (n: any) => n.networkId === networkId
@@ -111,9 +103,7 @@ export class CryptoService {
     return network;
   }
 
-  /**
-   * Validate wallet address format
-   */
+  // Validate wallet address format
   private validateWalletAddress(address: string, network: any) {
     if (!address || address.trim().length === 0) {
       throw new AppError(
@@ -138,9 +128,7 @@ export class CryptoService {
     return address.trim();
   }
 
-  /**
-   * Calculate breakdown for buy/sell transaction
-   */
+  // Calculate breakdown for buy/sell transaction
   async calculateBreakdown(data: {
     cryptoId: string;
     cryptoAmount: number;
@@ -203,9 +191,7 @@ export class CryptoService {
     };
   }
 
-  /**
-   * BUY CRYPTO - User pays fiat, gets crypto
-   */
+  // BUY CRYPTO - User pays fiat, gets crypto
   async buyCrypto(data: BuyCryptoData) {
     const reference = generateReference();
 
@@ -381,9 +367,7 @@ export class CryptoService {
     };
   }
 
-  /**
-   * SELL CRYPTO - User sends crypto, gets fiat
-   */
+  // SELL CRYPTO - User sends crypto, gets fiat
   async sellCrypto(data: SellCryptoData) {
     const reference = generateReference();
 
@@ -541,9 +525,7 @@ export class CryptoService {
     };
   }
 
-  /**
-   * Get user's crypto transactions with filters
-   */
+  // Get user's crypto transactions with filters
   async getCryptoTransactions(
     userId: string,
     filters: any = {},
@@ -582,9 +564,7 @@ export class CryptoService {
     );
   }
 
-  /**
-   * Get single transaction by ID
-   */
+  // Get single transaction by ID
   async getCryptoTransactionById(transactionId: string, userId?: string) {
     const transaction = await this.cryptoTransactionRepository.findById(
       transactionId
@@ -610,9 +590,7 @@ export class CryptoService {
     return transaction;
   }
 
-  /**
-   * Get transaction by reference
-   */
+  // Get transaction by reference
   async getCryptoTransactionByReference(reference: string, userId?: string) {
     const transaction = await this.cryptoTransactionRepository.findOne({
       reference,
@@ -638,9 +616,7 @@ export class CryptoService {
     return transaction;
   }
 
-  /**
-   * Get current crypto rates
-   */
+  // Get current crypto rates
   async getCryptoRates() {
     const cryptos = await this.cryptoRepository.findWithPagination(
       { deletedAt: null, isActive: true },
@@ -670,9 +646,7 @@ export class CryptoService {
 
   // ==================== ADMIN METHODS ====================
 
-  /**
-   * Update transaction status (Admin)
-   */
+  // Update transaction status (Admin)
   async updateTransactionStatus(
     transactionId: string,
     status: string,
@@ -746,9 +720,7 @@ export class CryptoService {
     return updated;
   }
 
-  /**
-   * Verify blockchain transaction (Admin/Automated)
-   */
+  // Verify blockchain transaction (Admin/Automated)
   async verifyBlockchainTransaction(
     transactionId: string,
     txHash: string,

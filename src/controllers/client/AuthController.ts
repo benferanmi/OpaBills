@@ -144,8 +144,11 @@ export class AuthController {
   verifyPhone = async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       const userId = req.user!.id;
-      await this.authService.verifyPhone({ ...req.body, userId });
-      return sendSuccessResponse(res, null, "Phone verified successfully");
+      const result = await this.authService.verifyPhone({
+        ...req.body,
+        userId,
+      });
+      return sendSuccessResponse(res, result, "Phone verified successfully");
     } catch (error) {
       next(error);
     }
@@ -154,8 +157,8 @@ export class AuthController {
   updatePin = async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       const userId = req.user!.id;
-      await this.authService.updatePin({ ...req.body, userId });
-      return sendSuccessResponse(res, null, "PIN updated successfully");
+      const result = await this.authService.updatePin({ ...req.body, userId });
+      return sendSuccessResponse(res, result, "PIN updated successfully");
     } catch (error) {
       next(error);
     }
@@ -179,8 +182,8 @@ export class AuthController {
     try {
       const userId = req.user!.id;
       const { pin } = req.body;
-      await this.authService.setPin({ pin, userId });
-      return sendSuccessResponse(res, null, "PIN set successfully");
+      const result = await this.authService.setPin({ pin, userId });
+      return sendSuccessResponse(res, result, "PIN set successfully");
     } catch (error) {
       next(error);
     }
@@ -190,10 +193,10 @@ export class AuthController {
     try {
       const userId = req.user!.id;
       const { enable } = req.body;
-      await this.authService.toggle2FA({ enable, userId });
+      const result = await this.authService.toggle2FA({ enable, userId });
       return sendSuccessResponse(
         res,
-        null,
+        result,
         `2FA ${enable ? "enabled" : "disabled"} successfully`
       );
     } catch (error) {

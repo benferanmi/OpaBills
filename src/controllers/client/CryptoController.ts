@@ -10,10 +10,7 @@ export class CryptoController {
     this.cryptoService = new CryptoService();
   }
 
-  /**
-   * Get list of available cryptocurrencies
-   * GET /api/cryptos
-   */
+  // Get list of available cryptocurrencies
   getCryptos = async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       const page = parseInt(req.query.page as string) || 1;
@@ -50,10 +47,7 @@ export class CryptoController {
     }
   };
 
-  /**
-   * Get single cryptocurrency details
-   * GET /api/cryptos/:cryptoId
-   */
+  // Get single cryptocurrency details
   getCryptoById = async (
     req: AuthRequest,
     res: Response,
@@ -73,10 +67,7 @@ export class CryptoController {
     }
   };
 
-  /**
-   * Get available networks for a cryptocurrency
-   * GET /api/cryptos/:cryptoId/networks
-   */
+  // Get available networks for a cryptocurrency
   getCryptoNetworks = async (
     req: AuthRequest,
     res: Response,
@@ -96,10 +87,7 @@ export class CryptoController {
     }
   };
 
-  /**
-   * Get current exchange rates for all cryptos
-   * GET /api/cryptos/rates
-   */
+  // Get current exchange rates for all cryptos
   getCryptoRates = async (
     req: AuthRequest,
     res: Response,
@@ -118,10 +106,7 @@ export class CryptoController {
     }
   };
 
-  /**
-   * Calculate transaction breakdown before initiating
-   * POST /api/cryptos/calculate-breakdown
-   */
+  // Calculate transaction breakdown before initiating
   calculateBreakdown = async (
     req: AuthRequest,
     res: Response,
@@ -140,10 +125,7 @@ export class CryptoController {
     }
   };
 
-  /**
-   * Initiate crypto purchase (BUY)
-   * POST /api/cryptos/buy
-   */
+  // Initiate crypto purchase (BUY)
   buyCrypto = async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       const userId = req.user!.id;
@@ -161,10 +143,7 @@ export class CryptoController {
     }
   };
 
-  /**
-   * Initiate crypto sale (SELL)
-   * POST /api/cryptos/sell
-   */
+  // Initiate crypto sale (SELL)
   sellCrypto = async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       const userId = req.user!.id;
@@ -182,10 +161,7 @@ export class CryptoController {
     }
   };
 
-  /**
-   * Get user's crypto transactions with filters
-   * GET /api/crypto-transactions
-   */
+  // Get user's crypto transactions with filters
   getCryptoTransactions = async (
     req: AuthRequest,
     res: Response,
@@ -222,10 +198,7 @@ export class CryptoController {
     }
   };
 
-  /**
-   * Get single transaction by ID
-   * GET /api/crypto-transactions/:transactionId
-   */
+  // Get single transaction by ID
   getCryptoTransactionById = async (
     req: AuthRequest,
     res: Response,
@@ -250,10 +223,7 @@ export class CryptoController {
     }
   };
 
-  /**
-   * Get transaction by reference
-   * GET /api/crypto-transactions/reference/:reference
-   */
+  // Get transaction by reference
   getCryptoTransactionByReference = async (
     req: AuthRequest,
     res: Response,
@@ -279,10 +249,7 @@ export class CryptoController {
     }
   };
 
-  /**
-   * Get transaction statistics for user
-   * GET /api/crypto-transactions/stats
-   */
+  // Get transaction statistics for user
   getCryptoTransactionStats = async (
     req: AuthRequest,
     res: Response,
@@ -337,10 +304,7 @@ export class CryptoController {
     }
   };
 
-  /**
-   * Get pending transactions for user
-   * GET /api/crypto-transactions/pending
-   */
+  // Get pending transactions for user
   getPendingCryptoTransactions = async (
     req: AuthRequest,
     res: Response,
@@ -369,10 +333,7 @@ export class CryptoController {
     }
   };
 
-  /**
-   * Get completed transactions for user
-   * GET /api/crypto-transactions/completed
-   */
+  // Get completed transactions for user
   getCompletedCryptoTransactions = async (
     req: AuthRequest,
     res: Response,

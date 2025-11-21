@@ -16,8 +16,23 @@ import { ReloadlyService } from "./providers/ReloadlyService";
 import { GiftBillsService } from "./providers/GiftBillsService";
 import { IProvider } from "@/models/reference/Provider";
 import { AmadeusService } from "./providers/AmadeusService";
-import { AirtimeData, AirtimeEPINData, BettingData, CableTvData, DataDataDTO, DataEPINData, EducationData, EducationEPINData, ElectricityData, FlightBookingData, HotelBookingData, InternationalAirtimeData, InternationalDataData, ProviderResponse, UtilityPaymentData } from "@/types";
-
+import {
+  AirtimeData,
+  AirtimeEPINData,
+  BettingData,
+  CableTvData,
+  DataDataDTO,
+  DataEPINData,
+  EducationData,
+  EducationEPINData,
+  ElectricityData,
+  FlightBookingData,
+  HotelBookingData,
+  InternationalAirtimeData,
+  InternationalDataData,
+  ProviderResponse,
+  UtilityPaymentData,
+} from "@/types";
 
 export class ProviderService {
   private vtpassService: VTPassService;
@@ -234,9 +249,7 @@ export class ProviderService {
     }
   }
 
-  /**
-   * Get products for a specific service
-   */
+  // Get products for a specific service
   async getProductsByService(
     serviceId: string,
     dataType?: string
@@ -248,7 +261,7 @@ export class ProviderService {
       };
 
       if (dataType) {
-        query.dataType = dataType;
+        query["attributes.dataType"] = dataType;
       }
 
       const products = await Product.find(query).sort({ amount: 1 }).lean();

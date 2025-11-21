@@ -1,55 +1,98 @@
 import { TransactionRepository } from "@/repositories/TransactionRepository";
-import { WalletService } from "./WalletService";
-import { generateReference } from "@/utils/helpers";
 import { AppError } from "@/middlewares/errorHandler";
 import { HTTP_STATUS, ERROR_CODES } from "@/utils/constants";
 
-export interface CreateTransactionDTO {
-  userId: string;
-  amount: number;
-  type: string;
-  provider: string;
-  remark?: string;
+export interface TransactionFilters {
+  type?: string;
+  status?: string;
+  provider?: string;
+  direction?: string;
   purpose?: string;
-  meta?: any;
+  reference?: string;
+  startDate?: string;
+  endDate?: string;
+  startPrice?: number;
+  endPrice?: number;
 }
 
 export class TransactionService {
   private transactionRepository: TransactionRepository;
-  private walletService: WalletService;
+
   constructor() {
     this.transactionRepository = new TransactionRepository();
-    this.walletService = new WalletService();
   }
 
-  async createTransaction(data: CreateTransactionDTO): Promise<any> {
-    const reference = generateReference("TXN");
+  async getUserTransactions(
+    userId: string,
+    filters: TransactionFilters = {},
+    page: number = 1,
+    limit: number = 20
+  ): Promise<any> {
+    const query: any = { sourceId: userId };
 
-    const transaction = await this.transactionRepository.create({
-      reference,
-      amount: data.amount,
-      type: data.type,
-      provider: data.provider,
-      remark: data.remark,
-      purpose: data.purpose,
-      status: "pending",
-      meta: data.meta,
-    });
+    // Type filter
+    if (filters.type) {
+      query.type = filters.type;
+    }
 
-    return {
-      id: transaction._id,
-      reference: transaction.reference,
-      amount: transaction.amount,
-      type: transaction.type,
-      status: transaction.status,
-      createdAt: transaction.createdAt,
-    };
+    // Status filter
+    if (filters.status) {
+      query.status = filters.status;
+    }
+
+    // Provider filter
+    if (filters.provider) {
+      query.provider = filters.provider;
+    }
+
+    // Direction filter
+    if (filters.direction) {
+      query.direction = filters.direction;
+    }
+
+    // Purpose filter
+    if (filters.purpose) {
+      query.purpose = filters.purpose;
+    }
+
+    // Reference filter (partial match)
+    if (filters.reference) {
+      query.reference = { $regex: filters.reference, $options: "i" };
+    }
+
+    // Date range filter
+    if (filters.startDate || filters.endDate) {
+      query.createdAt = {};
+      if (filters.startDate) {
+        query.createdAt.$gte = new Date(filters.startDate);
+      }
+      if (filters.endDate) {
+        // Set to end of day
+        const endDate = new Date(filters.endDate);
+        endDate.setHours(23, 59, 59, 999);
+        query.createdAt.$lte = endDate;
+      }
+    }
+
+    // Price range filter
+    if (filters.startPrice !== undefined || filters.endPrice !== undefined) {
+      query.amount = {};
+      if (filters.startPrice !== undefined) {
+        query.amount.$gte = filters.startPrice;
+      }
+      if (filters.endPrice !== undefined) {
+        query.amount.$lte = filters.endPrice;
+      }
+    }
+
+    return this.transactionRepository.findWithFilters(query, page, limit);
   }
 
-  async getTransaction(reference: string): Promise<any> {
+  async getTransaction(reference: string, userId: string): Promise<any> {
     const transaction = await this.transactionRepository.findByReference(
       reference
     );
+
     if (!transaction) {
       throw new AppError(
         "Transaction not found",
@@ -58,28 +101,30 @@ export class TransactionService {
       );
     }
 
+    // Verify ownership
+    if (transaction.sourceId?.toString() !== userId) {
+      throw new AppError(
+        "Unauthorized access to transaction",
+        HTTP_STATUS.FORBIDDEN,
+        ERROR_CODES.UNAUTHORIZED
+      );
+    }
+
     return transaction;
   }
 
-  async getUserTransactions(
+  async exportTransactions(
     userId: string,
-    filters: any = {},
-    page: number = 1,
-    limit: number = 20
-  ): Promise<any> {
+    filters: TransactionFilters = {}
+  ): Promise<string> {
     const query: any = { sourceId: userId };
 
-    if (filters.type) {
-      query.type = filters.type;
-    }
-
-    if (filters.status) {
-      query.status = filters.status;
-    }
-
-    if (filters.provider) {
-      query.provider = filters.provider;
-    }
+    // Apply same filters as getUserTransactions
+    if (filters.type) query.type = filters.type;
+    if (filters.status) query.status = filters.status;
+    if (filters.provider) query.provider = filters.provider;
+    if (filters.direction) query.direction = filters.direction;
+    if (filters.purpose) query.purpose = filters.purpose;
 
     if (filters.startDate || filters.endDate) {
       query.createdAt = {};
@@ -87,116 +132,10 @@ export class TransactionService {
         query.createdAt.$gte = new Date(filters.startDate);
       }
       if (filters.endDate) {
-        query.createdAt.$lte = new Date(filters.endDate);
+        const endDate = new Date(filters.endDate);
+        endDate.setHours(23, 59, 59, 999);
+        query.createdAt.$lte = endDate;
       }
-    }
-
-    return this.transactionRepository.findWithFilters(query, page, limit);
-  }
-
-  async getRecentTransactions(
-    userId: string,
-    limit: number = 10
-  ): Promise<any> {
-    return this.transactionRepository.findWithFilters(
-      { sourceId: userId },
-      1,
-      limit
-    );
-  }
-
-  async getTransactionStats(userId: string): Promise<any> {
-    const transactions = await this.transactionRepository.findWithFilters(
-      { sourceId: userId, status: "success" },
-      1,
-      1000
-    );
-
-    const totalSpent = transactions.data.reduce(
-      (sum: number, t: any) => sum + t.amount,
-      0
-    );
-    const countByType = transactions.data.reduce((acc: any, t: any) => {
-      acc[t.type] = (acc[t.type] || 0) + 1;
-      return acc;
-    }, {});
-
-    return {
-      totalSpent,
-      totalCount: transactions.total,
-      countByType,
-      successRate: (transactions.total > 0
-        ? (transactions.data.filter((t: any) => t.status === "success").length /
-            transactions.total) *
-          100
-        : 0
-      ).toFixed(2),
-    };
-  }
-
-  async getTransactionTypes(): Promise<any> {
-    return [
-      "airtime",
-      "data",
-      "electricity",
-      "tv_subscription",
-      "betting",
-      "education",
-      "internationalAirtime",
-      "internationalData",
-      "gift_card",
-      "crypto",
-      "flight",
-      "wallet_transfer",
-      "wallet_funding",
-      "withdrawal",
-    ];
-  }
-
-  async updateTransactionStatus(
-    reference: string,
-    status: "pending" | "success" | "failed" | "reversed"
-  ): Promise<any> {
-    const transaction = await this.transactionRepository.findByReference(
-      reference
-    );
-    if (!transaction) {
-      throw new AppError(
-        "Transaction not found",
-        HTTP_STATUS.NOT_FOUND,
-        ERROR_CODES.NOT_FOUND
-      );
-    }
-
-    const updated = await this.transactionRepository.updateStatus(
-      transaction.id,
-      status
-    );
-    return updated;
-  }
-
-  async getTransactionProviders(userId: string): Promise<any> {
-    const transactions = await this.transactionRepository.findWithFilters(
-      { sourceId: userId },
-      1,
-      1000
-    );
-
-    const providers = [
-      ...new Set(transactions.data.map((t: any) => t.provider)),
-    ];
-    return providers;
-  }
-
-  async exportTransactions(userId: string, filters: any = {}): Promise<string> {
-    const query: any = { sourceId: userId };
-
-    if (filters.type) query.type = filters.type;
-    if (filters.status) query.status = filters.status;
-    if (filters.startDate || filters.endDate) {
-      query.createdAt = {};
-      if (filters.startDate) query.createdAt.$gte = new Date(filters.startDate);
-      if (filters.endDate) query.createdAt.$lte = new Date(filters.endDate);
     }
 
     const result = await this.transactionRepository.findWithFilters(
@@ -209,32 +148,53 @@ export class TransactionService {
     const headers = [
       "Reference",
       "Type",
+      "Direction",
+      "Purpose",
       "Provider",
       "Amount",
       "Status",
+      "Remark",
       "Date",
     ];
+
     const rows = result.data.map((t: any) => [
       t.reference,
-      t.type,
-      t.provider,
+      t.type || "",
+      t.direction || "",
+      t.purpose || "",
+      t.provider || "",
       t.amount,
       t.status,
+      t.remark || "",
       new Date(t.createdAt).toISOString(),
     ]);
 
+    // Escape CSV values that contain commas or quotes
+    const escapeCsvValue = (value: any): string => {
+      const strValue = String(value);
+      if (
+        strValue.includes(",") ||
+        strValue.includes('"') ||
+        strValue.includes("\n")
+      ) {
+        return `"${strValue.replace(/"/g, '""')}"`;
+      }
+      return strValue;
+    };
+
     const csv = [
       headers.join(","),
-      ...rows.map((row: any[]) => row.join(",")),
+      ...rows.map((row: any[]) => row.map(escapeCsvValue).join(",")),
     ].join("\n");
 
     return csv;
   }
 
-  async generateReceipt(reference: string): Promise<any> {
+  async generateReceipt(reference: string, userId: string): Promise<any> {
     const transaction = await this.transactionRepository.findByReference(
       reference
     );
+
     if (!transaction) {
       throw new AppError(
         "Transaction not found",
@@ -243,17 +203,38 @@ export class TransactionService {
       );
     }
 
+    // Verify ownership
+    if (transaction.sourceId?.toString() !== userId) {
+      throw new AppError(
+        "Unauthorized access to transaction",
+        HTTP_STATUS.FORBIDDEN,
+        ERROR_CODES.UNAUTHORIZED
+      );
+    }
+
+    // Only generate receipts for successful transactions
+    if (transaction.status !== "success") {
+      throw new AppError(
+        "Receipt can only be generated for successful transactions",
+        HTTP_STATUS.BAD_REQUEST,
+        ERROR_CODES.BAD_REQUEST
+      );
+    }
+
     return {
+      receiptNumber: `RCP-${transaction.reference}`,
       reference: transaction.reference,
+      providerReference: transaction.providerReference,
       amount: transaction.amount,
+      direction: transaction.direction,
       type: transaction.type,
+      purpose: transaction.purpose,
       provider: transaction.provider,
       status: transaction.status,
       remark: transaction.remark,
-      purpose: transaction.purpose,
       meta: transaction.meta,
-      createdAt: transaction.createdAt,
-      receiptNumber: `RCP-${transaction.reference}`,
+      transactionDate: transaction.createdAt,
+      generatedAt: new Date(),
     };
   }
 }

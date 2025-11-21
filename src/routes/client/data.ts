@@ -13,25 +13,25 @@ const router = Router();
 const billPaymentController = new BillPaymentController();
 
 // All routes require authentication and service check
-router.use(authenticate);
-router.use(serviceCheck("data"));
+// router.use(authenticate);
+// router.use(serviceCheck("data"));
 
 // Get data services by type (SME, GIFTING, DIRECT)
 router.get("/providers", billPaymentController.getDataProviders);
-router.get("/", billPaymentController.getData);
-// Get data products by service (MTN data, Airtel data.....)
-router.get("/:providerId", billPaymentController.getDataProducts);
-// Get data types (SME, GIFTING, DIRECT)
-// router.get("/types", billPaymentController.getDataTypes);
+router.get("/history", billPaymentController.getDataHistory);
 router.post("/verify", billPaymentController.verifyPhone);
+
+router.get("/", billPaymentController.getData);
+// Get data types (SME, GIFTING, DIRECT)
+// Get data products by service (MTN data, Airtel data.....)
+router.get("/:providerId/:dataType", billPaymentController.getDataProducts);
 router.post(
-  "/:type",
+  "/",
   rateLimiter(10, 60000),
   validateRequest(dataPurchaseSchema),
   checkAndVerifyPin,
   walletLock,
   billPaymentController.purchaseData
 );
-router.get("/history", billPaymentController.getDataHistory);
 
 export default router;

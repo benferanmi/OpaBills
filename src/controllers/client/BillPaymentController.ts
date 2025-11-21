@@ -358,9 +358,10 @@ export class BillPaymentController {
     next: NextFunction
   ) => {
     try {
-      const { providerId } = req.params;
+      const { providerId, dataType } = req.params;
       const products = await this.billPaymentService.getDataProducts(
-        providerId
+        providerId,
+        dataType
       );
       return sendSuccessResponse(
         res,

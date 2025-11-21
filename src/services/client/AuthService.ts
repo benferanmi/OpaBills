@@ -591,7 +591,7 @@ export class AuthService {
     }
   }
 
-  async verifyPhone(data: VerifyPhoneDTO): Promise<void> {
+  async verifyPhone(data: VerifyPhoneDTO): Promise<any> {
     const user = await this.userRepository.findById(data.userId);
     if (!user) {
       throw new AppError(
@@ -641,9 +641,11 @@ export class AuthService {
         );
       }
     }
+
+    return { user: updatedUser };
   }
 
-  async updatePin(data: UpdatePinDTO): Promise<void> {
+  async updatePin(data: UpdatePinDTO): Promise<any> {
     const user = await this.userRepository.findById(data.userId);
     if (!user) {
       throw new AppError(
@@ -682,9 +684,11 @@ export class AuthService {
         );
       }
     }
+
+    return { user: updatedUser };
   }
 
-  async setPin(data: SetPinDTO): Promise<void> {
+  async setPin(data: SetPinDTO): Promise<any> {
     const user = await this.userRepository.findById(data.userId);
     if (!user) {
       throw new AppError(
@@ -714,7 +718,7 @@ export class AuthService {
       }
     }
 
-    return;
+    return { user: updatedUser };
   }
 
   async verifyPin(data: VerifyPinDTO): Promise<boolean> {
@@ -739,7 +743,7 @@ export class AuthService {
     return isPinValid;
   }
 
-  async toggle2FA(data: Toggle2FADTO): Promise<void> {
+  async toggle2FA(data: Toggle2FADTO): Promise<any> {
     const user = await this.userRepository.findById(data.userId);
     if (!user) {
       throw new AppError(
@@ -762,7 +766,7 @@ export class AuthService {
       );
     }
 
-    return;
+    return { user: userDetails };
   }
 
   async verify2FA(data: Verify2FADTO): Promise<AuthResponseDTO | null> {
@@ -821,7 +825,7 @@ export class AuthService {
       //   HTTP_STATUS.NOT_FOUND,
       //   ERROR_CODES.NOT_FOUND
       // );
-      return
+      return;
     }
 
     const otp = await this.otpService.generateAndStore(

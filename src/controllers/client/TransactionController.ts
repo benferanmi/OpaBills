@@ -6,51 +6,10 @@ import { HTTP_STATUS } from "@/utils/constants";
 
 export class TransactionController {
   private transactionService: TransactionService;
+
   constructor() {
     this.transactionService = new TransactionService();
   }
-
-  createTransaction = async (
-    req: AuthRequest,
-    res: Response,
-    next: NextFunction
-  ) => {
-    try {
-      const userId = req.user!.id;
-      const transaction = await this.transactionService.createTransaction({
-        ...req.body,
-        userId,
-      });
-      return sendSuccessResponse(
-        res,
-        transaction,
-        "Transaction created successfully",
-        HTTP_STATUS.CREATED
-      );
-    } catch (error) {
-      next(error);
-    }
-  };
-
-  getTransaction = async (
-    req: AuthRequest,
-    res: Response,
-    next: NextFunction
-  ) => {
-    try {
-      const { reference } = req.params;
-      const transaction = await this.transactionService.getTransaction(
-        reference
-      );
-      return sendSuccessResponse(
-        res,
-        transaction,
-        "Transaction retrieved successfully"
-      );
-    } catch (error) {
-      next(error);
-    }
-  };
 
   getUserTransactions = async (
     req: AuthRequest,
@@ -61,12 +20,22 @@ export class TransactionController {
       const userId = req.user!.id;
       const page = parseInt(req.query.page as string) || 1;
       const limit = parseInt(req.query.limit as string) || 10;
+
       const filters = {
-        type: req.query.type,
-        status: req.query.status,
-        provider: req.query.provider,
-        startDate: req.query.startDate,
-        endDate: req.query.endDate,
+        type: req.query.type as string,
+        status: req.query.status as string,
+        provider: req.query.provider as string,
+        direction: req.query.direction as string,
+        purpose: req.query.purpose as string,
+        reference: req.query.reference as string,
+        startDate: req.query.startDate as string,
+        endDate: req.query.endDate as string,
+        startPrice: req.query.startPrice
+          ? parseFloat(req.query.startPrice as string)
+          : undefined,
+        endPrice: req.query.endPrice
+          ? parseFloat(req.query.endPrice as string)
+          : undefined,
       };
 
       const result = await this.transactionService.getUserTransactions(
@@ -87,40 +56,24 @@ export class TransactionController {
     }
   };
 
-  getTransactionStats = async (
+  getTransaction = async (
     req: AuthRequest,
     res: Response,
     next: NextFunction
   ) => {
     try {
+      const { reference } = req.params;
       const userId = req.user!.id;
-      const stats = await this.transactionService.getTransactionStats(userId);
-      return sendSuccessResponse(
-        res,
-        stats,
-        "Transaction stats retrieved successfully"
-      );
-    } catch (error) {
-      next(error);
-    }
-  };
 
-  getRecentTransactions = async (
-    req: AuthRequest,
-    res: Response,
-    next: NextFunction
-  ) => {
-    try {
-      const userId = req.user!.id;
-      const limit = parseInt(req.query.limit as string) || 10;
-      const result = await this.transactionService.getRecentTransactions(
-        userId,
-        limit
+      const transaction = await this.transactionService.getTransaction(
+        reference,
+        userId
       );
+
       return sendSuccessResponse(
         res,
-        result.data,
-        "Recent transactions retrieved successfully"
+        transaction,
+        "Transaction retrieved successfully"
       );
     } catch (error) {
       next(error);
@@ -134,12 +87,17 @@ export class TransactionController {
   ) => {
     try {
       const userId = req.user!.id;
+
       const filters = {
-        type: req.query.type,
-        status: req.query.status,
-        startDate: req.query.startDate,
-        endDate: req.query.endDate,
+        type: req.query.type as string,
+        status: req.query.status as string,
+        provider: req.query.provider as string,
+        direction: req.query.direction as string,
+        purpose: req.query.purpose as string,
+        startDate: req.query.startDate as string,
+        endDate: req.query.endDate as string,
       };
+
       const csvData = await this.transactionService.exportTransactions(
         userId,
         filters
@@ -148,46 +106,12 @@ export class TransactionController {
       res.setHeader("Content-Type", "text/csv");
       res.setHeader(
         "Content-Disposition",
-        "attachment; filename=transactions.csv"
+        `attachment; filename=transactions_${
+          new Date().toISOString().split("T")[0]
+        }.csv`
       );
+
       return res.send(csvData);
-    } catch (error) {
-      next(error);
-    }
-  };
-
-  getTransactionTypes = async (
-    req: AuthRequest,
-    res: Response,
-    next: NextFunction
-  ) => {
-    try {
-      const types = await this.transactionService.getTransactionTypes();
-      return sendSuccessResponse(
-        res,
-        types,
-        "Transaction types retrieved successfully"
-      );
-    } catch (error) {
-      next(error);
-    }
-  };
-
-  getTransactionProviders = async (
-    req: AuthRequest,
-    res: Response,
-    next: NextFunction
-  ) => {
-    try {
-      const userId = req.user!.id;
-      const providers = await this.transactionService.getTransactionProviders(
-        userId
-      );
-      return sendSuccessResponse(
-        res,
-        providers,
-        "Transaction providers retrieved successfully"
-      );
     } catch (error) {
       next(error);
     }
@@ -200,7 +124,13 @@ export class TransactionController {
   ) => {
     try {
       const { reference } = req.params;
-      const receipt = await this.transactionService.generateReceipt(reference);
+      const userId = req.user!.id;
+
+      const receipt = await this.transactionService.generateReceipt(
+        reference,
+        userId
+      );
+
       return sendSuccessResponse(
         res,
         receipt,

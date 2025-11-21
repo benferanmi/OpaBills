@@ -647,9 +647,7 @@ export class BillPaymentService {
     );
   }
 
-  /**
-   * INTERNATIONAL DATA METHODS
-   */
+  // INTERNATIONAL DATA METHODS
   async getInternationalDataCountries() {
     return this.providerService.getInternationalDataCountries();
   }
