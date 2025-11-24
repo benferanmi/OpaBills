@@ -546,6 +546,10 @@ export class CryptoService {
       query.cryptoId = new Types.ObjectId(filters.cryptoId);
     }
 
+    if (filters.reference) {
+      query.reference = filters.reference;
+    }
+
     if (filters.startDate || filters.endDate) {
       query.createdAt = {};
       if (filters.startDate) {
@@ -643,6 +647,195 @@ export class CryptoService {
       // })),
     }));
   }
+  // Export crypto transactions to CSV
+  async exportCryptoTransactions(
+    userId: string,
+    filters: any = {}
+  ): Promise<string> {
+    const query: any = { userId: new Types.ObjectId(userId) };
+
+    // Apply same filters as getCryptoTransactions
+    if (filters.tradeType) query.tradeType = filters.tradeType;
+    if (filters.status) query.status = filters.status;
+    if (filters.cryptoId) query.cryptoId = new Types.ObjectId(filters.cryptoId);
+    if (filters.networkCode) query["network.code"] = filters.networkCode;
+
+    if (filters.startDate || filters.endDate) {
+      query.createdAt = {};
+      if (filters.startDate) {
+        query.createdAt.$gte = new Date(filters.startDate);
+      }
+      if (filters.endDate) {
+        const endDate = new Date(filters.endDate);
+        endDate.setHours(23, 59, 59, 999);
+        query.createdAt.$lte = endDate;
+      }
+    }
+
+    const result = await this.cryptoTransactionRepository.findWithPagination(
+      query,
+      1,
+      10000,
+      { createdAt: -1 }
+    );
+
+    // Generate CSV
+    const headers = [
+      "Reference",
+      "Trade Type",
+      "Crypto",
+      "Network",
+      "Crypto Amount",
+      "Fiat Amount",
+      "Exchange Rate",
+      "Service Fee",
+      "Network Fee",
+      "Total Amount",
+      "Status",
+      "Wallet Address",
+      "TX Hash",
+      "Confirmations",
+      "Bank Account",
+      "Review Note",
+      "Date",
+    ];
+
+    const rows = result.data.map((t: any) => [
+      t.reference,
+      t.tradeType,
+      t.cryptoId?.name || t.cryptoId || "",
+      t.network?.name || "",
+      t.cryptoAmount,
+      t.fiatAmount,
+      t.exchangeRate,
+      t.serviceFee || 0,
+      t.networkFee || 0,
+      t.totalAmount,
+      t.status,
+      t.walletAddress,
+      t.txHash || "",
+      t.confirmations || 0,
+      t.accountNumber || "",
+      t.reviewNote || "",
+      new Date(t.createdAt).toISOString(),
+    ]);
+
+    const escapeCsvValue = (value: any): string => {
+      const strValue = String(value);
+      if (
+        strValue.includes(",") ||
+        strValue.includes('"') ||
+        strValue.includes("\n")
+      ) {
+        return `"${strValue.replace(/"/g, '""')}"`;
+      }
+      return strValue;
+    };
+
+    const csv = [
+      headers.join(","),
+      ...rows.map((row: any[]) => row.map(escapeCsvValue).join(",")),
+    ].join("\n");
+
+    return csv;
+  }
+
+  // Generate receipt for crypto transaction
+  async generateCryptoReceipt(reference: string, userId: string): Promise<any> {
+    const transaction = await this.getCryptoTransactionByReference(
+      reference,
+      userId
+    );
+
+    // Only generate receipts for successful or approved transactions
+    if (!["success", "approved"].includes(transaction.status)) {
+      throw new AppError(
+        "Receipt can only be generated for successful or approved transactions",
+        HTTP_STATUS.BAD_REQUEST,
+        ERROR_CODES.BAD_REQUEST
+      );
+    }
+
+    return {
+      receiptNumber: `CRYPTO-RCP-${transaction.reference}`,
+      reference: transaction.reference,
+      tradeType: transaction.tradeType,
+      crypto: transaction.cryptoId,
+      network: transaction.network,
+      walletAddress: transaction.walletAddress,
+      cryptoAmount: transaction.cryptoAmount,
+      fiatAmount: transaction.fiatAmount,
+      exchangeRate: transaction.exchangeRate,
+      serviceFee: transaction.serviceFee,
+      networkFee: transaction.networkFee,
+      totalAmount: transaction.totalAmount,
+      status: transaction.status,
+      txHash: transaction.txHash,
+      confirmations: transaction.confirmations,
+      blockNumber: transaction.blockNumber,
+      bankDetails: transaction.accountNumber
+        ? {
+            accountName: transaction.accountName,
+            accountNumber: transaction.accountNumber,
+            bankCode: transaction.bankCode,
+          }
+        : null,
+      reviewNote: transaction.reviewNote,
+      transactionDate: transaction.createdAt,
+      completedDate: transaction.completedAt,
+      generatedAt: new Date(),
+    };
+  }
+
+  // Upload transaction proof (for sell transactions)
+  async uploadTransactionProof(
+    reference: string,
+    userId: string,
+    proof: string
+  ): Promise<any> {
+    const transaction = await this.getCryptoTransactionByReference(
+      reference,
+      userId
+    );
+
+    if (transaction.tradeType !== "sell") {
+      throw new AppError(
+        "Proof can only be uploaded for sell transactions",
+        HTTP_STATUS.BAD_REQUEST,
+        ERROR_CODES.VALIDATION_ERROR
+      );
+    }
+
+    if (!["pending", "processing"].includes(transaction.status)) {
+      throw new AppError(
+        "Cannot upload proof for completed transactions",
+        HTTP_STATUS.BAD_REQUEST,
+        ERROR_CODES.VALIDATION_ERROR
+      );
+    }
+
+    const updated = await this.cryptoTransactionRepository.update(
+      transaction.id.toString(),
+      { proof }
+    );
+
+    // Notify admin about proof upload
+    await this.notificationRepository.create({
+      type: "admin_crypto_proof_uploaded",
+      notifiableType: "Admin",
+      notifiableId: transaction.userId, // TODO: Use actual admin ID
+      data: {
+        reference: transaction.reference,
+        cryptoAmount: transaction.cryptoAmount,
+        cryptoCode: transaction.cryptoId,
+        proof,
+      },
+    });
+
+    return updated;
+  }
+
+  // Generate receipt for crypto transaction
 
   // ==================== ADMIN METHODS ====================
 

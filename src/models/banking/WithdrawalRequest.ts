@@ -10,7 +10,7 @@ export interface IWithdrawalRequest extends Document {
   accountNumber?: string;
   bankName?: string;
   bankCode?: string;
-  status: "pending" | "approved" | "declined" | "completed" | "failed";
+  status: "pending" | "reversed" | "approved" | "declined" | "completed" | "failed" | "processing";
   type: string;
   proof?: string;
   reviewProof?: string;

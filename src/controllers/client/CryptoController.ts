@@ -178,6 +178,7 @@ export class CryptoController {
         cryptoId: req.query.cryptoId as string,
         startDate: req.query.startDate as string,
         endDate: req.query.endDate as string,
+        reference: req.query.reference as string,
       };
 
       const result = await this.cryptoService.getCryptoTransactions(
@@ -249,8 +250,8 @@ export class CryptoController {
     }
   };
 
-  // Get transaction statistics for user
-  getCryptoTransactionStats = async (
+
+  exportCryptoTransactions = async (
     req: AuthRequest,
     res: Response,
     next: NextFunction
@@ -258,104 +259,77 @@ export class CryptoController {
     try {
       const userId = req.user!.id;
 
-      // Get all transactions
-      const allTransactions = await this.cryptoService.getCryptoTransactions(
+      const filters = {
+        tradeType: req.query.tradeType as string,
+        status: req.query.status as string,
+        cryptoId: req.query.cryptoId as string,
+        startDate: req.query.startDate as string,
+        endDate: req.query.endDate as string,
+      };
+
+      const csvData = await this.cryptoService.exportCryptoTransactions(
         userId,
-        {},
-        1,
-        1000
+        filters
       );
 
-      const transactions = allTransactions.data;
+      res.setHeader("Content-Type", "text/csv");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename=crypto_transactions_${
+          new Date().toISOString().split("T")[0]
+        }.csv`
+      );
 
-      // Calculate stats
-      const stats = {
-        total: transactions.length,
-        pending: transactions.filter((t: any) => t.status === "pending").length,
-        processing: transactions.filter((t: any) => t.status === "processing")
-          .length,
-        approved: transactions.filter((t: any) => t.status === "approved")
-          .length,
-        success: transactions.filter((t: any) => t.status === "success").length,
-        failed: transactions.filter((t: any) => t.status === "failed").length,
-        declined: transactions.filter((t: any) => t.status === "declined")
-          .length,
+      return res.send(csvData);
+    } catch (error) {
+      next(error);
+    }
+  };
 
-        totalBuy: transactions.filter((t: any) => t.tradeType === "buy").length,
-        totalSell: transactions.filter((t: any) => t.tradeType === "sell")
-          .length,
+  generateCryptoReceipt = async (
+    req: AuthRequest,
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const { reference } = req.params;
+      const userId = req.user!.id;
 
-        totalBuyAmount: transactions
-          .filter((t: any) => t.tradeType === "buy" && t.status === "success")
-          .reduce((sum: number, t: any) => sum + t.totalAmount, 0),
-
-        totalSellAmount: transactions
-          .filter((t: any) => t.tradeType === "sell" && t.status === "success")
-          .reduce((sum: number, t: any) => sum + t.totalAmount, 0),
-      };
+      const receipt = await this.cryptoService.generateCryptoReceipt(
+        reference,
+        userId
+      );
 
       return sendSuccessResponse(
         res,
-        stats,
-        "Transaction statistics retrieved successfully"
+        receipt,
+        "Receipt generated successfully"
       );
     } catch (error) {
       next(error);
     }
   };
 
-  // Get pending transactions for user
-  getPendingCryptoTransactions = async (
+  uploadTransactionProof = async (
     req: AuthRequest,
     res: Response,
     next: NextFunction
   ) => {
     try {
+      const { reference } = req.params;
       const userId = req.user!.id;
-      const page = parseInt(req.query.page as string) || 1;
-      const limit = parseInt(req.query.limit as string) || 10;
+      const { proof } = req.body;
 
-      const result = await this.cryptoService.getCryptoTransactions(
+      const transaction = await this.cryptoService.uploadTransactionProof(
+        reference,
         userId,
-        { status: "pending" },
-        page,
-        limit
+        proof
       );
 
-      return sendPaginatedResponse(
+      return sendSuccessResponse(
         res,
-        result.data,
-        { total: result.total, page, limit },
-        "Pending transactions retrieved successfully"
-      );
-    } catch (error) {
-      next(error);
-    }
-  };
-
-  // Get completed transactions for user
-  getCompletedCryptoTransactions = async (
-    req: AuthRequest,
-    res: Response,
-    next: NextFunction
-  ) => {
-    try {
-      const userId = req.user!.id;
-      const page = parseInt(req.query.page as string) || 1;
-      const limit = parseInt(req.query.limit as string) || 10;
-
-      const result = await this.cryptoService.getCryptoTransactions(
-        userId,
-        { status: "success" },
-        page,
-        limit
-      );
-
-      return sendPaginatedResponse(
-        res,
-        result.data,
-        { total: result.total, page, limit },
-        "Completed transactions retrieved successfully"
+        transaction,
+        "Proof uploaded successfully"
       );
     } catch (error) {
       next(error);

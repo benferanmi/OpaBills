@@ -5,8 +5,10 @@ import { connectRedis, disconnectRedis } from "./config/redis";
 import app from "./app";
 import logger from "./logger";
 import mongoose from "mongoose";
+import { startTransactionPolling } from "./jobs/transactionPolling";
 
 const PORT = process.env.PORT || 5000;
+const enviroment = process.env.NODE_ENV || "development";
 
 let server: any = null;
 let isShuttingDown = false;
@@ -17,6 +19,12 @@ const startServer = async () => {
 
     await connectRedis();
     await connectDatabase();
+    if (enviroment === "production") {
+      logger.info(
+        "Production environment detected, starting transaction polling..."
+      );
+      startTransactionPolling();
+    }
 
     // Start Express server
     server = app.listen(PORT, () => {
@@ -31,8 +39,6 @@ const startServer = async () => {
         logger.warn("Shutdown already in progress, ignoring duplicate signal");
         return;
       }
-
-      
 
       isShuttingDown = true;
       logger.info(`Received ${signal} signal, closing server gracefully...`);

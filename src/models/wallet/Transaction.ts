@@ -16,6 +16,14 @@ export interface ITransaction extends Document {
   purpose?: string;
   status: "pending" | "success" | "failed" | "reversed";
   meta?: any;
+  polling?: {
+    nextPollAt?: Date;
+    pollCount: number;
+    lastPolledAt?: Date;
+    stoppedAt?: Date;
+    stopReason?: "completed" | "failed" | "timeout" | "max_attempts";
+    providerOrderId?: string;
+  };
   createdAt: Date;
   updatedAt: Date;
 }
@@ -45,6 +53,7 @@ const TransactionSchema = new Schema<ITransaction>(
       default: "pending",
     },
     meta: { type: Schema.Types.Mixed },
+    polling: { type: Schema.Types.Mixed },
   },
   {
     timestamps: true,

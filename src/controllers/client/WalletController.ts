@@ -161,6 +161,15 @@ export class WalletController {
     }
   };
 
+  getProviders = async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const result = await this.paymentService.getProviders();
+      return sendSuccessResponse(res, result, "Providers retrieved successfully");
+    } catch (error) {
+      next(error);
+    }
+  }
+
   fundWallet = async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       const userId = req.user!.id;

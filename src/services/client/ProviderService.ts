@@ -4,7 +4,7 @@ import { Service } from "@/models/reference/Service";
 import { ServiceType } from "@/models/reference/ServiceType";
 import { ServiceTypeProvider } from "@/models/reference/ServiceTypeProvider";
 import { AppError } from "@/middlewares/errorHandler";
-import { HTTP_STATUS, ERROR_CODES } from "@/utils/constants";
+import { HTTP_STATUS, ERROR_CODES, CACHE_TTL } from "@/utils/constants";
 import logger from "@/logger";
 import { VTPassService } from "./providers/VtpassService";
 import { ClubKonnectService } from "./providers/ClubkonnectService";
@@ -33,6 +33,7 @@ import {
   ProviderResponse,
   UtilityPaymentData,
 } from "@/types";
+import CacheService from "../CacheService";
 
 export class ProviderService {
   private vtpassService: VTPassService;
@@ -45,6 +46,7 @@ export class ProviderService {
   private reloadlyService: ReloadlyService;
   private giftBillsService: GiftBillsService;
   private amadeusService: AmadeusService;
+  private cacheService = CacheService;
 
   constructor() {
     // Initialize VTPass Service
@@ -84,12 +86,17 @@ export class ProviderService {
     });
   }
 
-  /**
-   * Get the active API provider for a specific service type code
-   * Returns the Provider document with credentials
-   */
+  // Get the active API provider for a specific service type code
   private async getActiveApiProvider(serviceTypeCode: string): Promise<any> {
     try {
+      // Try cache first
+      const cacheKey = `provider:active:${serviceTypeCode}`;
+      const cached = await this.cacheService.get<any>(cacheKey);
+      if (cached) {
+        logger.debug(`Using cached provider for ${serviceTypeCode}`);
+        return cached;
+      }
+
       const serviceType = await ServiceType.findOne({
         code: serviceTypeCode,
         isActive: true,
@@ -124,6 +131,13 @@ export class ProviderService {
         );
       }
 
+      // Cache for 1 hour
+      await this.cacheService.set(
+        cacheKey,
+        providerMapping.providerId,
+        CACHE_TTL.ONE_HOUR
+      );
+
       return providerMapping.providerId;
     } catch (error: any) {
       if (error instanceof AppError) throw error;
@@ -140,11 +154,15 @@ export class ProviderService {
     }
   }
 
-  /**
-   * Get all active services for a specific service type code
-   */
+  // Get all active services for a specific service type code
   async getServicesByServiceTypeCode(serviceTypeCode: string): Promise<any[]> {
     try {
+      const cacheKey = `services:type:${serviceTypeCode}`;
+      const cached = await this.cacheService.get<any[]>(cacheKey);
+      if (cached) {
+        return cached;
+      }
+
       const serviceType = await ServiceType.findOne({
         code: serviceTypeCode,
         isActive: true,
@@ -163,13 +181,18 @@ export class ProviderService {
         .sort({ displayOrder: 1, name: 1 })
         .lean();
 
-      return services.map((service) => ({
+      const result = services.map((service) => ({
         id: service._id,
         name: service.name,
         code: service.code,
         logo: service.logo,
         serviceTypeCode: serviceTypeCode,
       }));
+
+      // Cache for 30 minutes
+      await this.cacheService.set(cacheKey, result, CACHE_TTL.THIRTY_MINUTES);
+
+      return result;
     } catch (error: any) {
       logger.error(`Error fetching services for ${serviceTypeCode}`, error);
       throw new AppError(
@@ -180,9 +203,7 @@ export class ProviderService {
     }
   }
 
-  /**
-   * Get all products for a specific service type
-   */
+  // Get all products for a specific service type
   async getProductsByServiceTypeCode(serviceTypeCode: string): Promise<any[]> {
     try {
       const serviceType = await ServiceType.findOne({
@@ -286,9 +307,7 @@ export class ProviderService {
     }
   }
 
-  /**
-   * Get all available data types from products
-   */
+  //Get all available data types from products
   async getDataTypes(): Promise<string[]> {
     try {
       const dataTypes = await Product.distinct("attributes.dataType", {
@@ -310,23 +329,33 @@ export class ProviderService {
       const provider = await this.getActiveApiProvider("airtime");
       logger.info(`Processing airtime purchase with ${provider.code}`, data);
 
+      let response: ProviderResponse;
+
       switch (provider.code.toLowerCase()) {
         case "vtpass":
-          return await this.vtpassService.purchaseAirtime(data);
+          response = await this.vtpassService.purchaseAirtime(data);
+          break;
         case "clubkonnect":
-          return await this.clubKonnectService.purchaseAirtime(data);
+          response = await this.clubKonnectService.purchaseAirtime(data);
+          break;
         case "coolsub":
-          return await this.coolsubService.purchaseAirtime(data);
+          response = await this.coolsubService.purchaseAirtime(data);
+          break;
         case "mysimhosting":
-          return await this.mySimHostingService.purchaseAirtime(data);
+          response = await this.mySimHostingService.purchaseAirtime(data);
+          break;
         case "vtung":
-          return await this.vtuNgService.purchaseAirtime(data);
+          response = await this.vtuNgService.purchaseAirtime(data);
+          break;
         case "mydataplug":
-          return await this.mydataplugPurchaseAirtime(data);
+          response = await this.mydataplugPurchaseAirtime(data);
+          break;
         case "bilalsadasub":
-          return await this.bilalsadasubService.purchaseAirtime(data);
+          response = await this.bilalsadasubService.purchaseAirtime(data);
+          break;
         case "giftbills":
-          return await this.giftBillsService.purchaseAirtime(data);
+          response = await this.giftBillsService.purchaseAirtime(data);
+          break;
         default:
           throw new AppError(
             `Unsupported airtime provider: ${provider.code}`,
@@ -334,6 +363,10 @@ export class ProviderService {
             ERROR_CODES.PROVIDER_ERROR
           );
       }
+
+      response.providerCode = provider.code;
+
+      return response;
     } catch (error: any) {
       logger.error("Airtime purchase failed", error);
       throw error;
@@ -345,23 +378,33 @@ export class ProviderService {
       const provider = await this.getActiveApiProvider("data");
       logger.info(`Processing data purchase with ${provider.code}`, data);
 
+      let response: ProviderResponse;
+
       switch (provider.code.toLowerCase()) {
         case "vtpass":
-          return await this.vtpassService.purchaseData(data);
+          response = await this.vtpassService.purchaseData(data);
+          break;
         case "clubkonnect":
-          return await this.clubKonnectService.purchaseData(data);
+          response = await this.clubKonnectService.purchaseData(data);
+          break;
         case "coolsub":
-          return await this.coolsubService.purchaseData(data);
+          response = await this.coolsubService.purchaseData(data);
+          break;
         case "mysimhosting":
-          return await this.mySimHostingService.purchaseData(data);
+          response = await this.mySimHostingService.purchaseData(data);
+          break;
         case "mydataplug":
-          return await this.mydataplugPurchaseData(data);
+          response = await this.mydataplugPurchaseData(data);
+          break;
         case "vtung":
-          return await this.vtuNgService.purchaseData(data);
+          response = await this.vtuNgService.purchaseData(data);
+          break;
         case "bilalsadasub":
-          return await this.bilalsadasubService.purchaseData(data);
+          response = await this.bilalsadasubService.purchaseData(data);
+          break;
         case "giftbills":
-          return await this.giftBillsService.purchaseData(data);
+          response = await this.giftBillsService.purchaseData(data);
+          break;
         default:
           throw new AppError(
             `Unsupported data provider: ${provider.code}`,
@@ -369,6 +412,10 @@ export class ProviderService {
             ERROR_CODES.PROVIDER_ERROR
           );
       }
+
+      response.providerCode = provider.code;
+
+      return response;
     } catch (error: any) {
       logger.error("Data purchase failed", error);
       throw error;
@@ -380,17 +427,24 @@ export class ProviderService {
       const provider = await this.getActiveApiProvider("cable_tv");
       logger.info(`Processing cable TV purchase with ${provider.code}`, data);
 
+      let response: ProviderResponse;
+
       switch (provider.code.toLowerCase()) {
         case "vtpass":
-          return await this.vtpassService.purchaseCableTv(data);
+          response = await this.vtpassService.purchaseCableTv(data);
+          break;
         case "clubkonnect":
-          return await this.clubKonnectService.purchaseCableTv(data);
+          response = await this.clubKonnectService.purchaseCableTv(data);
+          break;
         case "coolsub":
-          return await this.coolsubService.purchaseCableTv(data);
+          response = await this.coolsubService.purchaseCableTv(data);
+          break;
         case "vtung":
-          return await this.vtuNgService.purchaseCableTv(data);
+          response = await this.vtuNgService.purchaseCableTv(data);
+          break;
         case "bilalsadasub":
-          return await this.bilalsadasubService.purchaseCableTv(data);
+          response = await this.bilalsadasubService.purchaseCableTv(data);
+          break;
         default:
           throw new AppError(
             `Unsupported cable TV provider: ${provider.code}`,
@@ -398,6 +452,10 @@ export class ProviderService {
             ERROR_CODES.PROVIDER_ERROR
           );
       }
+
+      response.providerCode = provider.code;
+
+      return response;
     } catch (error: any) {
       logger.error("Cable TV purchase failed", error);
       throw error;
@@ -412,15 +470,21 @@ export class ProviderService {
         data
       );
 
+      let response: ProviderResponse;
+
       switch (provider.code.toLowerCase()) {
         case "vtpass":
-          return await this.vtpassService.purchaseElectricity(data);
+          response = await this.vtpassService.purchaseElectricity(data);
+          break;
         case "clubkonnect":
-          return await this.clubKonnectService.purchaseElectricity(data);
+          response = await this.clubKonnectService.purchaseElectricity(data);
+          break;
         case "vtung":
-          return await this.vtuNgService.purchaseElectricity(data);
+          response = await this.vtuNgService.purchaseElectricity(data);
+          break;
         case "coolsub":
-          return await this.coolsubService.purchaseElectricity(data);
+          response = await this.coolsubService.purchaseElectricity(data);
+          break;
         default:
           throw new AppError(
             `Unsupported electricity provider: ${provider.code}`,
@@ -428,6 +492,10 @@ export class ProviderService {
             ERROR_CODES.PROVIDER_ERROR
           );
       }
+
+      response.providerCode = provider.code;
+
+      return response;
     } catch (error: any) {
       logger.error("Electricity purchase failed", error);
       throw error;
@@ -439,17 +507,24 @@ export class ProviderService {
       const provider = await this.getActiveApiProvider("betting");
       logger.info(`Processing betting funding with ${provider.code}`, data);
 
+      let response: ProviderResponse;
+
       switch (provider.code.toLowerCase()) {
         case "vtpass":
-          return await this.vtpassService.fundBetting(data);
+          response = await this.vtpassService.fundBetting(data);
+          break;
         case "clubkonnect":
-          return await this.clubKonnectService.fundBetting(data);
+          response = await this.clubKonnectService.fundBetting(data);
+          break;
         case "coolsub":
-          return await this.coolsubService.fundBetting(data);
+          response = await this.coolsubService.fundBetting(data);
+          break;
         case "vtung":
-          return await this.vtuNgService.fundBetting(data);
+          response = await this.vtuNgService.fundBetting(data);
+          break;
         case "giftbills":
-          return await this.giftBillsService.fundBetting(data);
+          response = await this.giftBillsService.fundBetting(data);
+          break;
         default:
           throw new AppError(
             `Unsupported betting provider: ${provider.code}`,
@@ -457,6 +532,10 @@ export class ProviderService {
             ERROR_CODES.PROVIDER_ERROR
           );
       }
+
+      response.providerCode = provider.code;
+
+      return response;
     } catch (error: any) {
       logger.error("Betting funding failed", error);
       throw error;
@@ -468,9 +547,12 @@ export class ProviderService {
       const provider = await this.getActiveApiProvider("education");
       logger.info(`Processing education purchase with ${provider.code}`, data);
 
+      let response: ProviderResponse;
+
       switch (provider.code.toLowerCase()) {
         case "vtpass":
-          return await this.vtpassService.purchaseEducation(data);
+          response = await this.vtpassService.purchaseEducation(data);
+          break;
         default:
           throw new AppError(
             `Unsupported education provider: ${provider.code}`,
@@ -478,6 +560,10 @@ export class ProviderService {
             ERROR_CODES.PROVIDER_ERROR
           );
       }
+
+      response.providerCode = provider.code;
+
+      return response;
     } catch (error: any) {
       logger.error("Education purchase failed", error);
       throw error;
@@ -1411,6 +1497,7 @@ export class ProviderService {
         providerReference: response.data.transaction_id,
         message: response.data.message || "Airtime purchase processed",
         data: response.data,
+        providerCode: "mydataplug",
       };
     } catch (error: any) {
       logger.error(
@@ -1443,6 +1530,7 @@ export class ProviderService {
         providerReference: response.data.transaction_id,
         message: response.data.message || "Data purchase processed",
         data: response.data,
+        providerCode: "mydataplug",
       };
     } catch (error: any) {
       logger.error(

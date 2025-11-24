@@ -153,6 +153,10 @@ export const cryptoTransactionQuerySchema = Joi.object({
     "date.base": "End date must be a valid date",
     "date.min": "End date must be after start date",
   }),
+  reference: Joi.string().optional().min(10).max(50).messages({
+    "string.min": "Invalid reference format",
+    "string.max": "Invalid reference format",
+  }),
 });
 
 export const transactionIdParamSchema = Joi.object({
@@ -182,4 +186,12 @@ export const cryptoIdParamSchema = Joi.object({
       "string.pattern.base": "Invalid crypto ID format",
       "any.required": "Crypto ID is required",
     }),
+});
+
+export const uploadProofSchema = Joi.object({
+  proof: Joi.string().required().uri().messages({
+    "string.uri": "Proof must be a valid URL",
+    "string.empty": "Proof is required",
+    "any.required": "Proof is required",
+  }),
 });

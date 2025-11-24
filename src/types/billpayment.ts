@@ -4,11 +4,23 @@ export interface ProviderResponse {
   reference?: string;
   status?: string;
   providerReference?: string;
+  providerCode?: string;
   message: string;
   data?: any;
   token?: string;
   pins?: any[]; // For E-PIN responses
+}
 
+export interface ProviderResponseWithCode {
+  success: boolean;
+  pending: boolean;
+  reference: string;
+  providerReference?: string;
+  providerCode: string;
+  status: string;
+  message: string;
+  data?: any;
+  token?: string;
 }
 
 export interface AirtimeData {

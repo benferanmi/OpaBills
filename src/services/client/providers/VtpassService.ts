@@ -12,6 +12,43 @@ import {
   ElectricityData,
   BettingData,
 } from "@/types";
+import { WebhookProcessResult } from "@/services/WebhookService";
+
+interface VTPassWebhookPayload {
+  type: string;
+  data: {
+    code: string;
+    content: {
+      transactions: {
+        status: "delivered" | "reversed" | "pending" | "failed" | "initiated";
+        product_name: string;
+        unique_element: string;
+        unit_price: number;
+        quantity: number;
+        service_verification: any;
+        channel: string;
+        commission: number;
+        total_amount: number;
+        discount: any;
+        type: string;
+        email: string;
+        phone: string;
+        name: string | null;
+        convinience_fee: number;
+        amount: number;
+        platform: string;
+        method: string;
+        transactionId: string;
+        wallet_credit_id?: string; // Only present in reversal
+      };
+    };
+    response_description: string;
+    amount: number;
+    transaction_date: any;
+    requestId: string;
+    purchased_code: string;
+  };
+}
 
 export class VTPassService {
   private client: AxiosInstance;
@@ -235,15 +272,6 @@ export class VTPassService {
   async purchaseData(data: DataDataDTO): Promise<ProviderResponse> {
     try {
       const networkCode = this.getNetworkCode(data.serviceCode);
-
-      console.log({
-        request_id: data.reference,
-        serviceID: data.serviceCode,
-        billersCode: data.phone,
-        variation_code: data.productCode,
-        amount: data.amount,
-        phone: data.phone,
-      });
 
       const response = await this.client.post("/pay", {
         request_id: data.reference,
@@ -510,15 +538,19 @@ export class VTPassService {
         phone: data.phone,
       });
 
+      console.log(response.data);
+
       const result = this.handleTransactionResponse(
         response.data,
         "Electricity payment"
       );
 
+      // console.log(result, "this is result");
+      console.log(response.data?.token, "this is token");
+
       // Add token if available
-      if (result.success && response.data.content?.token) {
-        result.token =
-          response.data.content?.token || response.data.purchased_code;
+      if (result.success && response.data?.token) {
+        result.token = response.data.token;
       }
 
       return result;
@@ -666,6 +698,192 @@ export class VTPassService {
     }
   }
 
+  //WEBHOOK HANDLER
+
+  validatePayload(payload: any): boolean {
+    try {
+      // Check required fields
+      if (!payload || typeof payload !== "object") {
+        logger.error("VTPass webhook: Invalid payload structure", { payload });
+        return false;
+      }
+
+      if (payload.type !== "transaction-update") {
+        logger.error("VTPass webhook: Invalid webhook type", {
+          type: payload.type,
+        });
+        return false;
+      }
+
+      if (
+        !payload.data ||
+        !payload.data.content ||
+        !payload.data.content.transactions
+      ) {
+        logger.error("VTPass webhook: Missing required data fields", {
+          payload,
+        });
+        return false;
+      }
+
+      if (!payload.data.requestId) {
+        logger.error("VTPass webhook: Missing requestId", { payload });
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      logger.error("VTPass webhook: Validation error", { error, payload });
+      return false;
+    }
+  }
+
+  // Process VTPass webhook and extract transaction data
+  async process(payload: VTPassWebhookPayload): Promise<WebhookProcessResult> {
+    try {
+      logger.info("VTPass webhook: Processing payload", {
+        requestId: payload.data.requestId,
+        status: payload.data.content.transactions.status,
+      });
+
+      // Validate payload
+      if (!this.validatePayload(payload)) {
+        throw new AppError(
+          "Invalid VTPass webhook payload",
+          HTTP_STATUS.BAD_REQUEST,
+          ERROR_CODES.VALIDATION_ERROR
+        );
+      }
+
+      const { data } = payload;
+      const transaction = data.content.transactions;
+
+      // Map VTPass status to our standard status
+      const status = this.mapStatus(transaction.status, data.code);
+
+      // Extract metadata
+      const metadata = this.extractMetadata(data);
+
+      // Extract token (for electricity, e-pins)
+      const token = data.purchased_code || undefined;
+
+      const result: WebhookProcessResult = {
+        reference: data.requestId,
+        providerReference: transaction.transactionId,
+        status,
+        metadata,
+        token,
+      };
+
+      logger.info("VTPass webhook: Processing completed", {
+        requestId: data.requestId,
+        status,
+      });
+
+      return result;
+    } catch (error) {
+      logger.error("VTPass webhook: Processing error", { error, payload });
+      throw error;
+    }
+  }
+
+  //    Map VTPass status to our standard status
+  private mapStatus(
+    vtpassStatus: string,
+    code: string
+  ): "success" | "pending" | "failed" | "reversed" {
+    // Handle based on status
+    if (vtpassStatus === "delivered") {
+      return "success";
+    }
+
+    if (vtpassStatus === "reversed") {
+      return "reversed";
+    }
+
+    if (vtpassStatus === "failed") {
+      return "failed";
+    }
+
+    // Handle pending/initiated
+    if (vtpassStatus === "pending" || vtpassStatus === "initiated") {
+      return "pending";
+    }
+
+    // Fallback based on code
+    if (code === "000") {
+      return "success";
+    }
+
+    if (code === "099") {
+      return "pending";
+    }
+
+    if (code === "040") {
+      return "reversed";
+    }
+
+    // Default to pending for unknown statuses
+    logger.warn("VTPass webhook: Unknown status, defaulting to pending", {
+      vtpassStatus,
+      code,
+    });
+    return "pending";
+  }
+
+  //    Extract metadata from VTPass webhook
+  private extractMetadata(data: VTPassWebhookPayload["data"]): any {
+    const transaction = data.content.transactions;
+
+    return {
+      // VTPass specific fields
+      vtpassTransactionId: transaction.transactionId,
+      productName: transaction.product_name,
+      commission: transaction.commission,
+      totalAmount: transaction.total_amount,
+      unitPrice: transaction.unit_price,
+      quantity: transaction.quantity,
+      discount: transaction.discount,
+      convenienceFee: transaction.convinience_fee,
+      channel: transaction.channel,
+      platform: transaction.platform,
+      method: transaction.method,
+
+      // Additional info
+      responseCode: data.code,
+      responseDescription: data.response_description,
+      uniqueElement: transaction.unique_element,
+      purchasedCode: data.purchased_code,
+
+      // Reversal specific
+      walletCreditId: transaction.wallet_credit_id,
+
+      // Timestamps
+      transactionDate: data.transaction_date,
+      webhookReceivedAt: new Date(),
+    };
+  }
+
+  //    Optional: Validate webhook signature (if VTPass provides it in future)
+  // validateSignature(payload: string, signature: string, secret: string): boolean {
+  //   const crypto = require("crypto");
+  //   const hash = crypto
+  //     .createHmac("sha256", secret)
+  //     .update(payload)
+  //     .digest("hex");
+  //   return hash === signature;
+  // }
+
+  //    Optional: Validate webhook IP (if you want to whitelist VTPass IPs)
+  // validateIP(ip: string): boolean {
+  //   const allowedIPs = [
+  //     "VTPASS_IP_1",
+  //     "VTPASS_IP_2",
+  //     // Add VTPass webhook IPs here
+  //   ];
+  //   return allowedIPs.includes(ip);
+  // }
+
   // HELPER METHODS - Centralized response handling
   private handleTransactionResponse(
     responseData: any,
@@ -734,6 +952,7 @@ export class VTPassService {
         providerReference: responseData.requestId || responseData.transactionId,
         message: "Transaction is being processed",
         data: responseData.content,
+        token: responseData.content.token || "",
       };
     }
 

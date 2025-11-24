@@ -5,9 +5,9 @@ export interface ICryptoTransaction extends Document {
   userId: Types.ObjectId;
 
   // Transaction identifiers
-  transactionId?: string; // External provider transaction ID
-  reference: string; // Your internal unique reference
-
+  transactionId?: string; 
+  reference: string; 
+  
   // Trade details
   tradeType: "buy" | "sell";
 
@@ -31,7 +31,6 @@ export interface ICryptoTransaction extends Document {
   networkFee?: number; // Blockchain fee (if applicable)
   totalAmount: number; // For BUY: total debit | For SELL: total payout
 
-  // Status tracking
   status:
     | "pending"
     | "processing"
@@ -53,10 +52,10 @@ export interface ICryptoTransaction extends Document {
   accountNumber?: string;
 
   // Proof of payment (for SELL - user uploads)
-  proof?: string; // URL to uploaded screenshot/document
+  proof?: string;
 
   // Admin review (for manual processing)
-  reviewedBy?: Types.ObjectId; // Admin user ID
+  reviewedBy?: Types.ObjectId;
   reviewedAt?: Date;
   reviewNote?: string; // Admin's notes
   reviewRate?: number; // Adjusted rate if needed

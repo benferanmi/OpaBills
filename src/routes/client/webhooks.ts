@@ -1,49 +1,83 @@
-import { Router } from 'express';
-// TODO: Create WebhookController when implementing webhook handlers
-
+import { Router } from "express";
+import { WebhookController } from "@/controllers/WebhookController";
 const router = Router();
 
-// No authentication required for webhooks (they use signature verification instead)
+const webhookController = new WebhookController();
 
-// Payment provider webhooks
-router.post('/ksbtech', (req, res) => {
-  // TODO: Implement KSB Tech webhook handler
-  res.json({ status: 'received' });
-});
+// VTPASS
+router.post("/vtpass", webhookController.handleVTPassWebhook);
 
-router.post('/flutterwave', (req, res) => {
-  // TODO: Implement Flutterwave webhook handler
-  res.json({ status: 'received' });
-});
+// SAFEHAVEN
+router.post("/safehaven", webhookController.handleSafeHavenWebhook);
 
-router.post('/giftbills', (req, res) => {
-  // TODO: Implement Gift Bills webhook handler
-  res.json({ status: 'received' });
-});
+// FLUTTERWAVE
+router.post("/flutterwave", webhookController.handleFlutterwaveWebhook);
 
-router.post('/monnify', (req, res) => {
-  // TODO: Implement Monnify webhook handler
-  res.json({ status: 'received' });
-});
+// MONNIFY
+router.post("/monnify", webhookController.handleMonnifyWebhook);
 
-router.post('/opay', (req, res) => {
-  // TODO: Implement OPay webhook handler
-  res.json({ status: 'received' });
-});
+//✅ COOLSUB
+// router.post("/webhook/coolsub", coolsubController.handleWebhook);
+//TODO: Add CoolSub webhook handler
 
-router.post('/safehaven', (req, res) => {
-  // TODO: Implement Safe Haven webhook handler
-  res.json({ status: 'received' });
-});
+//✅ MYSIMHOSTING
+// router.post("/webhook/mysimhosting", mysimhostingController.handleWebhook);
+//TODO: Add MySimHosting webhook handler
 
-router.post('/reloadly', (req, res) => {
-  // TODO: Implement Reloadly webhook handler (if needed)
-  res.json({ status: 'received' });
-});
+//✅ VTUNG
+// router.post("/webhook/vtung", vtungController.handleWebhook);
+//TODO: Add Vtung webhook handler
 
-router.post('/amadeus', (req, res) => {
-  // TODO: Implement Amadeus webhook handler (if needed)
-  res.json({ status: 'received' });
-});
+//✅ BILALSADASUB
+// router.post("/webhook/bilalsadasub", bilalsadasubController.handleWebhook);
+//TODO: Add BilalSadaSub webhook handler
+
+//✅ GIFTBILLS
+// router.post("/webhook/giftbills", giftbillsController.handleWebhook);
+//TODO: Add GiftBills webhook handler
+
+//✅ AMADEUS
+// router.post("/webhook/amadeus", amadeusController.handleWebhook);
+//TODO: Add Amadeus webhook handler
+
+//============================================
+//PROVIDERS NOT IN YOUR CONFIG
+//============================================
+
+//❌ PAYSTACK
+// router.post("/webhook/paystack", paystackController.handleWebhook);
+//TODO: Add Paystack webhook handler
+
+//❌ INTERSWITCH
+// router.post("/webhook/interswitch", interswitchController.handleWebhook);
+//TODO: Add Interswitch webhook handler
+
+//❌ SQUAD
+// router.post("/webhook/squad", squadController.handleWebhook);
+//TODO: Add Squad webhook handler
+
+//❌ PAGA
+// router.post("/webhook/paga", pagaController.handleWebhook);
+//TODO: Add Paga webhook handler
+
+//❌ KORAPAY
+// router.post("/webhook/korapay", korapayController.handleWebhook);
+//TODO: Add Korapay webhook handler
+
+//❌ PAYAZA
+// router.post("/webhook/payaza", payazaController.handleWebhook);
+//TODO: Add Payaza webhook handler
+
+//❌ KUDA
+// router.post("/webhook/kuda", kudaController.handleWebhook);
+//TODO: Add Kuda webhook handler
+
+//❌ PROVIDUS
+// router.post("/webhook/providus", providusController.handleWebhook);
+//TODO: Add Providus webhook handler
+
+//❌ WEMA
+// router.post("/webhook/wema", wemaController.handleWebhook);
+//TODO: Add Wema webhook handler
 
 export default router;

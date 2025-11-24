@@ -113,12 +113,23 @@ export const CACHE_KEYS = {
   SETTINGS: "settings:all",
   GIFTCARD_RATES: "giftcard:rates",
   CRYPTO_RATES: "crypto:rates",
+
+  PROVIDER_ACTIVE: (serviceTypeCode: string) =>
+    `provider:active:${serviceTypeCode}`,
+  SERVICES_BY_TYPE: (serviceTypeCode: string) =>
+    `services:type:${serviceTypeCode}`,
+  PRODUCTS_BY_TYPE: (serviceTypeCode: string) =>
+    `products:type:${serviceTypeCode}`,
+  PRODUCTS_BY_SERVICE: (serviceId: string, dataType?: string) =>
+    `products:service:${serviceId}${dataType ? `:${dataType}` : ""}`,
+  DATA_TYPES: "products:data_types",
 } as const;
 
 export const CACHE_TTL = {
   ONE_MINUTE: 60,
   FIVE_MINUTES: 300,
   TEN_MINUTES: 600,
+  FIFTEEN_MINUTES: 900,
   THIRTY_MINUTES: 1800,
   ONE_HOUR: 3600,
   ONE_DAY: 86400,

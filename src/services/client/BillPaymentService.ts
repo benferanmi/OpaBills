@@ -10,6 +10,8 @@ import { generateReference } from "@/utils/helpers";
 import { Product } from "@/models/reference/Product";
 import { IUser } from "@/models/core/User";
 import { ServiceRepository } from "@/repositories/ServiceRepository";
+import logger from "@/logger";
+import { ServiceTypeProvider } from "@/models/reference/ServiceTypeProvider";
 
 interface BettingData {
   userId: string;
@@ -86,7 +88,6 @@ export class BillPaymentService {
       reference,
       amount: data.amount,
       type: "airtime",
-      provider: "vtpass",
       remark: `Airtime purchase for ${data.phone}`,
       purpose: "airtime_purchase",
       direction: "DEBIT",
@@ -121,8 +122,17 @@ export class BillPaymentService {
 
       const result = await this.transactionRepository.update(transaction.id, {
         status,
+        provider: providerResponse.providerCode,
         providerReference: providerResponse.providerReference,
       });
+
+      if (status === "pending" && providerResponse.providerReference) {
+        await this.initializePolling(
+          transaction.id,
+          providerResponse.providerReference,
+          providerResponse.providerCode
+        );
+      }
 
       // Send notification for success
       if (this.notificationRepository && status === "success") {
@@ -431,6 +441,7 @@ export class BillPaymentService {
 
       const result = await this.transactionRepository.update(transaction.id, {
         status,
+        provider: providerResponse.providerCode,
         providerReference: providerResponse.providerReference,
       });
 
@@ -614,8 +625,17 @@ export class BillPaymentService {
 
       const result = await this.transactionRepository.update(transaction.id, {
         status,
+        provider: providerResponse.providerCode,
         providerReference: providerResponse.providerReference,
       });
+
+      if (status === "pending" && providerResponse.providerReference) {
+        await this.initializePolling(
+          transaction.id,
+          providerResponse.providerReference,
+          providerResponse.providerCode
+        );
+      }
 
       // Refund for failed transactions only
       if (status === "failed") {
@@ -767,6 +787,7 @@ export class BillPaymentService {
 
       const result = await this.transactionRepository.update(transaction.id, {
         status,
+        provider: providerResponse.providerCode,
         providerReference: providerResponse.providerReference,
       });
 
@@ -942,7 +963,19 @@ export class BillPaymentService {
         status = "failed";
       }
 
-      await this.transactionRepository.updateStatus(transaction.id, status);
+      await this.transactionRepository.update(transaction.id, {
+        status,
+        provider: providerResponse.providerCode,
+        providerReference: providerResponse.providerReference,
+      });
+
+      if (status === "pending" && providerResponse.providerReference) {
+        await this.initializePolling(
+          transaction.id,
+          providerResponse.providerReference,
+          providerResponse.providerCode
+        );
+      }
 
       // Refund for failed transactions only
       if (status === "failed") {
@@ -1057,12 +1090,13 @@ export class BillPaymentService {
       remark: `Electricity: ${service.name} for ${data.meterNumber}`,
       purpose: "electricity_payment",
       status: "pending",
+      provider: service.code,
       meta: {
         meterNumber: data.meterNumber,
         meterType: data.meterType,
         serviceCode: service.code,
         serviceName: service.name,
-        logo: service.logo || ""
+        logo: service.logo || "",
       },
     });
 
@@ -1088,8 +1122,23 @@ export class BillPaymentService {
         status = "failed";
       }
 
-      await this.transactionRepository.updateStatus(transaction.id, status);
+      await this.transactionRepository.update(transaction.id, {
+        provider: providerResponse.providerCode,
+        providerReference: providerResponse.providerReference,
+        status,
+        meta: {
+          ...transaction.meta,
+          token: providerResponse.token,
+        }
+      });
 
+      if (status === "pending" && providerResponse.providerReference) {
+        await this.initializePolling(
+          transaction.id,
+          providerResponse.providerReference,
+          providerResponse.providerCode
+        );
+      }
       // Refund for failed transactions only
       if (status === "failed") {
         await this.walletService.creditWallet(
@@ -1226,7 +1275,19 @@ export class BillPaymentService {
         status = "failed";
       }
 
-      await this.transactionRepository.updateStatus(transaction.id, status);
+      await this.transactionRepository.update(transaction.id, {
+        status,
+        provider: providerResult.providerCode,
+        providerReference: providerResult.providerReference,
+      });
+
+      if (status === "pending" && providerResult.providerReference) {
+        await this.initializePolling(
+          transaction.id,
+          providerResult.providerReference,
+          providerResult.providerCode
+        );
+      }
 
       if (this.notificationRepository && status === "success") {
         await this.notificationRepository.create({
@@ -1413,8 +1474,17 @@ export class BillPaymentService {
 
       await this.transactionRepository.update(transaction.id, {
         status,
+        provider: providerResponse.providerCode,
         providerReference: providerResponse.providerReference,
       });
+
+      if (status === "pending" && providerResponse.providerReference) {
+        await this.initializePolling(
+          transaction.id,
+          providerResponse.providerReference,
+          providerResponse.providerCode
+        );
+      }
 
       if (this.notificationRepository && status === "success") {
         await this.notificationRepository.create({
@@ -1563,5 +1633,37 @@ export class BillPaymentService {
     }
 
     return code;
+  }
+
+  private async initializePolling(
+    transactionId: string,
+    providerReference: string,
+    providerCode: string = "clubkonnect"
+  ): Promise<void> {
+    // Only initialize polling for providers that need it
+    if (providerCode.toLowerCase() !== "clubkonnect") {
+      logger.info(
+        `Provider ${providerCode} uses webhooks, skipping polling initialization`
+      );
+      return;
+    }
+
+    try {
+      await this.transactionRepository.update(transactionId, {
+        polling: {
+          nextPollAt: new Date(Date.now() + 10000),
+          pollCount: 0,
+          providerOrderId: providerReference,
+        },
+      });
+
+      logger.info(`Polling initialized for transaction ${transactionId}`);
+    } catch (error: any) {
+      logger.error(
+        `Error initializing polling for ${transactionId}`,
+        error.message
+      );
+      // Don't throw - this shouldn't break the transaction
+    }
   }
 }

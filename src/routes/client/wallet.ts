@@ -38,6 +38,8 @@ router.post(
   validateRequest(fundWalletSchema),
   walletController.fundWallet
 );
+
+router.get("/providers", walletController.getProviders);
 router.post("/verify-transaction", walletController.verifyTransaction);
 router.post(
   "/record-deposit",
@@ -76,7 +78,8 @@ router.post(
 
 // Virtual accounts
 router.post(
-  "/accounts/initiate", validateRequest(identificationSchema),
+  "/accounts/initiate",
+  validateRequest(identificationSchema),
   profileComplete,
   virtualAccountController.initiateVirtualAccountGeneration
 );

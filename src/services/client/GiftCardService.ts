@@ -855,7 +855,7 @@ export class GiftCardService {
 
   async getTransaction(reference: string, userId: string): Promise<any> {
     const transaction =
-      await this.giftCardTransactionRepository.findByReference(reference);
+      await this.giftCardTransactionRepository.findByReferenceWithoutPopulate(reference);
 
     if (!transaction) {
       throw new AppError(
@@ -864,8 +864,8 @@ export class GiftCardService {
         ERROR_CODES.NOT_FOUND
       );
     }
+    console.log(transaction.userId?.toString(), userId);
 
-    // Verify ownership
     if (transaction.userId?.toString() !== userId) {
       throw new AppError(
         "Unauthorized access to gift card transaction",
@@ -904,7 +904,6 @@ export class GiftCardService {
   ): Promise<string> {
     const query: any = { userId };
 
-    // Apply same filters as getUserTransactions
     if (filters.tradeType) query.tradeType = filters.tradeType;
     if (filters.status) query.status = filters.status;
     if (filters.cardType) query.cardType = filters.cardType;

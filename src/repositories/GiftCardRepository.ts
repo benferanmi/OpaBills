@@ -96,6 +96,15 @@ export class GiftCardTransactionRepository extends BaseRepository<IGiftCardTrans
       .exec();
   }
 
+  async findByReferenceWithoutPopulate(
+    reference: string
+  ): Promise<IGiftCardTransaction | null> {
+    return this.model
+      .findOne({ reference })
+
+      .exec();
+  }
+
   async findByUserId(
     userId: string | Types.ObjectId,
     filters: any = {},

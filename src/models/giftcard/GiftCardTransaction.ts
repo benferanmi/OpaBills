@@ -11,9 +11,9 @@ export interface IGiftCardTransaction extends Document {
 
   // Sell-specific fields
   cardType?: "physical" | "ecode";
-  cards?: string[]; // Array of card images/codes
+  cards?: string[]; 
   comment?: string;
-  bankAccountId?: Types.ObjectId; // Reference to user's bank account
+  bankAccountId?: Types.ObjectId;
 
   // Transaction amounts
   amount: number;
@@ -25,7 +25,6 @@ export interface IGiftCardTransaction extends Document {
   // Grouping for multiple transactions
   groupTag?: string;
 
-  // Status management
   status:
     | "pending"
     | "processing"

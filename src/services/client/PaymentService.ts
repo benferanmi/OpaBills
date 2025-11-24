@@ -9,6 +9,7 @@ import { User } from "@/models/core/User";
 import { SaveHavenService } from "@/services/client/SaveHavenService";
 import { MonnifyService } from "./MonnifyService";
 import { FlutterwaveService } from "./FlutterwaveService";
+import { ProviderService } from "./ProviderService";
 
 export interface InitializePaymentDTO {
   userId: string;
@@ -35,6 +36,7 @@ export class PaymentService {
   private saveHavenService: SaveHavenService;
   private monnifyService: MonnifyService;
   private flutterwaveService: FlutterwaveService;
+  private providerService: ProviderService;
 
   constructor() {
     this.walletService = new WalletService();
@@ -42,8 +44,15 @@ export class PaymentService {
     this.saveHavenService = new SaveHavenService();
     this.monnifyService = new MonnifyService();
     this.flutterwaveService = new FlutterwaveService();
+    this.providerService = new ProviderService();
   }
+  async getProviders(): Promise<any> {
+    const result = await this.providerService.getServicesByServiceTypeCode(
+      "deposit"
+    );
 
+    return result;
+  }
   async initializePayment(data: InitializePaymentDTO): Promise<any> {
     const reference = generateReference("PAY");
     const provider = data.provider || "flutterwave";

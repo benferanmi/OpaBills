@@ -1,9 +1,16 @@
 import { Router } from "express";
 import { CryptoController } from "@/controllers/client/CryptoController";
-
 import { authenticate } from "@/middlewares/auth";
-import { validateQuery } from "@/middlewares/validation";
-import { cryptoTransactionQuerySchema } from "@/validations/client/cryptoValidation";
+import {
+  validateQuery,
+  validateParams,
+  validateRequest,
+} from "@/middlewares/validation";
+import {
+  cryptoTransactionQuerySchema,
+  transactionReferenceParamSchema,
+  uploadProofSchema,
+} from "@/validations/client/cryptoValidation";
 
 const router = Router();
 
@@ -17,10 +24,34 @@ router.get(
   validateQuery(cryptoTransactionQuerySchema),
   cryptoController.getCryptoTransactions
 );
-// router.get("/pending", cryptoController.getPendingCryptoTransactions);
-// router.get("/completed", cryptoController.getCompletedCryptoTransactions);
-// router.get("/stats", cryptoController.getCryptoTransactionStats);
+
+router.get(
+  "/export",
+  validateQuery(cryptoTransactionQuerySchema),
+  cryptoController.exportCryptoTransactions
+);
+
+// Single transaction - by reference (more common for users)
+router.get(
+  "/:reference",
+  validateParams(transactionReferenceParamSchema),
+  cryptoController.getCryptoTransactionByReference
+);
+
+router.get(
+  "/:reference/receipt",
+  validateParams(transactionReferenceParamSchema),
+  cryptoController.generateCryptoReceipt
+);
+
+router.put(
+  "/:reference/upload-proof",
+  validateParams(transactionReferenceParamSchema),
+  validateRequest(uploadProofSchema),
+  cryptoController.uploadTransactionProof
+);
+
+// Single transaction - by ID (for admin/internal use)
 router.get("/:id", cryptoController.getCryptoTransactionById);
-// router.put("/:id/upload-proof", cryptoController.uploadTransactionProof);
 
 export default router;
