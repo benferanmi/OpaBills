@@ -133,3 +133,17 @@ export const identificationSchema = Joi.object({
       "any.invalid": "{{#message}}",
     }),
 });
+
+export const verifyOtpAndCreateAccountSchema = Joi.object({
+  identityId: Joi.string().trim().required().messages({
+    "any.required": "identityId is required (from previous step)",
+  }),
+  otp: Joi.string().trim().required().messages({
+    "any.required": "OTP is required",
+  }),
+  type: Joi.string().valid("permanent", "temporary").default("permanent"),
+  identificationType: Joi.string().valid("bvn", "nin").required().messages({
+    "any.required": "identificationType is required",
+    "any.only": "identificationType must be either 'bvn' or 'nin'",
+  }),
+});

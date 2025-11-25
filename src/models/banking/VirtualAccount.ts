@@ -48,8 +48,8 @@ const virtualAccountSchema = new Schema<IVirtualAccount>(
     },
     accountReference: String,
     orderReference: String,
-    isPrimary: { Boolean },
-    isActive: { Boolean },
+    isPrimary: { type: Boolean },
+    isActive: { type: Boolean },
     type: {
       type: String,
       enum: ["permanent", "temporary"],

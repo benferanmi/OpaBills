@@ -6,6 +6,7 @@ export const PROVIDERS = {
     clientId: process.env.SAFEHAVEN_CLIENT_ID,
     secretKey: process.env.SAFEHAVEN_CLIENT_SECRET,
     clientAssertion: process.env.SAFEHAVEN_CLIENT_ASSERTION,
+    isSandBox: process.env.SAVEHAVEN_SANDBOX,
   },
   FLUTTERWAVE: {
     name: "Flutterwave",

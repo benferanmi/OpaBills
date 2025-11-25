@@ -115,7 +115,7 @@ export class VirtualAccountService {
       bankName: saveHavenAccount.bank_name,
       bankCode: saveHavenAccount.bank_code,
       orderReference: saveHavenAccount.reference,
-      isPrimary: true, // ✅ This is the account user will use
+      isPrimary: true, 
       isActive: true,
     });
 

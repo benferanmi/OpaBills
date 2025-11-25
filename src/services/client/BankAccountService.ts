@@ -45,10 +45,18 @@ export class BankAccountService {
     // );
 
     // Validating account details with monnify
-    const result = await this.monnifyService.verifyBankAccount(
+    // const result = await this.monnifyService.verifyBankAccount(
+    //   data.accountNumber,
+    //   data.bankCode
+    // );
+
+    const result = await this.saveHavenService.nameEnquiry(
       data.accountNumber,
       data.bankCode
     );
+
+    // console.log(result, "monnify result");
+    console.log(result, "savehaven result");
 
     if (!result) {
       throw new AppError(

@@ -23,29 +23,6 @@ export class VirtualAccountController {
     this.virtualAccountService = new VirtualAccountService();
   }
 
-  /**
-   * STEP 1: Initiate BVN/NIN validation
-   * - Creates Monnify account (validates BVN/NIN internally via KYC)
-   * - Sends OTP via SaveHaven for ownership verification
-   *
-   * Request body:
-   * {
-   *   "identificationType": "bvn" | "nin",
-   *   "value": "12345678901", // 11 digits
-   *   "firstname": "John",
-   *   "lastname": "Doe",
-   *   "middlename": "Middle", // optional
-   *   "dateOfBirth": "1990-01-15", // YYYY-MM-DD
-   *   "phoneNumber": "08012345678" // optional but recommended
-   * }
-   *
-   * Response:
-   * {
-   *   "identityId": "uuid-from-safehaven",
-   *   "step": "otp_sent",
-   *   "message": "BVN validated. OTP sent to your phone."
-   * }
-   */
   initiateVirtualAccountGeneration = async (
     req: AuthRequest,
     res: Response,
@@ -70,9 +47,7 @@ export class VirtualAccountController {
         `[Step 1] Initiating validation for user ${userId}, type: ${normalizedType}`
       );
 
-      console.log(phoneNumber, "user number")
-
-      // STEP 1: Validate with Monnify (BVN/NIN check) then send OTP via SaveHaven
+      //  Validate with Monnify (BVN/NIN check) then send OTP via SaveHaven
       const result = await this.identityVerificationService.validateIdentity(
         userId,
         {
@@ -95,7 +70,7 @@ export class VirtualAccountController {
         {
           identityId: result.identityId,
           step: result.step,
-          expiresIn: 3600, // 1 hour
+          expiresIn: 3600,
           nextStep: "Verify the OTP sent to your phone to continue",
         },
         result.message
@@ -106,29 +81,6 @@ export class VirtualAccountController {
     }
   };
 
-  /**
-   * STEP 2: Verify OTP and create virtual account
-   * - Validates OTP from SaveHaven
-   * - Creates SafeHaven virtual account with verified identity
-   * - Stores both Monnify (hidden) and SafeHaven (primary) accounts
-   *
-   * Request body:
-   * {
-   *   "identityId": "uuid-from-step-1",
-   *   "otp": "123456"
-   * }
-   *
-   * Response:
-   * {
-   *   "verified": true,
-   *   "account": {
-   *     "accountNumber": "1234567890",
-   *     "accountName": "John Doe",
-   *     "bankName": "Wema Bank",
-   *     "provider": "savehaven"
-   *   }
-   * }
-   */
   verifyOTPAndCreateAccount = async (
     req: AuthRequest,
     res: Response,
@@ -136,53 +88,22 @@ export class VirtualAccountController {
   ) => {
     try {
       const userId = req.user!.id;
-      const { identityId, otp, type = "permanent", identificationType } = req.body;
-
-      // Validate required fields
-      if (!identityId || !identityId.trim()) {
-        throw new AppError(
-          "identityId is required (from previous step)",
-          HTTP_STATUS.BAD_REQUEST,
-          ERROR_CODES.VALIDATION_ERROR
-        );
-      }
-
-      if (!otp || !otp.trim()) {
-        throw new AppError(
-          "OTP is required",
-          HTTP_STATUS.BAD_REQUEST,
-          ERROR_CODES.VALIDATION_ERROR
-        );
-      }
-
-      // Validate OTP format (typically 6 digits)
-      const trimmedOtp = otp.trim();
-      if (!/^\d{4,6}$/.test(trimmedOtp)) {
-        throw new AppError(
-          "Invalid OTP format. OTP should be 4-6 digits",
-          HTTP_STATUS.BAD_REQUEST,
-          ERROR_CODES.VALIDATION_ERROR
-        );
-      }
-
-      // Validate account type
-      if (!["permanent", "temporary"].includes(type)) {
-        throw new AppError(
-          "type must be either 'permanent' or 'temporary'",
-          HTTP_STATUS.BAD_REQUEST,
-          ERROR_CODES.VALIDATION_ERROR
-        );
-      }
+      const {
+        identityId,
+        otp,
+        type = "permanent",
+        identificationType,
+      } = req.body;
 
       logger.info(
         `[Step 2] Validating OTP for user ${userId}, identityId: ${identityId}`
       );
 
-      // STEP 2A: Validate OTP
+      //  Validate OTP
       const validation = await this.identityVerificationService.validateOtp(
         identityId.trim(),
         identificationType,
-        trimmedOtp
+        otp
       );
 
       if (!validation.success) {
@@ -193,23 +114,19 @@ export class VirtualAccountController {
         );
       }
 
-      logger.info(`[Step 2] ✅ OTP validated for user ${userId}`);
+      logger.info(`Creating virtual account for user ${userId}`);
 
-      logger.info(`[Step 3] Creating virtual account for user ${userId}`);
-
-      // STEP 3: Create virtual account using validated identityId
+      // Create virtual account using validated identityId
       const virtualAccount =
         await this.virtualAccountService.createVirtualAccount({
           userId,
           type,
           provider: "savehaven",
-          identificationType: "bvn", // Get from validation data
+          identificationType: "bvn",
           identityId: identityId.trim(),
         });
 
-      logger.info(
-        `[Step 3] ✅ Virtual account created successfully for user ${userId}`
-      );
+      logger.info(` Virtual account created successfully for user ${userId}`);
 
       return sendSuccessResponse(
         res,
@@ -228,9 +145,7 @@ export class VirtualAccountController {
     }
   };
 
-  /**
-   * Get user's primary virtual account
-   */
+  // Get user's primary virtual account
   getUserVirtualAccount = async (
     req: AuthRequest,
     res: Response,
@@ -262,9 +177,7 @@ export class VirtualAccountController {
     }
   };
 
-  /**
-   * Get validation status (check if OTP session is still valid)
-   */
+  // Get validation status (check if OTP session is still valid)
   getValidationStatus = async (
     req: AuthRequest,
     res: Response,
@@ -298,10 +211,6 @@ export class VirtualAccountController {
     }
   };
 
-  /**
-   * Resend OTP (if needed)
-   * Note: This would require storing enough info to re-initiate
-   */
   resendOTP = async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
       const { identityId } = req.body;
@@ -335,8 +244,8 @@ export class VirtualAccountController {
         );
       }
 
-      // In a real implementation, you'd call SafeHaven's resend OTP endpoint
-      // For now, inform user to restart the process if needed
+      // TODO: call SafeHaven's resend OTP endpoint
+      // For now, informing user to restart the process
       throw new AppError(
         "OTP resend not yet implemented. Please restart the verification process if OTP expired.",
         HTTP_STATUS.NOT_IMPLEMENTED,

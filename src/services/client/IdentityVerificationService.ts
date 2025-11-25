@@ -71,9 +71,7 @@ export class IdentityVerificationService {
         `[FLOW START] Starting BVN/NIN validation for user ${userId}`
       );
 
-      // ===
-      // STEP 0: Check if user already has SafeHaven account (the real goal)
-      // ===
+      // STEP 0: Checking if user already has SafeHaven account
       const existingSafeHavenAccount =
         await this.virtualAccountRepository.findOne({
           userId: new Types.ObjectId(userId.toString()),
@@ -87,22 +85,20 @@ export class IdentityVerificationService {
         );
 
         throw new AppError(
-          "You already have a SafeHaven virtual account. No need to create again.",
+          "You already have a SafeHaven virtual account.",
           HTTP_STATUS.BAD_REQUEST,
           ERROR_CODES.VALIDATION_ERROR
         );
       }
 
-      // ===
       // STEP 1: Validate BVN/NIN with Monnify (if not already validated)
-      // Purpose: Confirm BVN/NIN details are correct (not for actual use)
-      // ===
+      // Purpose: Confirm BVN/NIN details are correct
       let monnifyAccount;
       let shouldSaveMonnify = false;
 
       if (user.bvnValidated && data.identificationType === "bvn") {
         logger.info(
-          `[STEP 1] ✅ User ${userId} BVN already validated. Skipping Monnify validation.`
+          `User ${userId} BVN already validated. Skipping Monnify validation.`
         );
 
         // Get existing Monnify account details from database
@@ -130,29 +126,25 @@ export class IdentityVerificationService {
         } else {
           // Edge case: bvnValidated=true but no Monnify record
           logger.warn(
-            `[STEP 1] ⚠️ User has bvnValidated=true but no Monnify record. Creating one...`
+            ` User has bvnValidated=true but no Monnify record. Creating one...`
           );
           monnifyAccount = await this.validateBVNWithMonnify(user, data);
           shouldSaveMonnify = true;
         }
       } else {
-        logger.info(`[STEP 1] Validating BVN/NIN with Monnify...`);
+        logger.info(`Validating BVN/NIN with Monnify...`);
         monnifyAccount = await this.validateBVNWithMonnify(user, data);
         shouldSaveMonnify = true;
 
         logger.info(
-          `[STEP 1] ✅ Monnify validation successful: ${monnifyAccount.accountReference}`
+          `Monnify validation successful: ${monnifyAccount.accountReference}`
         );
       }
 
-      // ===
-      // STEP 1.1: Save Monnify Account to Database (if newly created)
-      // isPrimary = false (not for user's actual use)
-      // type = "permanent" (for record-keeping)
-      // ===
+      // STEP 1.1: Save Monnify Account to Database
       if (shouldSaveMonnify) {
         logger.info(
-          "[STEP 1.1] 💾 Saving Monnify account to database (for validation records only)..."
+          "Saving Monnify account to database (for validation records only)..."
         );
 
         const savedMonnifyAccount =
@@ -166,54 +158,41 @@ export class IdentityVerificationService {
             bankName: monnifyAccount.accounts[0].bankName,
             bankCode: monnifyAccount.accounts[0].bankCode,
             orderReference: monnifyAccount.accountReference,
-            isPrimary: false, // ✅ Not the primary account (SafeHaven is)
+            isPrimary: false,
             isActive: true,
           });
 
         logger.info(
-          `[STEP 1.1] ✅ Monnify account saved (validation record): ${savedMonnifyAccount.accountNumber}`
+          `Monnify account saved (validation record): ${savedMonnifyAccount.accountNumber}`
         );
 
-        // ===
-        // STEP 1.2: Update User with BVN and Validation Status
-        // bvnValidated = true (means: "BVN details confirmed correct")
-        // ===
-        logger.info(
-          "[STEP 1.2] 💾 Updating user with BVN and validation status..."
-        );
+        // Update User with BVN and Validation Status
+        logger.info("Updating user with BVN and validation status...");
 
         if (data.identificationType === "bvn") {
           user.bvn = data.value;
-          user.bvnValidated = true; // ✅ BVN details validated
+          user.bvnValidated = true;
           await user.save();
           logger.info(
-            `[STEP 1.2] ✅ User ${userId} updated: BVN = ${data.value}, bvnValidated = true`
+            `User ${userId} updated: BVN = ${data.value}, bvnValidated = true`
           );
         } else if (data.identificationType === "nin") {
           user.nin = data.value;
-          // You might want: user.ninValidated = true
+          // TOCHECK: user.ninValidated = true
+
           await user.save();
-          logger.info(
-            `[STEP 1.2] ✅ User ${userId} updated: NIN = ${data.value}`
-          );
+          logger.info(`User ${userId} updated: NIN = ${data.value}`);
         }
       }
 
-      // ===
       // STEP 2: Send OTP via SafeHaven (if not already verified)
-      // Purpose: Confirm user owns the BVN/NIN phone number
-      // ===
       let identityId: string;
       let otpAlreadySent = false;
 
       if (user.bvnVerified && data.identificationType === "bvn") {
         logger.info(
-          `[STEP 2] ✅ User ${userId} BVN already verified (OTP confirmed). Skipping OTP send.`
+          `User ${userId} BVN already verified (OTP confirmed). Skipping OTP send.`
         );
-
-        // Check if we have cached identity data
-        // In practice, if bvnVerified=true, user should already have SafeHaven account
-        // But we'll allow proceeding to Step 3 to create SafeHaven account if missing
 
         throw new AppError(
           "Your BVN is already verified. Please proceed to create your virtual account.",
@@ -221,9 +200,7 @@ export class IdentityVerificationService {
           ERROR_CODES.VALIDATION_ERROR
         );
       } else {
-        logger.info(
-          `[STEP 2] Initiating SafeHaven identity verification (OTP)...`
-        );
+        logger.info(`Initiating SafeHaven identity verification (OTP)...`);
 
         const saveHavenOTP =
           await this.saveHavenService.initiateIdentityVerification({
@@ -238,14 +215,10 @@ export class IdentityVerificationService {
         identityId = saveHavenOTP.identityId;
         otpAlreadySent = true;
 
-        logger.info(
-          `[STEP 2] ✅ OTP sent via SafeHaven, identityId: ${identityId}`
-        );
+        logger.info(`OTP sent via SafeHaven, identityId: ${identityId}`);
       }
 
-      // ===
       // Store validation data in cache
-      // ===
       const cacheKey = `${CACHE_KEYS.IDENTITY_VALIDATION}:${identityId}`;
 
       const cacheData = {
@@ -258,15 +231,14 @@ export class IdentityVerificationService {
         middlename: data.middlename,
         phoneNumber: data.phoneNumber,
         email: user.email,
-
-        // Monnify data (validation proof - not for actual use)
+        //Monnify
         monnifyAccountReference: monnifyAccount.accountReference,
         monnifyAccountNumber: monnifyAccount.accounts[0]?.accountNumber,
         monnifyAccountName: monnifyAccount.accountName,
         monnifyBankName: monnifyAccount.accounts[0]?.bankName,
         monnifyBankCode: monnifyAccount.accounts[0]?.bankCode,
 
-        // SafeHaven identity data (for sub-account creation later)
+        // SafeHaven identity data
         saveHavenIdentityId: identityId,
 
         // Validation status flags
@@ -280,16 +252,10 @@ export class IdentityVerificationService {
         timestamp: Date.now(),
       };
 
-      await this.cacheService.set(
-        cacheKey,
-        JSON.stringify(cacheData),
-        3600 // 1 hour expiry
-      );
-
-      console.log(cacheData, cacheKey);
+      await this.cacheService.set(cacheKey, JSON.stringify(cacheData), 3600);
 
       logger.info(
-        `[STEP 2 COMPLETE] ✅ Flow completed:
+        `Flow completed:
       - BVN validated: ${user.bvnValidated}
       - Monnify saved: ${shouldSaveMonnify}
       - OTP sent: ${otpAlreadySent}
@@ -300,7 +266,7 @@ export class IdentityVerificationService {
         success: true,
         identityId: identityId,
         message:
-          "BVN/NIN validated successfully. An OTP has been sent to your registered phone number. Please verify to complete the process.",
+          "BVN/NIN validated successfully. An OTP has been sent to your registered phone number. ",
         step: "otp_sent",
         data: {
           bvnValidated: user.bvnValidated,
@@ -317,7 +283,6 @@ export class IdentityVerificationService {
         stack: error.stack,
       });
 
-      // Enhanced error handling
       if (error instanceof AppError) {
         throw error;
       }
@@ -356,10 +321,8 @@ export class IdentityVerificationService {
     }
   }
 
-  /**
-   * STEP 1 HELPER: Validate BVN/NIN by creating Monnify account
-   * Monnify performs internal KYC validation during account creation
-   */
+  // Validate BVN/NIN by creating Monnify account
+  // Monnify performs internal KYC validation during account creation
   private async validateBVNWithMonnify(
     user: any,
     data: ValidationData
@@ -393,7 +356,7 @@ export class IdentityVerificationService {
       );
 
       logger.info(
-        `✅ Monnify account created (BVN/NIN validated): ${monnifyAccount.accountReference}`
+        `Monnify account created (BVN/NIN validated): ${monnifyAccount.accountReference}`
       );
 
       return monnifyAccount;
@@ -448,10 +411,7 @@ export class IdentityVerificationService {
     }
   }
 
-  /**
-   * STEP 3: Validate OTP
-   * This confirms the user owns the BVN/NIN phone number
-   */
+  // STEP 3: Validate OTP
   async validateOtp(
     identityId: string,
     identificationType: string,
@@ -500,7 +460,7 @@ export class IdentityVerificationService {
         );
       }
 
-      logger.info(`[STEP 3] ✅ OTP validated successfully`);
+      logger.info(` OTP validated successfully`);
 
       // Update user with BVN/NIN verification status
       const user = await this.userRepository.findById(validationData.userId);
@@ -512,18 +472,12 @@ export class IdentityVerificationService {
         );
       }
 
-      // Update verification status (OTP confirmed = ownership verified)
       if (validationData.identificationType === "bvn") {
-        // bvnValidated should already be true (from Monnify)
-        user.bvnVerified = true; // ✅ OTP confirmed - user owns this BVN
+        user.bvnVerified = true;
         await user.save();
-        logger.info(
-          `[STEP 3] ✅ User ${user.id} bvnVerified = true (OTP confirmed)`
-        );
       } else if (validationData.identificationType === "nin") {
-        // You might want: user.ninVerified = true
+        // TOCHECK: user.ninVerified = true
         await user.save();
-        logger.info(`[STEP 3] ✅ User ${user.id} NIN verified (OTP confirmed)`);
       }
 
       logger.info(
@@ -573,9 +527,7 @@ export class IdentityVerificationService {
     }
   }
 
-  /**
-   * Get validation status
-   */
+  // Get validation status
   async getValidationStatus(identityId: string): Promise<any> {
     try {
       const cacheKey = `${CACHE_KEYS.IDENTITY_VALIDATION}:${identityId}`;

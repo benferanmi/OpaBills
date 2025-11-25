@@ -10,6 +10,7 @@ import {
   fundWalletSchema,
   generateVirtualAccountSchema,
   identificationSchema,
+  verifyOtpAndCreateAccountSchema,
   walletTypeSchema,
 } from "@/validations/client/walletValidation";
 import { VirtualAccountController } from "@/controllers/client/VirtualAccountController ";
@@ -85,6 +86,7 @@ router.post(
 );
 router.post(
   "/accounts/verify",
+  validateRequest(verifyOtpAndCreateAccountSchema),
   virtualAccountController.verifyOTPAndCreateAccount
 );
 router.get(

@@ -182,6 +182,22 @@ export class SaveHavenService {
     accountNumber: string,
     bankCode: string
   ): Promise<NameEnquiryResponse> {
+    // Sandbox Mock
+    if (this.provider.isSandBox) {
+      logger.info("🧪 SANDBOX MODE: Mocking name enquiry");
+      const mockResponse = this.getMockResponse("nameEnquiry", {
+        accountNumber,
+        bankCode,
+      });
+
+      return {
+        accountName: mockResponse.data.accountName,
+        accountNumber: mockResponse.data.accountNumber,
+        sessionId: mockResponse.data.sessionId,
+        bankCode: mockResponse.data.bankCode,
+      };
+    }
+
     return this.executeWithAuth(async () => {
       const response = await this.client.post("/transfers/name-enquiry", {
         accountNumber,
@@ -247,6 +263,23 @@ export class SaveHavenService {
     middleName?: string;
     dateOfBirth: string;
   }): Promise<{ identityId: string; message: string }> {
+    if (this.provider.isSandBox) {
+      logger.info("🧪 SANDBOX MODE: Mocking identity verification initiation");
+      const mockResponse = this.getMockResponse(
+        "initiateIdentityVerification",
+        {
+          type: data.identityType.toUpperCase(),
+          number: data.identityNumber,
+          debitAccountNumber: process.env.SAFEHAVEN_SWEEP_ACCOUNT,
+        }
+      );
+
+      return {
+        identityId: mockResponse.data._id,
+        message: mockResponse.message,
+      };
+    }
+
     return this.executeWithAuth(async () => {
       const payload = {
         type: data.identityType.toUpperCase(),
@@ -297,6 +330,30 @@ export class SaveHavenService {
     otp: string;
   }): Promise<{ verified: boolean; message: string }> {
     return this.executeWithAuth(async () => {
+      // Sandbox mock
+      if (this.provider.isSandBox) {
+        logger.info("🧪 SANDBOX MODE: Mocking identity validation");
+        const mockResponse = this.getMockResponse("validateIdentity", {
+          identityId: data.identityId,
+          type: data.identificationType,
+          otp: data.otp,
+        });
+
+        // Handle mock failure
+        if (mockResponse.statusCode !== 0) {
+          throw new AppError(
+            mockResponse.message,
+            400,
+            ERROR_CODES.VALIDATION_ERROR
+          );
+        }
+
+        return {
+          verified: true,
+          message: mockResponse.message,
+        };
+      }
+
       const response = await this.client.post("/identity/v2/validate", {
         identityId: data.identityId,
         type: data.identificationType,
@@ -335,6 +392,21 @@ export class SaveHavenService {
     phone?: string;
     bvn?: string;
   }): Promise<SaveHavenAccountData> {
+    if (this.provider.isSandBox) {
+      logger.info("🧪 SANDBOX MODE: Mocking virtual account creation");
+      const mockResponse = this.getMockResponse("createVirtualAccount", data);
+
+      return {
+        account_number: mockResponse.data.accountNumber,
+        account_name: mockResponse.data.accountName,
+        bank_name: "Safe Haven MFB",
+        bank_code: mockResponse.data.bankCode,
+        reference: data.reference,
+        status: mockResponse.data.status,
+        created_at: mockResponse.data.createdAt,
+        expires_at: mockResponse.data.expiryDate,
+      };
+    }
     return this.executeWithAuth(async () => {
       const response = await this.client.post("/virtual-accounts", {
         validFor: 900,
@@ -369,6 +441,20 @@ export class SaveHavenService {
     emailAddress: string;
     identityId: string; // Must be from verified identity
   }): Promise<SaveHavenAccountData> {
+    if (this.provider.isSandBox) {
+      logger.info("🧪 SANDBOX MODE: Mocking sub-account creation");
+      const mockResponse = this.getMockResponse("createSubAccount", data);
+
+      return {
+        account_number: mockResponse.data.accountNumber,
+        account_name: mockResponse.data.accountName,
+        bank_name: "Safe Haven MFB",
+        bank_code: "000",
+        reference: data.externalReference,
+        status: "active",
+        created_at: mockResponse.data.createdAt,
+      };
+    }
     return this.executeWithAuth(async () => {
       const payload = {
         externalReference: data.externalReference,
@@ -415,10 +501,15 @@ export class SaveHavenService {
 
   // Verify payment/transaction (for wallet funding confirmation)
   async verifyPayment(reference: string): Promise<any> {
+    // Sandbox Mock
+    if (this.provider.isSandBox) {
+      logger.info("🧪 SANDBOX MODE: Mocking payment verification");
+      const mockResponse = this.getMockResponse("verifyPayment", { reference });
+      return mockResponse.data;
+    }
+
     return this.executeWithAuth(async () => {
-      const response = await this.client.get(
-        `/transaction/verify/${reference}`
-      );
+      const response = await this.client.get(`/checkout/${reference}/verify`);
 
       // Check HTTP status code for success
       if (!this.isSuccessResponse(response.status)) {
@@ -447,6 +538,11 @@ export class SaveHavenService {
     reference: string;
     sessionId?: string; // Optional - will do name enquiry if not provided
   }): Promise<any> {
+    if (this.provider.isSandBox) {
+      logger.info("🧪 SANDBOX MODE: Mocking transfer initiation");
+      const mockResponse = this.getMockResponse("initiateTransfer", data);
+      return mockResponse.data;
+    }
     return this.executeWithAuth(async () => {
       // If no sessionId provided, do name enquiry first
       let sessionId = data.sessionId;
@@ -464,7 +560,7 @@ export class SaveHavenService {
         amount: data.amount,
         narration: data.narration,
         sessionId: sessionId,
-        callbackUrl: `${process.env.BASE_URL}/api/webhooks/savehaven/transfer`,
+        callbackUrl: `${process.env.BASE_URL}/api/v1/webhooks/savehaven`,
       });
 
       // Check HTTP status code for success
@@ -961,5 +1057,268 @@ export class SaveHavenService {
     };
 
     return statusMap[paymentStatus] || "processing";
+  }
+
+  // Mock data generator for sandbox environment
+  private getMockResponse(method: string, data?: any): any {
+    const timestamp = new Date().toISOString();
+
+    switch (method) {
+      case "nameEnquiry":
+        return {
+          statusCode: 0,
+          responseCode: "00",
+          message: "Name enquiry successful",
+          data: {
+            responseCode: "00",
+            responseMessage: "Successful",
+            sessionId: `SESS_${Date.now()}_${Math.random()
+              .toString(36)
+              .substr(2, 9)}`,
+            bankCode: data?.bankCode || "000",
+            accountNumber: data?.accountNumber || "0000000000",
+            accountName: "SANDBOX TEST ACCOUNT",
+            kycLevel: "3",
+            bvn: "22222222222",
+          },
+        };
+
+      case "initiateIdentityVerification":
+        return {
+          statusCode: 0,
+          data: {
+            _id: `ID_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            clientId: "sandbox_client_id",
+            identityNumber: data?.number || "22222222222",
+            type: data?.type || "BVN",
+            amount: 50,
+            status: "pending",
+            debitAccountNumber: data?.debitAccountNumber || "",
+            vat: 0,
+            stampDuty: 0,
+            isDeleted: false,
+            otpVerified: false,
+            otpResendCount: 0,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+            __v: 0,
+            debitMessage: "Successful",
+            debitResponsCode: 0,
+            debitSessionId: `SESS_${Date.now()}`,
+            otpId: `OTP_${Date.now()}`,
+            providerResponse: "OTP sent successfully",
+          },
+          message: "Record fetched successfully",
+        };
+
+      case "validateIdentity":
+        // Simulate success if OTP is "123456", failure otherwise
+        const isValidOtp = data?.otp === "123456" || data?.otp === "111111";
+
+        if (!isValidOtp) {
+          return {
+            statusCode: 400,
+            message: "Invalid OTP",
+            data: null,
+          };
+        }
+
+        return {
+          statusCode: 0,
+          message: "Identity validated successfully",
+          data: {
+            _id: data?.identityId || `ID_${Date.now()}`,
+            clientId: "sandbox_client_id",
+            identityNumber: "22222222222",
+            type: data?.type || "BVN",
+            amount: 50,
+            status: "verified",
+            debitAccountNumber: process.env.SAFEHAVEN_SWEEP_ACCOUNT || "",
+            vat: 0,
+            stampDuty: 0,
+            isDeleted: false,
+            otpVerified: true,
+            otpResendCount: 0,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+            __v: 0,
+            debitMessage: "Successful",
+            debitResponsCode: 0,
+            debitSessionId: `SESS_${Date.now()}`,
+            otpId: `OTP_${Date.now()}`,
+            providerResponse: {
+              firstName: "SANDBOX",
+              lastName: "USER",
+              middleName: "TEST",
+              dateOfBirth: "1990-01-01",
+              phone: "08012345678",
+              bvn: "22222222222",
+            },
+          },
+        };
+
+      case "createVirtualAccount":
+        return {
+          statusCode: 0,
+          message: "Virtual account created successfully",
+          data: {
+            _id: `VA_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            client: "sandbox_client_id",
+            bankCode: "000",
+            accountNumber: `90${Math.floor(
+              10000000 + Math.random() * 90000000
+            )}`,
+            accountName: `${data?.firstname?.toUpperCase() || "SANDBOX"} ${
+              data?.lastname?.toUpperCase() || "USER"
+            }`,
+            currencyCode: "NGN",
+            bvn: data?.bvn || "",
+            validFor: 900,
+            amountControl: "Fixed",
+            amount: data?.amount || 0,
+            expiryDate: new Date(Date.now() + 900000).toISOString(), // 15 mins from now
+            callbackUrl: `${process.env.BASE_URL}/api/webhooks/savehaven/payment`,
+            settlementAccount: {
+              accountNumber: process.env.SAFEHAVEN_SWEEP_ACCOUNT || "",
+              bankCode: "000",
+            },
+            status: "active",
+            isDeleted: false,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+            __v: 0,
+          },
+        };
+
+      case "verifyPayment":
+        return {
+          statusCode: 0,
+          message: "Transaction verified successfully",
+          data: {
+            channels: ["card", "bank_transfer"],
+            _id: `TXN_${Date.now()}`,
+            client: "sandbox_client_id",
+            merchantName: "SANDBOX MERCHANT",
+            oauthClientId: "sandbox_oauth_client",
+            referenceCode: data?.reference || `REF_${Date.now()}`,
+            customer: {
+              email: "sandbox@example.com",
+              name: "Sandbox User",
+            },
+            currencyCode: "NGN",
+            amount: 100000, // 1000 NGN in kobo
+            feeBearer: "customer",
+            fees: 150,
+            vat: 12,
+            stampDuty: 50,
+            customIconUrl: "",
+            redirectUrl: "",
+            webhookUrl: `${process.env.BASE_URL}/api/webhooks/savehaven/payment`,
+            settlementAccount: {
+              accountNumber: process.env.SAFEHAVEN_SWEEP_ACCOUNT || "",
+              bankCode: "000",
+            },
+            settlementStatus: "settled",
+            settlementReference: `SETTLE_${Date.now()}`,
+            channelDetails: {
+              channel: "bank_transfer",
+              method: "virtual_account",
+            },
+            paymentDetails: {
+              paidAt: timestamp,
+              amount: 100000,
+            },
+            status: "successful",
+            isDeleted: false,
+            createdAt: timestamp,
+            updatedAt: timestamp,
+            __v: 0,
+          },
+        };
+
+      case "initiateTransfer":
+        return {
+          statusCode: 0,
+          responseCode: "00",
+          message: "Transfer initiated successfully",
+          data: {
+            _id: `TRF_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            client: "sandbox_client_id",
+            account: process.env.SAFEHAVEN_SWEEP_ACCOUNT || "",
+            type: "transfer",
+            sessionId: `SESS_${Date.now()}`,
+            nameEnquiryReference: data?.sessionId || `SESS_${Date.now()}`,
+            paymentReference: data?.reference || `PAY_${Date.now()}`,
+            mandateReference: "",
+            isReversed: false,
+            reversalReference: "",
+            provider: "SafeHaven",
+            providerChannel: "NIP",
+            providerChannelCode: "03",
+            destinationInstitutionCode: data?.bank_code || "000",
+            creditAccountName: "SANDBOX BENEFICIARY",
+            creditAccountNumber: data?.account_number || "0000000000",
+            creditBankVerificationNumber: "",
+            creditKYCLevel: "3",
+            debitAccountName: "SANDBOX MERCHANT",
+            debitAccountNumber: process.env.SAFEHAVEN_SWEEP_ACCOUNT || "",
+            debitBankVerificationNumber: "",
+            debitKYCLevel: "3",
+            transactionLocation: "NG",
+            narration: data?.narration || "Transfer",
+            amount: data?.amount || 0,
+            fees: Math.floor((data?.amount || 0) * 0.001), // 0.1% fee
+            vat: Math.floor((data?.amount || 0) * 0.00075), // VAT on fee
+            stampDuty: data?.amount >= 1000000 ? 50 : 0, // Stamp duty for amounts >= 10k NGN
+            responseCode: "00",
+            responseMessage: "Successful",
+            status: "success",
+            isDeleted: false,
+            createdAt: timestamp,
+            createdBy: "system",
+            updatedAt: timestamp,
+            __v: 0,
+            approvedAt: timestamp,
+            approvedBy: "system",
+          },
+        };
+      case "createSubAccount":
+        return {
+          statusCode: 0,
+          message: "Sub-account created successfully",
+          data: {
+            _id: `SUB_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            client: "sandbox_client_id",
+            accountProduct: "savings",
+            accountNumber: `10${Math.floor(
+              10000000 + Math.random() * 90000000
+            )}`,
+            accountName: `${
+              data?.emailAddress?.split("@")[0]?.toUpperCase() || "SANDBOX"
+            } USER`,
+            accountType: "subaccount",
+            currencyCode: "NGN",
+            bvn: "22222222222",
+            identityId: data?.identityId || "",
+            accountBalance: 0,
+            bookBalance: 0,
+            callbackUrl: `${process.env.APP_URL}/api/webhooks/savehaven/subaccount`,
+            isSubAccount: true,
+            subAccountDetails: {
+              externalReference: data?.externalReference || `EXT_${Date.now()}`,
+              phoneNumber: data?.phoneNumber || "+2348000000000",
+              emailAddress: data?.emailAddress || "sandbox@example.com",
+              autoSweep: false,
+            },
+            createdAt: timestamp,
+            updatedAt: timestamp,
+            nin: "",
+            __v: 0,
+            cbaAccountId: `CBA_${Date.now()}`,
+          },
+        };
+      default:
+        return null;
+    }
   }
 }
