@@ -20,6 +20,7 @@ import { Types } from "mongoose";
 import { WalletRepository } from "@/repositories/WalletRepository";
 import { CacheService } from "../CacheService";
 import { OTPService } from "../OTPService";
+import { valid } from "joi";
 
 export interface RegisterDTO {
   firstname: string;
@@ -415,6 +416,51 @@ export class AuthService {
     }
 
     const hashedPassword = await hashPassword(data.password);
+    await this.userRepository.updatePassword(user.email, hashedPassword);
+
+    return;
+  }
+
+  async verifyResetOTP(otp: string, email: string): Promise<void> {
+    const user = await this.userRepository.findByEmail(email);
+
+    if (!user) {
+      throw new AppError(
+        "User not found",
+        HTTP_STATUS.NOT_FOUND,
+        ERROR_CODES.NOT_FOUND
+      );
+    }
+
+    const isValid = await this.otpService.verify(
+      user.id.toString(),
+      "forgot_password",
+      otp
+    );
+
+    if (!isValid) {
+      throw new AppError(
+        "Invalid or expired OTP",
+        HTTP_STATUS.BAD_REQUEST,
+        ERROR_CODES.UNAUTHORIZED
+      );
+    }
+
+    return;
+  }
+
+  async changeAppPassword(password: string, email: string): Promise<void> {
+    const user = await this.userRepository.findByEmail(email);
+
+    if (!user) {
+      throw new AppError(
+        "User not found",
+        HTTP_STATUS.NOT_FOUND,
+        ERROR_CODES.NOT_FOUND
+      );
+    }
+
+    const hashedPassword = await hashPassword(password);
     await this.userRepository.updatePassword(user.email, hashedPassword);
 
     return;

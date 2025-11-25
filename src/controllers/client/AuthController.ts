@@ -76,9 +76,33 @@ export class AuthController {
     }
   };
 
+  verifyResetOTP = async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { otp, email } = req.body;
+      const result = await this.authService.verifyResetOTP(otp, email);
+      return sendSuccessResponse(res, result, "OTP verified successfully");
+    }
+   catch (error) {
+      next(error);
+    }
+  }
+  changeAppPassword = async (
+    req: AuthRequest,    
+    res: Response,
+    next: NextFunction
+  ) => {
+    try {
+      const { password, email } = req.body;
+      await this.authService.changeAppPassword( password, email );
+      return sendSuccessResponse(res, null, "Password changed successfully");
+    } catch (error) {
+      next(error);
+    }
+  }
+
   changePassword = async (
     req: AuthRequest,
-    res: Response,
+    res: Response,      
     next: NextFunction
   ) => {
     try {

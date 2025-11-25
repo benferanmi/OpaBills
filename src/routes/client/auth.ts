@@ -16,6 +16,8 @@ import {
   phoneNumberVerificationSchema,
   setPinSchema,
   toggle2FASchema,
+  verifyOTPAppSchema,
+  changeAppPasswordSchema,
 } from "@/validations/client/authValidation";
 
 const router = Router();
@@ -44,6 +46,11 @@ router.post(
   validateRequest(resetPasswordSchema),
   authController.resetPassword
 );
+
+// reset password for app 
+router.post("/verify-reset-otp", validateRequest(verifyOTPAppSchema), authController.verifyResetOTP);
+
+router.post("/change-app-password", validateRequest(changeAppPasswordSchema), authController.changeAppPassword);
 
 // Protected routes
 router.post("/logout", authenticate, authController.logout);
