@@ -92,6 +92,7 @@ export class BillPaymentService {
       purpose: "airtime_purchase",
       direction: "DEBIT",
       status: "pending",
+      provider: service.name,
       meta: {
         phone: data.phone,
         network: data.network,
@@ -591,7 +592,7 @@ export class BillPaymentService {
       type: "data",
       remark: `Data purchase: ${product.name} for ${data.phone}`,
       purpose: "data_purchase",
-      provider: "vtpass",
+      provider: service.name,
       status: "pending",
       meta: {
         phone: data.phone,
@@ -1249,7 +1250,7 @@ export class BillPaymentService {
       sourceId: new Types.ObjectId(userId),
       amount,
       type: "betting",
-      // provider: ""
+      provider: serviceCode,
       direction: "DEBIT",
       purpose: "betting_funding",
       remark: `Betting funding for ${service.name} for ${customerId}`,
@@ -1275,7 +1276,7 @@ export class BillPaymentService {
         status = "failed";
       }
 
-      await this.transactionRepository.update(transaction.id, {
+      const result = await this.transactionRepository.update(transaction.id, {
         status,
         provider: providerResult.providerCode,
         providerReference: providerResult.providerReference,
@@ -1312,7 +1313,11 @@ export class BillPaymentService {
         );
       }
 
-      return { status, ...providerResult, pending: status === "pending" };
+      return {
+        result,
+        providerStatus: providerResult.status,
+        pending: status === "pending",
+      };
     } catch (error: any) {
       await this.transactionRepository.updateStatus(transaction.id, "failed");
       await this.walletService.creditWallet(
@@ -1438,6 +1443,7 @@ export class BillPaymentService {
       reference,
       amount: totalAmount,
       direction: "DEBIT",
+      provider: service.name,
       type: "e_pin",
       remark: `E-Pin: ${product.name} for Profile ${data.profileId}`,
       purpose: "e_pin_purchase",

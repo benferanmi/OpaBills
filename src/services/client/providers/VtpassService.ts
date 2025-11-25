@@ -538,15 +538,12 @@ export class VTPassService {
         phone: data.phone,
       });
 
-      console.log(response.data);
 
       const result = this.handleTransactionResponse(
         response.data,
         "Electricity payment"
       );
 
-      // console.log(result, "this is result");
-      console.log(response.data?.token, "this is token");
 
       // Add token if available
       if (result.success && response.data?.token) {

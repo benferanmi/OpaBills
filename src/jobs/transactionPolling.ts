@@ -20,20 +20,3 @@ export function startTransactionPolling(): void {
 
   logger.info("Transaction polling cron job started (runs every 30 seconds)");
 }
-
-// simpler cron expression (every minute)
-
-// export function startTransactionPolling(): void {
-//   logger.info("Starting transaction polling cron job...");
-//
-//   // Run every minute
-//   cron.schedule("* * * * *", async () => {
-//     try {
-//       await pollingService.pollPendingTransactions();
-//     } catch (error: any) {
-//       logger.error("Transaction polling cron job error", error);
-//     }
-//   });
-//
-//   logger.info("Transaction polling cron job started (runs every minute)");
-// }

@@ -93,10 +93,7 @@ export class TransactionPollingService {
         true // isOrderId
       );
 
-      logger.info(
-        `Query result for ${transaction.reference}`,
-        queryResult
-      );
+      logger.info(`Query result for ${transaction.reference}`, queryResult);
 
       // Parse status
       const statusCode = parseInt(queryResult.statuscode || "0");
@@ -106,26 +103,49 @@ export class TransactionPollingService {
       if (statusCode === 200 && status === "ORDER_COMPLETED") {
         // SUCCESS
         await this.handleSuccess(transactionId, transaction, queryResult);
-      } else if (
-        statusCode >= 400 &&
-        statusCode < 600 &&
-        (status === "ORDER_ERROR" || status === "ORDER_CANCELLED")
-      ) {
-        // FAILED or CANCELLED
+      } else if (this.isFailureStatus(statusCode, status)) {
+        // FAILED, CANCELLED, or REFUNDED
         await this.handleFailure(transactionId, transaction, queryResult);
       } else {
-        // Still pending (100, 300, 201, 600-699, etc.)
+        // Still pending (100, 300, 201, etc.)
         await this.scheduleNextPoll(transactionId, polling);
       }
     } catch (error: any) {
-      logger.error(
-        `Error polling transaction ${transaction.reference}`,
-        error
-      );
+      logger.error(`Error polling transaction ${transaction.reference}`, error);
 
       // On error, schedule next poll (don't stop polling)
       await this.scheduleNextPoll(transactionId, polling);
     }
+  }
+
+  /**
+   * Check if status indicates failure/cancellation/refund
+   */
+  private isFailureStatus(statusCode: number, status: string): boolean {
+    // Handle explicit failure statuses
+    const failureStatuses = [
+      "ORDER_ERROR",
+      "ORDER_CANCELLED",
+      "ORDER_REFUNDED",
+      "ORDER_FAILED",
+    ];
+
+    // Status code 800 = ORDER_REFUNDED (transaction failed and was refunded)
+    if (statusCode === 800) {
+      return true;
+    }
+
+    // Standard error codes (400-599)
+    if (statusCode >= 400 && statusCode < 600) {
+      return true;
+    }
+
+    // Check explicit failure status strings
+    if (failureStatuses.includes(status)) {
+      return true;
+    }
+
+    return false;
   }
 
   /**
@@ -136,9 +156,7 @@ export class TransactionPollingService {
     transaction: any,
     queryResult: any
   ): Promise<void> {
-    logger.info(
-      `Transaction ${transaction.reference} completed successfully`
-    );
+    logger.info(`Transaction ${transaction.reference} completed successfully`);
 
     await this.transactionRepository.update(transactionId, {
       status: "success",
@@ -172,7 +190,7 @@ export class TransactionPollingService {
     queryResult: any
   ): Promise<void> {
     logger.warn(
-      `Transaction ${transaction.reference} failed`,
+      `Transaction ${transaction.reference} failed - Status: ${queryResult.status} (${queryResult.statuscode})`,
       queryResult
     );
 
@@ -189,6 +207,7 @@ export class TransactionPollingService {
       "polling.stoppedAt": new Date(),
       "polling.stopReason": "failed",
       "polling.lastPolledAt": new Date(),
+      failureReason: queryResult.remark || queryResult.status,
     });
 
     // Send failure notification
@@ -201,6 +220,7 @@ export class TransactionPollingService {
           transactionType: this.getTransactionTypeLabel(transaction.type),
           amount: transaction.amount,
           reference: transaction.reference,
+          reason: queryResult.remark || "Transaction failed",
         },
       });
     }
@@ -240,13 +260,10 @@ export class TransactionPollingService {
       "polling.nextPollAt": nextPollAt,
     });
 
-    logger.info(
-      `Scheduled next poll for transaction ${transactionId}`,
-      {
-        pollCount,
-        nextPollAt,
-      }
-    );
+    logger.info(`Scheduled next poll for transaction ${transactionId}`, {
+      pollCount,
+      nextPollAt,
+    });
   }
 
   /**
