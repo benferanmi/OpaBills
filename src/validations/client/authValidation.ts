@@ -78,6 +78,11 @@ export const updatePinSchema = Joi.object({
   password: Joi.string().required(),
 });
 
+export const changePinSchema = Joi.object({
+  oldPin: Joi.string().length(4).pattern(/^\d+$/).required(),
+  newPin: Joi.string().length(4).pattern(/^\d+$/).required(),
+});
+
 export const setPinSchema = Joi.object({
   pin: Joi.string().length(4).pattern(/^\d+$/).required(),
 });

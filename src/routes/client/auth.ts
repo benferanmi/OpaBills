@@ -18,6 +18,7 @@ import {
   toggle2FASchema,
   verifyOTPAppSchema,
   changeAppPasswordSchema,
+  changePinSchema,
 } from "@/validations/client/authValidation";
 
 const router = Router();
@@ -96,6 +97,13 @@ router.put(
   authenticate,
   validateRequest(updatePinSchema),
   authController.updatePin
+);
+
+router.put(
+  "/pin/change",
+  authenticate,
+  validateRequest(changePinSchema),
+  authController.changePin
 );
 
 router.post(

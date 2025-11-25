@@ -20,7 +20,7 @@ import { Types } from "mongoose";
 import { WalletRepository } from "@/repositories/WalletRepository";
 import { CacheService } from "../CacheService";
 import { OTPService } from "../OTPService";
-import { valid } from "joi";
+
 
 export interface RegisterDTO {
   firstname: string;
@@ -77,6 +77,12 @@ export interface UpdatePinDTO {
 export interface VerifyPinDTO {
   userId: string;
   pin: string;
+}
+
+export interface ChangePinDTO {
+  userId: string;
+  oldPin: string;
+  newPin: string;
 }
 
 export interface Toggle2FADTO {
@@ -713,6 +719,57 @@ export class AuthService {
 
     // Hash PIN
     const hashedPin = await hashPassword(data.pin);
+
+    await User.findByIdAndUpdate(data.userId, {
+      pin: hashedPin,
+      pinActivatedAt: new Date(),
+    });
+
+    // Fetch updated user and update cache
+    const updatedUser = await this.userRepository.findById(data.userId);
+    if (updatedUser) {
+      const userDetails = await this.formatUserDetails(updatedUser);
+      if (userDetails) {
+        await this.cacheService.set(
+          CACHE_KEYS.USER_PROFILE(data.userId),
+          userDetails
+        );
+      }
+    }
+
+    return { user: updatedUser };
+  }
+
+  async changePin(data: ChangePinDTO): Promise<any> {
+    const user = await this.userRepository.findById(data.userId);
+    if (!user) {
+      throw new AppError(
+        "User not found",
+        HTTP_STATUS.NOT_FOUND,
+        ERROR_CODES.NOT_FOUND
+      );
+    }
+
+    if (!user.pin) {
+      throw new AppError(
+        "Kindly Set Your Pin",
+        HTTP_STATUS.BAD_REQUEST,
+        ERROR_CODES.VALIDATION_ERROR
+      )
+    }
+
+    // Verify old PIN
+    const isPinValid = await comparePassword(data.oldPin, user.pin);
+    if (!isPinValid) {
+      throw new AppError(
+        "Invalid old PIN",
+        HTTP_STATUS.UNAUTHORIZED,
+        ERROR_CODES.INVALID_CREDENTIALS
+      );
+    }
+
+    // Hash new PIN
+    const hashedPin = await hashPassword(data.newPin);
 
     await User.findByIdAndUpdate(data.userId, {
       pin: hashedPin,

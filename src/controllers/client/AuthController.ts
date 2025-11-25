@@ -81,28 +81,27 @@ export class AuthController {
       const { otp, email } = req.body;
       const result = await this.authService.verifyResetOTP(otp, email);
       return sendSuccessResponse(res, result, "OTP verified successfully");
-    }
-   catch (error) {
+    } catch (error) {
       next(error);
     }
-  }
+  };
   changeAppPassword = async (
-    req: AuthRequest,    
+    req: AuthRequest,
     res: Response,
     next: NextFunction
   ) => {
     try {
       const { password, email } = req.body;
-      await this.authService.changeAppPassword( password, email );
+      await this.authService.changeAppPassword(password, email);
       return sendSuccessResponse(res, null, "Password changed successfully");
     } catch (error) {
       next(error);
     }
-  }
+  };
 
   changePassword = async (
     req: AuthRequest,
-    res: Response,      
+    res: Response,
     next: NextFunction
   ) => {
     try {
@@ -183,6 +182,16 @@ export class AuthController {
       const userId = req.user!.id;
       const result = await this.authService.updatePin({ ...req.body, userId });
       return sendSuccessResponse(res, result, "PIN updated successfully");
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  changePin = async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const userId = req.user!.id;
+      const result = await this.authService.changePin({ ...req.body, userId });
+      return sendSuccessResponse(res, result, "PIN changed successfully");
     } catch (error) {
       next(error);
     }
