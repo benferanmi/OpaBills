@@ -155,6 +155,7 @@ jobs:
             echo "SAFEHAVEN_SWEEP_ACCOUNT=${{ secrets.SAFEHAVEN_SWEEP_ACCOUNT }}" >> ${{ secrets.PROD_ENV_PATH }}
             echo "SAFEHAVEN_BANK_NAME=${{ secrets.SAFEHAVEN_BANK_NAME }}" >> ${{ secrets.PROD_ENV_PATH }}
             echo "SAFEHAVEN_BANK_CODE=${{ secrets.SAFEHAVEN_BANK_CODE }}" >> ${{ secrets.PROD_ENV_PATH }}
+            echo "SAVEHAVEN_SANDBOX=${{ secrets.SAVEHAVEN_SANDBOX }}" >> ${{ secrets.PROD_ENV_PATH }}
             echo "SUPER_ADMIN_EMAIL=${{ secrets.SUPER_ADMIN_EMAIL }}" >> ${{ secrets.PROD_ENV_PATH }}
             echo "SUPER_ADMIN_PASSWORD=${{ secrets.SUPER_ADMIN_PASSWORD }}" >> ${{ secrets.PROD_ENV_PATH }}
             echo "SUPER_ADMIN_FIRST_NAME=${{ secrets.SUPER_ADMIN_FIRST_NAME }}" >> ${{ secrets.PROD_ENV_PATH }}
