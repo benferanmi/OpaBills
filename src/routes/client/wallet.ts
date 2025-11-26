@@ -15,6 +15,7 @@ import {
   transferSchema,
 } from "@/validations/client/walletValidation";
 import { VirtualAccountController } from "@/controllers/client/VirtualAccountController ";
+import { checkAndVerifyPin } from "@/middlewares/checkAndVerifyPin";
 
 const router = Router();
 const walletController = new WalletController();
@@ -65,15 +66,17 @@ router.post("/beneficiaries/search", walletController.searchBeneficiaries);
 // Withdrawal & bank transfer
 router.post(
   "/withdraw",
-  rateLimiter(3, 60000),
+  // rateLimiter(3, 60000),
+  checkAndVerifyPin,
   walletLock,
   profileComplete,
   walletController.withdrawFunds
 );
 router.post(
   "/bank-transfer",
-  rateLimiter(5, 60000),
+  // rateLimiter(5, 60000),
   validateRequest(bankTransferSchema),
+  checkAndVerifyPin,
   walletLock,
   profileComplete,
   walletController.bankTransfer

@@ -31,6 +31,7 @@ const BankAccountSchema = new Schema<IBankAccount>(
 BankAccountSchema.index({ userId: 1, accountNumber: 1 }, { unique: true });
 BankAccountSchema.index({ userId: 1 });
 BankAccountSchema.index({ bankId: 1 });
+BankAccountSchema.index({ bankCode: 1 });
 
 export const BankAccount = mongoose.model<IBankAccount>(
   "BankAccount",

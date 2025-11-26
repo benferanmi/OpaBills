@@ -5,17 +5,20 @@ import { PaymentService } from "@/services/client/PaymentService";
 import { VirtualAccountService } from "@/services/client/VirtualAccountService";
 import { WithdrawalService } from "@/services/client/WithdrawalService";
 import { sendSuccessResponse } from "@/utils/helpers";
+import { DepositService } from "@/services/client/DepositService";
 
 export class WalletController {
   private walletService: WalletService;
   private paymentService: PaymentService;
   private virtualAccountService: VirtualAccountService;
   private withdrawalService: WithdrawalService;
+  private depositService: DepositService;
   constructor() {
     this.walletService = new WalletService();
     this.paymentService = new PaymentService();
     this.virtualAccountService = new VirtualAccountService();
     this.withdrawalService = new WithdrawalService();
+    this.depositService = new DepositService();
   }
 
   getWallet = async (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -211,7 +214,6 @@ export class WalletController {
       next(error);
     }
   };
-
   recordDeposit = async (
     req: AuthRequest,
     res: Response,
@@ -220,17 +222,23 @@ export class WalletController {
     try {
       const userId = req.user!.id;
       const { amount, provider, proof } = req.body;
-      // This would create a deposit request that needs admin approval
+
+      const depositRequest = await this.depositService.createDepositRequest({
+        userId,
+        amount,
+        provider,
+        proof,
+      });
+
       return sendSuccessResponse(
         res,
-        { message: "Deposit request submitted" },
+        depositRequest,
         "Deposit request created successfully"
       );
     } catch (error) {
       next(error);
     }
   };
-
   transferFunds = async (
     req: AuthRequest,
     res: Response,
@@ -313,7 +321,7 @@ export class WalletController {
     try {
       const userId = req.user!.id;
       const { amount, bankAccountId, provider } = req.body;
-      const result = await this.withdrawalService.createWithdrawalRequest({
+      const result = await this.withdrawalService.withdrawFunds({
         userId,
         amount,
         bankAccountId,
@@ -338,10 +346,9 @@ export class WalletController {
       const userId = req.user!.id;
       const { amount, bankCode, provider, accountNumber, accountName, pin } =
         req.body;
-      const result = await this.withdrawalService.bankTransferRequest({
+      const result = await this.withdrawalService.bankTransfer({
         userId,
         amount,
-        pin,
         accountNumber,
         accountName,
         bankCode,

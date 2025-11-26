@@ -11,6 +11,7 @@ import { MonnifyService } from "./MonnifyService";
 import { FlutterwaveService } from "./FlutterwaveService";
 import { ProviderService } from "./ProviderService";
 import { Transaction } from "@/models/wallet/Transaction";
+import { TransactionRepository } from "@/repositories/TransactionRepository";
 
 export interface InitializePaymentDTO {
   userId: string;
@@ -34,6 +35,7 @@ export interface ProcessWithdrawalDTO {
 export class PaymentService {
   private walletService: WalletService;
   private notificationRepository: NotificationRepository;
+  private transactionRepository: TransactionRepository;
   private saveHavenService: SaveHavenService;
   private monnifyService: MonnifyService;
   private flutterwaveService: FlutterwaveService;
@@ -46,6 +48,7 @@ export class PaymentService {
     this.monnifyService = new MonnifyService();
     this.flutterwaveService = new FlutterwaveService();
     this.providerService = new ProviderService();
+    this.transactionRepository = new TransactionRepository();
   }
   async getProviders(): Promise<any> {
     const result = await this.providerService.getServicesByServiceTypeCode(
@@ -337,7 +340,7 @@ export class PaymentService {
 
       // Create Transaction record (what user sees!)
       const transactionReference = generateReference("TXN");
-      await Transaction.create({
+      await this.transactionRepository.create({
         walletId: wallet._id,
         sourceId: payment.userId,
         reference: transactionReference,

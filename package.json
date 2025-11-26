@@ -8,6 +8,8 @@
     "create:role": "ts-node src/seeders/createSuperAdminRole.ts",
     "seed:crypto": "ts-node src/scripts/seedCrypto.ts",
     "seed:location": "ts-node src/scripts/seedReferenceData.ts",
+    "update:banks": "ts-node src/scripts/updatebanks.ts",
+    "cleanup:duplicateBanks": "ts-node src/scripts/cleanupDuplicateBanks.ts",
     "update:countries": "ts-node src/scripts/updateCountryWithFlag.ts",
     "build": "tsc && tsc-alias",
     "start": "node dist/server.js"

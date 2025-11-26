@@ -27,7 +27,6 @@ import cryptoTransactionRoutes from './crypto-transactions';
 // Banking
 import bankAccountRoutes from './bankaccounts';
 import depositRoutes from './deposit';
-import withdrawalRoutes from './withdrawal';
 
 // Travel
 import flightRoutes from './flights';
@@ -76,7 +75,6 @@ router.use('/crypto-transactions', cryptoTransactionRoutes);
 // Banking
 router.use('/bank-accounts', bankAccountRoutes);
 router.use('/deposits', depositRoutes);
-router.use('/withdrawals', withdrawalRoutes);
 
 // Travel
 router.use('/flights', flightRoutes);

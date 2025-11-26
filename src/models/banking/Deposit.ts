@@ -1,7 +1,6 @@
 import mongoose, { Schema, Document, Types } from "mongoose";
 
 export interface IDeposit extends Document {
-  _id: string;
   userId: Types.ObjectId;
   walletId: Types.ObjectId;
   reference: string;
@@ -20,10 +19,6 @@ export interface IDeposit extends Document {
 
 const depositSchema = new Schema<IDeposit>(
   {
-    _id: {
-      type: String,
-      required: true,
-    },
     userId: {
       type: Schema.Types.ObjectId,
       ref: "User",
@@ -76,7 +71,6 @@ const depositSchema = new Schema<IDeposit>(
   },
   {
     timestamps: true,
-    _id: false,
   }
 );
 

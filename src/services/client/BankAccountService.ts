@@ -4,7 +4,7 @@ import { HTTP_STATUS, ERROR_CODES } from "@/utils/constants";
 import { Types } from "mongoose";
 import { SaveHavenService } from "./SaveHavenService";
 import { MonnifyService } from "./MonnifyService";
-
+import { BankRepository } from "@/repositories/BankRepository";
 export interface CreateBankAccountDTO {
   userId: Types.ObjectId;
   bankId?: Types.ObjectId;
@@ -18,10 +18,12 @@ export class BankAccountService {
   private bankAccountRepository: BankAccountRepository;
   private saveHavenService: SaveHavenService;
   private monnifyService: MonnifyService;
+  private bankRepository: BankRepository;
   constructor() {
     this.bankAccountRepository = new BankAccountRepository();
     this.saveHavenService = new SaveHavenService();
     this.monnifyService = new MonnifyService();
+    this.bankRepository = new BankRepository();
   }
 
   async createBankAccount(data: CreateBankAccountDTO): Promise<any> {
@@ -30,7 +32,7 @@ export class BankAccountService {
       data.userId,
       data.accountNumber
     );
-  if (existing) {
+    if (existing) {
       throw new AppError(
         "Bank account already exists",
         HTTP_STATUS.CONFLICT,
@@ -80,7 +82,27 @@ export class BankAccountService {
 
   async getUserBankAccounts(userId: string): Promise<any> {
     const accounts = await this.bankAccountRepository.findByUserId(userId);
-    return accounts;
+
+    if (!accounts || accounts.length === 0) {
+      return accounts;
+    }
+
+    // Fetch bank details for all accounts in parallel
+    const accountsWithBankNames = await Promise.all(
+      accounts.map(async (account) => {
+        const bank = await this.bankRepository.findBySavehavenCode(
+          account.bankCode
+        );
+
+        const plainAccount = account.toObject ? account.toObject() : account;
+        return {
+          ...plainAccount,
+          bankName: bank?.name || "Unknown Bank",
+        };
+      })
+    );
+
+    return accountsWithBankNames;
   }
 
   async getBankAccount(accountId: string): Promise<any> {

@@ -8,10 +8,10 @@ import { HTTP_STATUS, ERROR_CODES } from "@/utils/constants";
 import { generateReference } from "@/utils/helpers";
 import { Types } from "mongoose";
 import { Bank } from "@/models/reference/Bank";
-import { comparePassword } from "@/utils/cryptography";
 import { UserRepository } from "@/repositories/UserRepository";
 import { PaymentService } from "./PaymentService";
 import logger from "@/logger";
+import { BankRepository } from "@/repositories/BankRepository";
 
 export class WithdrawalService {
   private bankAccountRepository: BankAccountRepository;
@@ -20,8 +20,8 @@ export class WithdrawalService {
   private userRepository: UserRepository;
   private paymentService: PaymentService;
   private transactionRepository: TransactionRepository;
-  private BankModel: typeof Bank;
-  
+  private bankRepository: BankRepository;
+
   constructor(BankModel = Bank) {
     this.bankAccountRepository = new BankAccountRepository();
     this.walletService = new WalletService();
@@ -29,10 +29,10 @@ export class WithdrawalService {
     this.userRepository = new UserRepository();
     this.paymentService = new PaymentService();
     this.transactionRepository = new TransactionRepository();
-    this.BankModel = BankModel;
+    this.bankRepository = new BankRepository();
   }
 
-  async createWithdrawalRequest(data: {
+  async withdrawFunds(data: {
     userId: string;
     amount: number;
     bankAccountId: string;
@@ -62,7 +62,9 @@ export class WithdrawalService {
     }
 
     // Get bank details
-    const bank = await this.BankModel.findById(bankAccount.bankId.toString());
+    const bank = await this.bankRepository.findBySavehavenCode(
+      bankAccount.bankCode
+    );
     if (!bank) {
       throw new AppError(
         "Bank not found",
@@ -98,6 +100,15 @@ export class WithdrawalService {
       "main"
     );
 
+    let bankCode;
+    if (data.provider === "saveHaven") {
+      bankCode = bank.savehavenCode;
+    } else if (data.provider === "monnify") {
+      bankCode = bank.monnifyCode;
+    } else {
+      bankCode = bank.flutterwaveCode;
+    }
+
     // Create Transaction record
     const transaction = await Transaction.create({
       walletId: wallet._id,
@@ -107,13 +118,14 @@ export class WithdrawalService {
       direction: "DEBIT",
       type: "withdrawal",
       provider: data.provider || "flutterwave",
+      remark: `Withdrawal to ${bankAccount.accountNumber} (${bank.name})`,
       status: "processing",
       purpose: "withdrawal",
       meta: {
         accountNumber: bankAccount.accountNumber,
         accountName: bankAccount.accountName,
         bankName: bank.name,
-        bankCode: bank.flutterwaveCode,
+        bankCode,
       },
     });
 
@@ -124,7 +136,7 @@ export class WithdrawalService {
         amount: data.amount,
         accountNumber: bankAccount.accountNumber,
         accountName: bankAccount.accountName,
-        bankCode: bank.flutterwaveCode!,
+        bankCode: bankCode!,
         bankName: bank.name,
         reference,
         provider: data.provider || "flutterwave",
@@ -158,7 +170,7 @@ export class WithdrawalService {
       return {
         ...transaction.toObject(),
         status: "processing",
-        paymentDetails: result,
+        // paymentDetails: result,
       };
     } catch (error: any) {
       // Revert wallet debit
@@ -201,10 +213,9 @@ export class WithdrawalService {
     }
   }
 
-  async bankTransferRequest(data: {
+  async bankTransfer(data: {
     userId: string;
     amount: number;
-    pin?: string;
     accountNumber: string;
     accountName?: string;
     bankCode: string;
@@ -212,30 +223,12 @@ export class WithdrawalService {
   }) {
     const reference = generateReference("BTR");
 
-    if (!data.pin) {
-      throw new AppError(
-        "Pin is required",
-        HTTP_STATUS.BAD_REQUEST,
-        ERROR_CODES.VALIDATION_ERROR
-      );
-    }
-
     const user = await this.userRepository.findById(data.userId);
     if (!user) {
       throw new AppError(
         "User not found",
         HTTP_STATUS.NOT_FOUND,
         ERROR_CODES.NOT_FOUND
-      );
-    }
-
-    // Checking pin validity
-    const isPinValid = await comparePassword(data.pin, user.pin!);
-    if (!isPinValid) {
-      throw new AppError(
-        "Invalid PIN",
-        HTTP_STATUS.BAD_REQUEST,
-        ERROR_CODES.VALIDATION_ERROR
       );
     }
 
@@ -258,10 +251,8 @@ export class WithdrawalService {
       );
     }
 
-    // Get bank details
-    const bank = await this.BankModel.findOne({
-      flutterwaveCode: data.bankCode,
-    });
+    const bank = await this.bankRepository.findBySavehavenCode(data.bankCode);
+
     if (!bank) {
       throw new AppError(
         "Bank not found",
@@ -287,6 +278,17 @@ export class WithdrawalService {
       "main"
     );
 
+    let bankCode;
+    if (data.provider === "saveHaven") {
+      bankCode = bank.savehavenCode;
+    } else if (data.provider === "monnify") {
+      bankCode = bank.monnifyCode;
+    } else if (data.provider === "flutterwave") {
+      bankCode = bank.flutterwaveCode;
+    } else {
+      bankCode = bank.savehavenCode;
+    }
+
     // Create transaction record
     const transaction = await Transaction.create({
       walletId: wallet._id,
@@ -295,14 +297,14 @@ export class WithdrawalService {
       amount: data.amount,
       direction: "DEBIT",
       type: "bank_transfer",
-      provider: data.provider || "flutterwave",
+      provider: data.provider || "saveHaven",
       status: "pending",
       purpose: "bank_transfer",
       meta: {
         accountName: data.accountName,
         accountNumber: data.accountNumber,
         bankName: bank.name,
-        bankCode: data.bankCode,
+        bankCode,
       },
     });
 
@@ -313,10 +315,10 @@ export class WithdrawalService {
         amount: data.amount,
         accountNumber: data.accountNumber,
         accountName: data.accountName,
-        bankCode: data.bankCode,
+        bankCode: bankCode!,
         bankName: bank.name,
         reference,
-        provider: data.provider || "flutterwave",
+        provider: data.provider || "saveHaven",
       });
 
       // Update transaction with payment details
@@ -349,7 +351,7 @@ export class WithdrawalService {
       return {
         ...transaction.toObject(),
         status: "processing",
-        paymentDetails: result,
+        // paymentDetails: result,
       };
     } catch (error: any) {
       // Revert wallet debit if payment processing fails
