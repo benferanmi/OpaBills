@@ -1,7 +1,6 @@
 import mongoose, { Schema, Document, Types } from "mongoose";
 
 export interface IVirtualAccount extends Document {
-  _id: string; // UUID
   userId: Types.ObjectId;
   provider: string;
   bankCode?: string;

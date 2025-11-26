@@ -30,7 +30,7 @@ export class BankAccountService {
       data.userId,
       data.accountNumber
     );
-    if (existing) {
+  if (existing) {
       throw new AppError(
         "Bank account already exists",
         HTTP_STATUS.CONFLICT,

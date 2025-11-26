@@ -55,7 +55,7 @@ export class PaymentService {
   }
   async initializePayment(data: InitializePaymentDTO): Promise<any> {
     const reference = generateReference("PAY");
-    const provider = data.provider || "flutterwave";
+    const provider = data.provider || "saveHaven";
 
     // Get user details for virtual account creation
     const user = await User.findById(data.userId);
