@@ -47,18 +47,6 @@ export class ReportController {
     }
   };
 
-  getDepositWithdrawalReport = async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { startDate, endDate } = req.query;
-      const start = new Date(startDate as string);
-      const end = new Date(endDate as string);
-      
-      const report = await this.reportService.getDepositWithdrawalReport(start, end);
-      res.json(report);
-    } catch (error) {
-      next(error);
-    }
-  };
 
   getCryptoGiftCardReport = async (req: Request, res: Response, next: NextFunction) => {
     try {

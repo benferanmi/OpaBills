@@ -1,19 +1,20 @@
 import { Payment } from "@/models/wallet/Payment";
+import { Transaction } from "@/models/wallet/Transaction";
 import { NotificationRepository } from "@/repositories/NotificationRepository";
+import { TransactionRepository } from "@/repositories/TransactionRepository";
 import logger from "@/logger";
 import { Types } from "mongoose";
 import { WebhookProcessResult } from "./FlutterwaveWebhookProcessor";
 import { generateReference } from "@/utils/helpers";
 import { VirtualAccount } from "@/models/banking/VirtualAccount";
 import { WalletService } from "../WalletService";
-import { WithdrawalRequest } from "@/models/banking/WithdrawalRequest";
 
 /**
  * FLUTTERWAVE WEBHOOK SERVICE
  * 
  * Purpose: Handle business logic for Flutterwave webhook events
  * Responsibilities:
- * - Find or create Payment/WithdrawalRequest records
+ * - Find or create Payment/Transaction records
  * - Check idempotency (prevent duplicate processing)
  * - Update database records
  * - Credit/debit wallets
@@ -25,15 +26,18 @@ import { WithdrawalRequest } from "@/models/banking/WithdrawalRequest";
  * - handleFailedCharge (failed payment)
  * - handleSuccessfulTransfer (withdrawal success)
  * - handleFailedTransfer (withdrawal failure)
+ * - handleReversedTransfer (withdrawal reversal)
  */
 
 export class FlutterwaveWebhookService {
   private walletService: WalletService;
   private notificationRepository: NotificationRepository;
+  private transactionRepository: TransactionRepository;
 
   constructor() {
     this.walletService = new WalletService();
     this.notificationRepository = new NotificationRepository();
+    this.transactionRepository = new TransactionRepository();
   }
 
   /**
@@ -404,7 +408,7 @@ export class FlutterwaveWebhookService {
 
   /**
    * Handle successful transfer (withdrawal)
-   * Update payment and withdrawal records
+   * Update payment and withdrawal transaction records
    */
   private async handleSuccessfulTransfer(webhookData: WebhookProcessResult): Promise<void> {
     const { reference, providerTransactionId, metadata } = webhookData;
@@ -442,16 +446,21 @@ export class FlutterwaveWebhookService {
       }
 
       // ===
-      // STEP 3: Find WithdrawalRequest Record
+      // STEP 3: Find Transaction Record
       // ===
-      const withdrawal = await WithdrawalRequest.findOne({
+      const transaction = await this.transactionRepository.findOne({
         reference,
+        type: { $in: ["withdrawal", "bank_transfer"] },
         provider: "flutterwave",
       });
 
-      if (!withdrawal) {
-        logger.error("WithdrawalRequest not found for successful transfer", { reference });
-        return;
+      if (!transaction) {
+        logger.warn("Withdrawal Transaction not found for successful transfer", { reference });
+      } else {
+        logger.info("Found Withdrawal Transaction record", {
+          transactionId: transaction._id,
+          reference,
+        });
       }
 
       // ===
@@ -468,45 +477,52 @@ export class FlutterwaveWebhookService {
 
       await payment.save();
 
-      // ===
-      // STEP 5: Update WithdrawalRequest Record
-      // ===
-      withdrawal.status = "approved";
-      withdrawal.meta = {
-        ...withdrawal.meta,
-        paymentReference: payment.reference,
-        transferId: metadata.transferId,
-        completedAt: new Date(),
-      };
-
-      await withdrawal.save();
-
-      logger.info("Flutterwave withdrawal completed successfully", {
+      logger.info("Flutterwave payment updated to success", {
+        paymentId: payment._id,
         reference,
-        amount: withdrawal.amount,
-        userId: withdrawal.userId,
       });
+
+      // ===
+      // STEP 5: Update Transaction Record
+      // ===
+      if (transaction) {
+        await this.transactionRepository.update(transaction.id.toString(), {
+          status: "success",
+          providerReference: metadata.transferId,
+          meta: {
+            ...transaction.meta,
+            paymentReference: payment.reference,
+            transferId: metadata.transferId,
+            completedAt: new Date(),
+          },
+        });
+
+        logger.info("Withdrawal Transaction updated to success", {
+          transactionId: transaction._id,
+          reference,
+        });
+      }
 
       // ===
       // STEP 6: Send Success Notification
       // ===
+      const userId = transaction?.sourceId || payment.userId;
+      
       await this.notificationRepository.create({
-        type: "withdrawal_success",
+        type: "withdrawal_completed",
         notifiableType: "User",
-        notifiableId: withdrawal.userId,
+        notifiableId: userId,
         data: {
-          transactionType: "WithdrawalRequest",
-          amount: withdrawal.amount,
-          reference: withdrawal.reference,
+          transactionType: transaction?.type === "bank_transfer" ? "Bank Transfer" : "Withdrawal",
+          amount: transaction?.amount || payment.amount,
+          reference: reference,
           provider: "flutterwave",
-          accountNumber: withdrawal.accountNumber,
-          bankName: withdrawal.bankName,
         },
       });
 
       logger.info("Flutterwave transfer processed successfully", {
         reference,
-        userId: withdrawal.userId,
+        userId,
       });
     } catch (error: any) {
       logger.error("Error handling Flutterwave successful transfer", {
@@ -547,16 +563,21 @@ export class FlutterwaveWebhookService {
       }
 
       // ===
-      // STEP 2: Find WithdrawalRequest Record
+      // STEP 2: Find Transaction Record
       // ===
-      const withdrawal = await WithdrawalRequest.findOne({
+      const transaction = await this.transactionRepository.findOne({
         reference,
+        type: { $in: ["withdrawal", "bank_transfer"] },
         provider: "flutterwave",
       });
 
-      if (!withdrawal) {
-        logger.error("WithdrawalRequest not found for failed transfer", { reference });
-        return;
+      if (!transaction) {
+        logger.warn("Withdrawal Transaction not found for failed transfer", { reference });
+      } else {
+        logger.info("Found Withdrawal Transaction record", {
+          transactionId: transaction._id,
+          reference,
+        });
       }
 
       // ===
@@ -571,37 +592,47 @@ export class FlutterwaveWebhookService {
 
       await payment.save();
 
-      // ===
-      // STEP 4: Update WithdrawalRequest Record
-      // ===
-      withdrawal.status = "failed";
-      withdrawal.meta = {
-        ...withdrawal.meta,
-        error: metadata.failureReason || "Transfer failed",
-        failedAt: new Date(),
-      };
-
-      await withdrawal.save();
-
-      logger.info("Flutterwave withdrawal marked as failed", {
+      logger.info("Flutterwave payment marked as failed", {
+        paymentId: payment._id,
         reference,
-        reason: metadata.failureReason,
       });
+
+      // ===
+      // STEP 4: Update Transaction Record
+      // ===
+      if (transaction) {
+        await this.transactionRepository.update(transaction.id.toString(), {
+          status: "failed",
+          meta: {
+            ...transaction.meta,
+            error: metadata.failureReason || "Transfer failed",
+            failedAt: new Date(),
+          },
+        });
+
+        logger.info("Withdrawal Transaction marked as failed", {
+          transactionId: transaction._id,
+          reference,
+        });
+      }
 
       // ===
       // STEP 5: REFUND WALLET
       // CRITICAL: Return money to user's wallet
       // ===
+      const userId = transaction?.sourceId || payment.userId;
+      const amount = transaction?.amount || payment.amount;
+
       await this.walletService.creditWallet(
-        withdrawal.userId,
-        withdrawal.amount,
-        `WithdrawalRequest refund - ${reference} (Flutterwave transfer failed)`,
+        userId,
+        amount,
+        `Withdrawal refund - ${reference} (Flutterwave transfer failed)`,
         "main"
       );
 
       logger.info("Wallet refunded for failed withdrawal", {
-        userId: withdrawal.userId,
-        amount: withdrawal.amount,
+        userId,
+        amount,
         reference,
       });
 
@@ -611,14 +642,12 @@ export class FlutterwaveWebhookService {
       await this.notificationRepository.create({
         type: "withdrawal_failed",
         notifiableType: "User",
-        notifiableId: withdrawal.userId,
+        notifiableId: userId,
         data: {
-          transactionType: "WithdrawalRequest",
-          amount: withdrawal.amount,
-          reference: withdrawal.reference,
+          transactionType: transaction?.type === "bank_transfer" ? "Bank Transfer" : "Withdrawal",
+          amount: amount,
+          reference: reference,
           provider: "flutterwave",
-          accountNumber: withdrawal.accountNumber,
-          bankName: withdrawal.bankName,
           reason: metadata.failureReason || "Transfer failed",
           refunded: true,
         },
@@ -626,7 +655,7 @@ export class FlutterwaveWebhookService {
 
       logger.info("Flutterwave failed transfer processed", {
         reference,
-        userId: withdrawal.userId,
+        userId,
         refunded: true,
       });
     } catch (error: any) {
@@ -668,16 +697,21 @@ export class FlutterwaveWebhookService {
       }
 
       // ===
-      // STEP 2: Find WithdrawalRequest Record
+      // STEP 2: Find Transaction Record
       // ===
-      const withdrawal = await WithdrawalRequest.findOne({
+      const transaction = await this.transactionRepository.findOne({
         reference,
+        type: { $in: ["withdrawal", "bank_transfer"] },
         provider: "flutterwave",
       });
 
-      if (!withdrawal) {
-        logger.error("WithdrawalRequest not found for reversed transfer", { reference });
-        return;
+      if (!transaction) {
+        logger.warn("Withdrawal Transaction not found for reversed transfer", { reference });
+      } else {
+        logger.info("Found Withdrawal Transaction record", {
+          transactionId: transaction._id,
+          reference,
+        });
       }
 
       // ===
@@ -692,36 +726,46 @@ export class FlutterwaveWebhookService {
 
       await payment.save();
 
-      // ===
-      // STEP 4: Update WithdrawalRequest Record
-      // ===
-      withdrawal.status = "reversed";
-      withdrawal.meta = {
-        ...withdrawal.meta,
-        reversedAt: new Date(),
-        reversalReason: metadata.failureReason || "Transfer reversed",
-      };
-
-      await withdrawal.save();
-
-      logger.info("Flutterwave withdrawal marked as reversed", {
+      logger.info("Flutterwave payment marked as reversed", {
+        paymentId: payment._id,
         reference,
-        reason: metadata.failureReason,
       });
+
+      // ===
+      // STEP 4: Update Transaction Record
+      // ===
+      if (transaction) {
+        await this.transactionRepository.update(transaction.id.toString(), {
+          status: "reversed",
+          meta: {
+            ...transaction.meta,
+            reversedAt: new Date(),
+            reversalReason: metadata.failureReason || "Transfer reversed",
+          },
+        });
+
+        logger.info("Withdrawal Transaction marked as reversed", {
+          transactionId: transaction._id,
+          reference,
+        });
+      }
 
       // ===
       // STEP 5: REFUND WALLET (if not already refunded)
       // ===
+      const userId = transaction?.sourceId || payment.userId;
+      const amount = transaction?.amount || payment.amount;
+
       await this.walletService.creditWallet(
-        withdrawal.userId,
-        withdrawal.amount,
-        `WithdrawalRequest reversal - ${reference} (Flutterwave transfer reversed)`,
+        userId,
+        amount,
+        `Withdrawal reversal - ${reference} (Flutterwave transfer reversed)`,
         "main"
       );
 
       logger.info("Wallet refunded for reversed withdrawal", {
-        userId: withdrawal.userId,
-        amount: withdrawal.amount,
+        userId,
+        amount,
         reference,
       });
 
@@ -731,14 +775,12 @@ export class FlutterwaveWebhookService {
       await this.notificationRepository.create({
         type: "withdrawal_reversed",
         notifiableType: "User",
-        notifiableId: withdrawal.userId,
+        notifiableId: userId,
         data: {
-          transactionType: "WithdrawalRequest",
-          amount: withdrawal.amount,
-          reference: withdrawal.reference,
+          transactionType: transaction?.type === "bank_transfer" ? "Bank Transfer" : "Withdrawal",
+          amount: amount,
+          reference: reference,
           provider: "flutterwave",
-          accountNumber: withdrawal.accountNumber,
-          bankName: withdrawal.bankName,
           reason: metadata.failureReason || "Transfer reversed",
           refunded: true,
         },
@@ -746,7 +788,7 @@ export class FlutterwaveWebhookService {
 
       logger.info("Flutterwave reversed transfer processed", {
         reference,
-        userId: withdrawal.userId,
+        userId,
         refunded: true,
       });
     } catch (error: any) {

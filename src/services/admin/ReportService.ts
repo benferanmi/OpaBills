@@ -1,7 +1,6 @@
 import { Transaction } from '@/models/wallet/Transaction';
 import { User } from '@/models/core/User';
 import { Deposit } from '@/models/banking/Deposit';
-import { WithdrawalRequest } from '@/models/banking/WithdrawalRequest';
 import { CryptoTransaction } from '@/models/crypto/CryptoTransaction';
 import { GiftCardTransaction } from '@/models/giftcard/GiftCardTransaction';
 
@@ -148,42 +147,6 @@ export class ReportService {
     };
   }
 
-  async getDepositWithdrawalReport(startDate: Date, endDate: Date) {
-    const deposits = await Deposit.aggregate([
-      {
-        $match: {
-          createdAt: { $gte: startDate, $lte: endDate },
-        },
-      },
-      {
-        $group: {
-          _id: '$status',
-          count: { $sum: 1 },
-          totalAmount: { $sum: '$amount' },
-        },
-      },
-    ]);
-
-    const withdrawals = await WithdrawalRequest.aggregate([
-      {
-        $match: {
-          createdAt: { $gte: startDate, $lte: endDate },
-        },
-      },
-      {
-        $group: {
-          _id: '$status',
-          count: { $sum: 1 },
-          totalAmount: { $sum: '$amount' },
-        },
-      },
-    ]);
-
-    return {
-      deposits,
-      withdrawals,
-    };
-  }
 
   async getCryptoGiftCardReport(startDate: Date, endDate: Date) {
     const crypto = await CryptoTransaction.aggregate([

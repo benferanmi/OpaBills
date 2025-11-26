@@ -137,6 +137,20 @@ export class NotificationService {
           data.reference
         }`;
         break;
+      case "withdrawal_failed":
+        subject = "Withdrawal Failed";
+        message = `Your withdrawal of ₦${data.amount.toLocaleString()} failed. ${
+          data.refunded ? "The amount has been refunded to your wallet." : ""
+        } Reason: ${
+          data.failureReason || data.reason || "Unknown error"
+        }. Reference: ${data.reference}`;
+        break;
+      case "withdrawal_reversed":
+        subject = "Withdrawal Reversed";
+        message = `Your withdrawal of ₦${data.amount.toLocaleString()} has been reversed by the payment provider. ${
+          data.refunded ? "The amount has been refunded to your wallet." : ""
+        } Reference: ${data.reference}`;
+        break;
       default:
         message = data.message || "You have a new notification";
     }
@@ -202,6 +216,16 @@ export class NotificationService {
       case "withdrawal_completed":
         message = `BillPadi: Your withdrawal of NGN${data.amount} has been completed. Ref: ${data.reference}`;
         break;
+      case "withdrawal_failed":
+        message = `BillPadi: Your withdrawal of NGN${data.amount} failed${
+          data.refunded ? " and was refunded" : ""
+        }. Ref: ${data.reference}`;
+        break;
+      case "withdrawal_reversed":
+        message = `BillPadi: Your withdrawal of NGN${data.amount} was reversed${
+          data.refunded ? " and refunded" : ""
+        }. Ref: ${data.reference}`;
+        break;
       default:
         message = data.message || "You have a new notification from BillPadi";
     }
@@ -245,6 +269,18 @@ export class NotificationService {
       case "withdrawal_completed":
         title = "Withdrawal Completed";
         body = `Your withdrawal of ₦${data.amount} has been completed`;
+        break;
+      case "withdrawal_failed":
+        title = "Withdrawal Failed";
+        body = `Your withdrawal of ₦${data.amount} failed${
+          data.refunded ? " and was refunded" : ""
+        }`;
+        break;
+      case "withdrawal_reversed":
+        title = "Withdrawal Reversed";
+        body = `Your withdrawal of ₦${data.amount} was reversed${
+          data.refunded ? " and refunded" : ""
+        }`;
         break;
       default:
         body = data.message || "You have a new notification";

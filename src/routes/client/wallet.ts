@@ -12,6 +12,7 @@ import {
   identificationSchema,
   verifyOtpAndCreateAccountSchema,
   walletTypeSchema,
+  transferSchema,
 } from "@/validations/client/walletValidation";
 import { VirtualAccountController } from "@/controllers/client/VirtualAccountController ";
 
@@ -54,6 +55,7 @@ router.post(
   rateLimiter(5, 60000),
   walletLock,
   profileComplete,
+  validateRequest(transferSchema),
   walletController.transferFunds
 );
 router.post("/beneficiaries/verify", walletController.verifyBeneficiary);

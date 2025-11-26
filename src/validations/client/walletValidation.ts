@@ -147,3 +147,18 @@ export const verifyOtpAndCreateAccountSchema = Joi.object({
     "any.only": "identificationType must be either 'bvn' or 'nin'",
   }),
 });
+
+export const transferSchema = Joi.object({
+  amount: Joi.number().positive().required().messages({
+    "any.required": "Amount is required",
+  }),
+  beneficiary: Joi.string().required().messages({
+    "any.required": "beneficiary is required",
+  }),
+  pin: Joi.string().required().length(4).pattern(/^\d+$/).messages({
+    "any.required": "Pin is required",
+    "string.length": "Pin must be exactly 4 digits",
+    "string.pattern.base": "Pin must contain only numbers",
+  }),
+  remark: Joi.string().allow("", null),
+});

@@ -1,12 +1,12 @@
-import { WithdrawalRepository } from "@/repositories/WithdrawalRepository";
+import { Transaction } from "@/models/wallet/Transaction";
 import { BankAccountRepository } from "@/repositories/BankAccountRepository";
 import { NotificationRepository } from "@/repositories/NotificationRepository";
+import { TransactionRepository } from "@/repositories/TransactionRepository";
 import { WalletService } from "./WalletService";
 import { AppError } from "@/middlewares/errorHandler";
 import { HTTP_STATUS, ERROR_CODES } from "@/utils/constants";
 import { generateReference } from "@/utils/helpers";
 import { Types } from "mongoose";
-import { v4 as uuidv4 } from "uuid";
 import { Bank } from "@/models/reference/Bank";
 import { comparePassword } from "@/utils/cryptography";
 import { UserRepository } from "@/repositories/UserRepository";
@@ -14,20 +14,21 @@ import { PaymentService } from "./PaymentService";
 import logger from "@/logger";
 
 export class WithdrawalService {
-  private withdrawalRepository: WithdrawalRepository;
   private bankAccountRepository: BankAccountRepository;
   private walletService: WalletService;
   private notificationRepository: NotificationRepository;
   private userRepository: UserRepository;
   private paymentService: PaymentService;
+  private transactionRepository: TransactionRepository;
   private BankModel: typeof Bank;
+  
   constructor(BankModel = Bank) {
-    this.withdrawalRepository = new WithdrawalRepository();
     this.bankAccountRepository = new BankAccountRepository();
     this.walletService = new WalletService();
     this.notificationRepository = new NotificationRepository();
     this.userRepository = new UserRepository();
     this.paymentService = new PaymentService();
+    this.transactionRepository = new TransactionRepository();
     this.BankModel = BankModel;
   }
 
@@ -35,18 +36,9 @@ export class WithdrawalService {
     userId: string;
     amount: number;
     bankAccountId: string;
-    pin?: string;
-    provider?:  "flutterwave" | "saveHaven" | "monnify";
+    provider?: "flutterwave" | "saveHaven" | "monnify";
   }) {
     const reference = generateReference("WTH");
-
-    if (!data.pin) {
-      throw new AppError(
-        "Pin is required",
-        HTTP_STATUS.BAD_REQUEST,
-        ERROR_CODES.VALIDATION_ERROR
-      );
-    }
 
     const user = await this.userRepository.findById(data.userId);
     if (!user) {
@@ -54,16 +46,6 @@ export class WithdrawalService {
         "User not found",
         HTTP_STATUS.NOT_FOUND,
         ERROR_CODES.NOT_FOUND
-      );
-    }
-
-    // checking pin validity
-    const isPinValid = await comparePassword(data.pin, user.pin!);
-    if (!isPinValid) {
-      throw new AppError(
-        "Invalid PIN",
-        HTTP_STATUS.BAD_REQUEST,
-        ERROR_CODES.VALIDATION_ERROR
       );
     }
 
@@ -116,38 +98,43 @@ export class WithdrawalService {
       "main"
     );
 
-    // Create withdrawal request
-    const withdrawalRequest = await this.withdrawalRepository.create({
-      userId: new Types.ObjectId(data.userId),
+    // Create Transaction record
+    const transaction = await Transaction.create({
+      walletId: wallet._id,
+      sourceId: new Types.ObjectId(data.userId),
       reference,
-      provider: data.provider || "flutterwave",
       amount: data.amount,
-      accountName: bankAccount.accountName,
-      accountNumber: bankAccount.accountNumber,
-      bankName: bank.name,
-      bankCode: bank.flutterwaveCode,
-      status: "pending",
+      direction: "DEBIT",
+      type: "withdrawal",
+      provider: data.provider || "flutterwave",
+      status: "processing",
+      purpose: "withdrawal",
+      meta: {
+        accountNumber: bankAccount.accountNumber,
+        accountName: bankAccount.accountName,
+        bankName: bank.name,
+        bankCode: bank.flutterwaveCode,
+      },
     });
 
     try {
       const result = await this.paymentService.processWithdrawal({
-        withdrawalId: withdrawalRequest.id.toString(),
+        withdrawalId: transaction.id.toString(),
         userId: data.userId,
         amount: data.amount,
         accountNumber: bankAccount.accountNumber,
         accountName: bankAccount.accountName,
-        //Todo: Updating bank code based on the provider being used
         bankCode: bank.flutterwaveCode!,
         bankName: bank.name,
         reference,
         provider: data.provider || "flutterwave",
       });
 
-      // Update withdrawal request with payment details and status
-      await this.withdrawalRepository.update(withdrawalRequest.id.toString(), {
-        status: "processing",
+      // Update transaction with payment details
+      await this.transactionRepository.update(transaction.id.toString(), {
+        providerReference: result.reference,
         meta: {
-          paymentReference: result.reference,
+          ...transaction.meta,
           transferId: result.transferId,
           provider: result.provider,
         },
@@ -169,11 +156,12 @@ export class WithdrawalService {
       });
 
       return {
-        ...withdrawalRequest.toObject(),
+        ...transaction.toObject(),
         status: "processing",
         paymentDetails: result,
       };
     } catch (error: any) {
+      // Revert wallet debit
       await this.walletService.creditWallet(
         data.userId,
         data.amount,
@@ -181,10 +169,11 @@ export class WithdrawalService {
         "main"
       );
 
-      // Update withdrawal status to failed
-      await this.withdrawalRepository.update(withdrawalRequest.id.toString(), {
+      // Update transaction status to failed
+      await this.transactionRepository.update(transaction.id.toString(), {
         status: "failed",
         meta: {
+          ...transaction.meta,
           error: error.message,
           failedAt: new Date(),
         },
@@ -269,9 +258,10 @@ export class WithdrawalService {
       );
     }
 
-
     // Get bank details
-    const bank = await this.BankModel.findOne({ flutterwaveCode: data.bankCode });
+    const bank = await this.BankModel.findOne({
+      flutterwaveCode: data.bankCode,
+    });
     if (!bank) {
       throw new AppError(
         "Bank not found",
@@ -297,24 +287,28 @@ export class WithdrawalService {
       "main"
     );
 
-    // Create withdrawal request
-    const withdrawalRequest = await this.withdrawalRepository.create({
-      userId: new Types.ObjectId(data.userId),
+    // Create transaction record
+    const transaction = await Transaction.create({
+      walletId: wallet._id,
+      sourceId: new Types.ObjectId(data.userId),
       reference,
-      provider: data.provider || "flutterwave",
       amount: data.amount,
-      accountName: data.accountName,
-      accountNumber: data.accountNumber,
-      bankName: bank.name,
-      bankCode: data.bankCode,
-      status: "pending",
+      direction: "DEBIT",
       type: "bank_transfer",
+      provider: data.provider || "flutterwave",
+      status: "pending",
+      purpose: "bank_transfer",
+      meta: {
+        accountName: data.accountName,
+        accountNumber: data.accountNumber,
+        bankName: bank.name,
+        bankCode: data.bankCode,
+      },
     });
-
 
     try {
       const result = await this.paymentService.processWithdrawal({
-        withdrawalId: withdrawalRequest.id.toString(),
+        withdrawalId: transaction.id.toString(),
         userId: data.userId,
         amount: data.amount,
         accountNumber: data.accountNumber,
@@ -325,10 +319,12 @@ export class WithdrawalService {
         provider: data.provider || "flutterwave",
       });
 
-      await this.withdrawalRepository.update(withdrawalRequest.id.toString(), {
+      // Update transaction with payment details
+      await this.transactionRepository.update(transaction.id.toString(), {
         status: "processing",
+        providerReference: result.reference,
         meta: {
-          paymentReference: result.reference,
+          ...transaction.meta,
           transferId: result.transferId,
           provider: result.provider,
         },
@@ -351,7 +347,7 @@ export class WithdrawalService {
       });
 
       return {
-        ...withdrawalRequest.toObject(),
+        ...transaction.toObject(),
         status: "processing",
         paymentDetails: result,
       };
@@ -364,10 +360,11 @@ export class WithdrawalService {
         "main"
       );
 
-      // Update withdrawal status to failed
-      await this.withdrawalRepository.update(withdrawalRequest.id.toString(), {
+      // Update transaction status to failed
+      await this.transactionRepository.update(transaction.id.toString(), {
         status: "failed",
         meta: {
+          ...transaction.meta,
           error: error.message,
           failedAt: new Date(),
         },
@@ -403,7 +400,10 @@ export class WithdrawalService {
     page: number = 1,
     limit: number = 10
   ) {
-    const query: any = {};
+    const query: any = {
+      sourceId: new Types.ObjectId(userId),
+      type: { $in: ["withdrawal", "bank_transfer"] },
+    };
 
     if (filters.status) {
       query.status = filters.status;
@@ -419,18 +419,28 @@ export class WithdrawalService {
       }
     }
 
-    return this.withdrawalRepository.findByUserId(userId, query, page, limit);
+    return this.transactionRepository.findWithFilters(query, page, limit);
   }
 
   async getWithdrawalRequestById(requestId: string) {
-    const request = await this.withdrawalRepository.findById(requestId);
-    if (!request) {
+    const transaction = await this.transactionRepository.findById(requestId);
+    if (!transaction) {
       throw new AppError(
-        "Withdrawal request not found",
+        "Transaction not found",
         HTTP_STATUS.NOT_FOUND,
         ERROR_CODES.RESOURCE_NOT_FOUND
       );
     }
-    return request;
+
+    // Verify it's a withdrawal or bank_transfer type
+    if (!["withdrawal", "bank_transfer"].includes(transaction.type)) {
+      throw new AppError(
+        "Invalid transaction type",
+        HTTP_STATUS.BAD_REQUEST,
+        ERROR_CODES.VALIDATION_ERROR
+      );
+    }
+
+    return transaction;
   }
 }

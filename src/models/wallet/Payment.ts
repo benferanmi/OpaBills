@@ -8,6 +8,7 @@ export interface IPayment extends Document {
   amount: number;
   amountPaid?: number;
   status: "pending" | "success" | "failed" | "expired" | "processing" | "reversed";
+  
   meta: {
     virtualAccount?: {
       accountNumber: string;
@@ -46,7 +47,7 @@ const PaymentSchema = new Schema<IPayment>(
     amountPaid: { type: Number },
     status: {
       type: String,
-      enum: ["pending", "success", "failed"],
+      enum: ["pending", "success", "failed", "expired", "processing", "reversed"],
       default: "pending",
     },
     meta: { type: Schema.Types.Mixed, default: {} },

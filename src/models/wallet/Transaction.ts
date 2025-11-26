@@ -14,7 +14,7 @@ export interface ITransaction extends Document {
   provider?: string;
   remark?: string;
   purpose?: string;
-  status: "pending" | "success" | "failed" | "reversed";
+  status: "pending" | "processing" | "success" | "failed" | "reversed";
   meta?: any;
   polling?: {
     nextPollAt?: Date;
@@ -49,7 +49,7 @@ const TransactionSchema = new Schema<ITransaction>(
     purpose: { type: String },
     status: {
       type: String,
-      enum: ["pending", "success", "failed", "reversed"],
+      enum: ["pending", "processing", "success", "failed", "reversed"],
       default: "pending",
     },
     meta: { type: Schema.Types.Mixed },

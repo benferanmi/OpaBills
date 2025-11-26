@@ -1,8 +1,8 @@
 import { WalletRepository } from "@/repositories/WalletRepository";
 import { LedgerRepository } from "@/repositories/LedgerRepository";
-import { NotificationRepository } from "@/repositories/NotificationRepository";
 import { TransactionRepository } from "@/repositories/TransactionRepository";
 import { UserRepository } from "@/repositories/UserRepository";
+import { NotificationService } from "./NotificationService";
 import { AppError } from "@/middlewares/errorHandler";
 import {
   HTTP_STATUS,
@@ -21,13 +21,15 @@ export class WalletService {
   private cacheService: CacheService;
   private transactionRepository: TransactionRepository;
   private userRepository: UserRepository;
-  private notificationRepository?: NotificationRepository;
+  private notificationService: NotificationService;
+
   constructor() {
     this.walletRepository = new WalletRepository();
     this.ledgerRepository = new LedgerRepository();
     this.cacheService = new CacheService();
     this.transactionRepository = new TransactionRepository();
     this.userRepository = new UserRepository();
+    this.notificationService = new NotificationService(); // Added
   }
 
   async getWallet(
@@ -79,7 +81,6 @@ export class WalletService {
     const oldBalance = wallet.balance;
     const newBalance = oldBalance + Number(amount);
 
-
     // Update wallet balance
     await this.walletRepository.updateBalance(wallet.id.toString(), newBalance);
 
@@ -100,19 +101,20 @@ export class WalletService {
     // Invalidate cache
     await this.cacheService.delete(CACHE_KEYS.USER_WALLET(userId.toString()));
 
-    // Send notification
-    if (this.notificationRepository) {
-      await this.notificationRepository.create({
-        type: "wallet_credit",
-        notifiableType: "User",
-        notifiableId: userId as Types.ObjectId,
-        data: {
-          amount,
-          balance: newBalance,
-          reason,
-        },
-      });
-    }
+    // Send notification using NotificationService
+    await this.notificationService.createNotification({
+      type: "wallet_credit",
+      notifiableType: "User",
+      notifiableId: userId as Types.ObjectId,
+      data: {
+        amount,
+        balance: newBalance,
+        reason,
+      },
+      sendEmail: true,
+      sendSMS: false,
+      sendPush: true,
+    });
 
     return {
       walletId: wallet._id,
@@ -169,19 +171,20 @@ export class WalletService {
     // Invalidate cache
     await this.cacheService.delete(CACHE_KEYS.USER_WALLET(userId.toString()));
 
-    // Send notification
-    if (this.notificationRepository) {
-      await this.notificationRepository.create({
-        type: "wallet_debit",
-        notifiableType: "User",
-        notifiableId: userId as Types.ObjectId,
-        data: {
-          amount,
-          balance: newBalance,
-          reason,
-        },
-      });
-    }
+    // Send notification using NotificationService
+    await this.notificationService.createNotification({
+      type: "wallet_debit",
+      notifiableType: "User",
+      notifiableId: userId as Types.ObjectId,
+      data: {
+        amount,
+        balance: newBalance,
+        reason,
+      },
+      sendEmail: true,
+      sendSMS: false,
+      sendPush: true,
+    });
 
     return {
       walletId: wallet._id,
@@ -320,7 +323,21 @@ export class WalletService {
       );
     }
 
-    // Debit sender
+    // Get wallets before debit/credit
+    const senderWallet = await this.walletRepository.findByUserId(senderId);
+    const recipientWallet = await this.walletRepository.findByUserId(
+      recipient.id
+    );
+
+    if (!senderWallet || !recipientWallet) {
+      throw new AppError(
+        "Wallet not found",
+        HTTP_STATUS.NOT_FOUND,
+        ERROR_CODES.NOT_FOUND
+      );
+    }
+
+    // Debit sender (creates ledger entry + notification)
     await this.debitWallet(
       senderId,
       amount,
@@ -328,7 +345,7 @@ export class WalletService {
       "main"
     );
 
-    // Credit recipient
+    // Credit recipient (creates ledger entry + notification)
     await this.creditWallet(
       recipient.id,
       amount,
@@ -336,28 +353,58 @@ export class WalletService {
       "main"
     );
 
-    // Create transaction records
-    const reference = generateReference("TRF");
+    // Generate reference for both transactions
+
+    const transferId = generateReference("TRF");
+
+    const senderReference = generateReference("TXN");
+    const recipientReference = generateReference("TXN");
+
     await this.transactionRepository.create({
-      reference,
+      walletId: senderWallet.id,
       sourceId: new Types.ObjectId(senderId),
       recipientId: recipient.id,
+      reference: senderReference,
       amount,
+      direction: "DEBIT",
       type: "wallet_transfer",
       provider: "internal",
       remark,
+      purpose: "wallet_to_wallet_transfer",
       status: "success",
+      meta: {
+        transferId,
+        recipientUsername: recipient.username,
+        recipientEmail: recipient.email,
+      },
+    });
+
+    await this.transactionRepository.create({
+      walletId: recipientWallet.id,
+      sourceId: new Types.ObjectId(senderId),
+      recipientId: recipient.id,
+      reference: recipientReference,
+      amount,
+      direction: "CREDIT",
+      type: "wallet_transfer",
+      provider: "internal",
+      remark,
+      purpose: "wallet_to_wallet_transfer",
+      status: "success",
+      meta: {
+        transferId,
+        senderInfo: "Transfer received",
+      },
     });
 
     return {
-      reference,
+      reference: senderReference,
       amount,
       recipient: {
         id: recipient._id,
         username: recipient.username,
         email: recipient.email,
       },
-      status: "success",
     };
   }
 
@@ -370,6 +417,19 @@ export class WalletService {
         ERROR_CODES.NOT_FOUND
       );
     }
+
+    // TODO: Implement payment gateway integration
+    // This should:
+    // 1. Generate payment reference
+    // 2. Create pending transaction
+    // 3. Return payment URL/details
+    // 4. Handle webhook callback to credit wallet
+
+    throw new AppError(
+      "Funding method not implemented",
+      HTTP_STATUS.NOT_IMPLEMENTED,
+      ERROR_CODES.NOT_IMPLEMENTED
+    );
   }
 
   async verifyBeneficiary(identifier: string): Promise<any> {

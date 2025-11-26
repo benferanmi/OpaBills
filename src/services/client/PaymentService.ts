@@ -10,6 +10,7 @@ import { SaveHavenService } from "@/services/client/SaveHavenService";
 import { MonnifyService } from "./MonnifyService";
 import { FlutterwaveService } from "./FlutterwaveService";
 import { ProviderService } from "./ProviderService";
+import { Transaction } from "@/models/wallet/Transaction";
 
 export interface InitializePaymentDTO {
   userId: string;
@@ -329,6 +330,31 @@ export class PaymentService {
       payment.meta.verificationData = verificationResult;
       await payment.save();
 
+      // Get wallet
+      const wallet = await this.walletService.getWallet(
+        payment.userId.toString()
+      );
+
+      // Create Transaction record (what user sees!)
+      const transactionReference = generateReference("TXN");
+      await Transaction.create({
+        walletId: wallet._id,
+        sourceId: payment.userId,
+        reference: transactionReference,
+        providerReference: payment.providerReference,
+        amount: payment.amount,
+        direction: "CREDIT",
+        type: "wallet_funding",
+        provider: provider,
+        status: "success",
+        purpose: "deposit",
+        meta: {
+          paymentReference: payment.reference,
+          paymentId: payment._id,
+          provider: provider,
+        },
+      });
+
       // Credit user wallet
       await this.walletService.creditWallet(
         payment.userId,
@@ -344,7 +370,7 @@ export class PaymentService {
         data: {
           transactionType: "Wallet Funding",
           amount: payment.amount,
-          reference: payment.reference,
+          reference: transactionReference,
           provider: provider,
         },
       });
@@ -354,7 +380,7 @@ export class PaymentService {
       );
 
       return {
-        reference: payment.reference,
+        reference: transactionReference,
         amount: payment.amount,
         status: payment.status,
         provider: provider,

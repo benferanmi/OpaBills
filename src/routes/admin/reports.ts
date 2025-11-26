@@ -27,11 +27,6 @@ router.get(
   reportController.getTransactionSummary
 );
 
-router.get(
-  '/deposit-withdrawal',
-  requirePermission(ADMIN_PERMISSIONS.REPORTS.VIEW),
-  reportController.getDepositWithdrawalReport
-);
 
 router.get(
   '/crypto-giftcard',

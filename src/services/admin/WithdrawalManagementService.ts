@@ -1,17 +1,17 @@
-import { WithdrawalRepository } from "@/repositories/WithdrawalRepository";
 import { WalletRepository } from "@/repositories/WalletRepository";
 import { LedgerRepository } from "@/repositories/LedgerRepository";
 import { NotificationService } from "@/services/client/NotificationService";
 import { Types } from "mongoose";
+import { TransactionRepository } from "@/repositories/TransactionRepository";
 
 export class WithdrawalManagementService {
-  private withdrawalRepository: WithdrawalRepository;
+  private transactionRepository: TransactionRepository;
   private walletRepository: WalletRepository;
   private ledgerRepository: LedgerRepository;
   private notificationService: NotificationService;
 
   constructor() {
-    this.withdrawalRepository = new WithdrawalRepository();
+    this.transactionRepository = new TransactionRepository();
     this.walletRepository = new WalletRepository();
     this.ledgerRepository = new LedgerRepository();
     this.notificationService = new NotificationService();
@@ -41,7 +41,7 @@ export class WithdrawalManagementService {
       if (filters.maxAmount) query.amount.$lte = parseFloat(filters.maxAmount);
     }
 
-    const result = await this.withdrawalRepository.findWithPagination(
+    const result = await this.transactionRepository.findWithPagination(
       query,
       page,
       limit
@@ -59,7 +59,7 @@ export class WithdrawalManagementService {
   }
 
   async getWithdrawalDetails(withdrawalId: string) {
-    const withdrawal = await this.withdrawalRepository.findById(withdrawalId);
+    const withdrawal = await this.transactionRepository.findById(withdrawalId);
 
     if (!withdrawal) {
       throw new Error("Withdrawal not found");
@@ -69,7 +69,7 @@ export class WithdrawalManagementService {
   }
 
   async approveWithdrawal(withdrawalId: string, approvedBy: string) {
-    const withdrawal = await this.withdrawalRepository.findById(withdrawalId);
+    const withdrawal = await this.transactionRepository.findById(withdrawalId);
 
     if (!withdrawal) {
       throw new Error("Withdrawal not found");
@@ -80,9 +80,10 @@ export class WithdrawalManagementService {
     }
 
     // Update withdrawal status
-    withdrawal.status = "approved";
-    withdrawal.approvedAt = new Date();
-    withdrawal.approvedBy = approvedBy;
+    //TOCHECK: Why commented out?
+    // withdrawal.status = "approved";
+    // withdrawal.approvedAt = new Date();
+    // withdrawal.approvedBy = approvedBy;
     await withdrawal.save();
 
     // Get the main wallet for notification
@@ -123,7 +124,7 @@ export class WithdrawalManagementService {
     reason: string,
     declinedBy: string
   ) {
-    const withdrawal = await this.withdrawalRepository.findById(withdrawalId);
+    const withdrawal = await this.transactionRepository.findById(withdrawalId);
 
     if (!withdrawal) {
       throw new Error("Withdrawal not found");
@@ -163,10 +164,12 @@ export class WithdrawalManagementService {
     });
 
     // Update withdrawal status
-    withdrawal.status = "declined";
-    withdrawal.declinedAt = new Date();
-    withdrawal.declinedBy = declinedBy;
-    withdrawal.declineReason = reason;
+    //TOCHECK: Why commented out?
+
+    // withdrawal.status = "declined";
+    // withdrawal.declinedAt = new Date();
+    // withdrawal.declinedBy = declinedBy;
+    // withdrawal.declineReason = reason;
     await withdrawal.save();
 
     // Send notification
@@ -203,18 +206,19 @@ export class WithdrawalManagementService {
     provider: "monnify" | "saveHaven" | "flutterwave",
     transactionId: string
   ) {
-    const withdrawal = await this.withdrawalRepository.findById(withdrawalId);
+    const withdrawal = await this.transactionRepository.findById(withdrawalId);
 
     if (!withdrawal) {
       throw new Error("Withdrawal not found");
     }
+    //TOCHECK: Why commented out?
 
-    if (withdrawal.status !== "approved") {
-      throw new Error("Can only process approved withdrawals");
-    }
+    // if (withdrawal.status !== "approved") {
+    //   throw new Error("Can only process approved withdrawals");
+    // }
 
-    withdrawal.status = "completed";
-    withdrawal.processedAt = new Date();
+    // withdrawal.status = "completed";
+    // withdrawal.processedAt = new Date();
     withdrawal.provider = provider;
     withdrawal.providerReference = transactionId;
     await withdrawal.save();

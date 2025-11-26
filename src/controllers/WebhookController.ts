@@ -6,22 +6,18 @@ import { AppError } from "@/middlewares/errorHandler";
 import { HTTP_STATUS, ERROR_CODES } from "@/utils/constants";
 import { VTPassService } from "@/services/client/providers/VtpassService";
 import { SafeHavenWebhookProcessor } from "@/services/client/webhooks/SafeHavenWebhookProcessor";
-import { SaveHavenService } from "@/services/client/SaveHavenService";
 import { MonnifyWebhookProcessor } from "@/services/client/webhooks/MonnifyWebhookProcessor";
 import { MonnifyWebhookService } from "@/services/client/webhooks/MonnifyWebhookService";
 import { FlutterwaveWebhookProcessor } from "@/services/client/webhooks/FlutterwaveWebhookProcessor";
 import { FlutterwaveWebhookService } from "@/services/client/webhooks/FlutterwaveWebhookService";
+import { SaveHavenWebhookService } from "@/services/client/webhooks/SaveHavenWebhookService";
 
-/**
- * WEBHOOK CONTROLLER
- * Handles HTTP layer for all provider webhooks
- * Routes to appropriate processor → WebhookService
- */
+// Routes to appropriate processor → WebhookService
 export class WebhookController {
   private webhookService: WebhookService;
   private vtpassService: VTPassService;
   private saveHavenProcessor: SafeHavenWebhookProcessor;
-  private saveHavenService: SaveHavenService;
+  private saveHavenService: SaveHavenWebhookService;
   private monnifyProcessor: MonnifyWebhookProcessor;
   private monnifyService: MonnifyWebhookService;
   private flutterwaveProcessor: FlutterwaveWebhookProcessor;
@@ -31,7 +27,7 @@ export class WebhookController {
     this.webhookService = new WebhookService();
     this.vtpassService = new VTPassService();
     this.saveHavenProcessor = new SafeHavenWebhookProcessor();
-    this.saveHavenService = new SaveHavenService();
+    this.saveHavenService = new SaveHavenWebhookService();
     this.monnifyProcessor = new MonnifyWebhookProcessor();
     this.monnifyService = new MonnifyWebhookService();
     this.flutterwaveProcessor = new FlutterwaveWebhookProcessor();
@@ -94,10 +90,7 @@ export class WebhookController {
     }
   };
 
-  /**
-   * Handle SafeHaven webhook callbacks
-   * Flow: SafeHaven → Controller → saveHavenProcessor → safeHavenService
-   */
+  // Flow: SafeHaven → Controller → saveHavenProcessor → safeHavenService
   handleSafeHavenWebhook = async (
     req: Request,
     res: Response,

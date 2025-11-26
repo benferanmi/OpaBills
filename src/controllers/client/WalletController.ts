@@ -161,14 +161,22 @@ export class WalletController {
     }
   };
 
-  getProviders = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  getProviders = async (
+    req: AuthRequest,
+    res: Response,
+    next: NextFunction
+  ) => {
     try {
       const result = await this.paymentService.getProviders();
-      return sendSuccessResponse(res, result, "Providers retrieved successfully");
+      return sendSuccessResponse(
+        res,
+        result,
+        "Providers retrieved successfully"
+      );
     } catch (error) {
       next(error);
     }
-  }
+  };
 
   fundWallet = async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
@@ -230,7 +238,7 @@ export class WalletController {
   ) => {
     try {
       const userId = req.user!.id;
-      const { recipient, amount, remark } = req.body;
+      const { beneficiary: recipient, amount, remark } = req.body;
       const result = await this.walletService.transferFunds(
         userId,
         recipient,
@@ -304,7 +312,7 @@ export class WalletController {
   ) => {
     try {
       const userId = req.user!.id;
-      const { amount, bankAccountId, provider, pin } = req.body;
+      const { amount, bankAccountId, provider } = req.body;
       const result = await this.withdrawalService.createWithdrawalRequest({
         userId,
         amount,

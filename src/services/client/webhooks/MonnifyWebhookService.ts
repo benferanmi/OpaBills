@@ -1,5 +1,7 @@
 import { Payment } from "@/models/wallet/Payment";
+import { Transaction } from "@/models/wallet/Transaction";
 import { NotificationRepository } from "@/repositories/NotificationRepository";
+import { TransactionRepository } from "@/repositories/TransactionRepository";
 import { WebhookProcessResult } from "@/services/WebhookService";
 import { AppError } from "@/middlewares/errorHandler";
 import { HTTP_STATUS, ERROR_CODES } from "@/utils/constants";
@@ -8,7 +10,6 @@ import { generateReference } from "@/utils/helpers";
 import { Types } from "mongoose";
 import { VirtualAccount } from "@/models/banking/VirtualAccount";
 import { WalletService } from "../WalletService";
-import { WithdrawalRequest } from "@/models/banking/WithdrawalRequest";
 
 /**
  * MONNIFY WEBHOOK SERVICE
@@ -20,17 +21,19 @@ import { WithdrawalRequest } from "@/models/banking/WithdrawalRequest";
  * 3. Process withdrawal failure (FAILED_DISBURSEMENT)
  * 4. Process withdrawal reversal (REVERSED_DISBURSEMENT)
  * 5. Handle unsolicited payments
- * 6. Update Payment/WithdrawalRequest records
+ * 6. Update Payment/Transaction records
  * 7. Credit/debit wallets
  * 8. Send notifications
  */
 export class MonnifyWebhookService {
   private walletService: WalletService;
   private notificationRepository: NotificationRepository;
+  private transactionRepository: TransactionRepository;
 
   constructor() {
     this.walletService = new WalletService();
     this.notificationRepository = new NotificationRepository();
+    this.transactionRepository = new TransactionRepository();
   }
 
   /**
@@ -312,13 +315,13 @@ export class MonnifyWebhookService {
   }
 
   /**
-   * Handle SUCCESSFUL_DISBURSEMENT (WithdrawalRequest Success)
+   * Handle SUCCESSFUL_DISBURSEMENT (Withdrawal Transaction Success)
    * 
    * Flow:
    * 1. Find Payment by reference
-   * 2. Find WithdrawalRequest by reference
+   * 2. Find Transaction by reference
    * 3. Update Payment status to "success"
-   * 4. Update WithdrawalRequest status to "success"
+   * 4. Update Transaction status to "success"
    * 5. Send success notification
    */
   private async handleSuccessfulDisbursement(
@@ -373,17 +376,20 @@ export class MonnifyWebhookService {
     });
 
     // ===
-    // STEP 2: Find WithdrawalRequest Record
+    // STEP 2: Find Transaction Record
     // ===
-    const withdrawal = await WithdrawalRequest.findOne({ reference: reference });
+    const transaction = await this.transactionRepository.findOne({
+      reference: reference,
+      type: { $in: ["withdrawal", "bank_transfer"] },
+    });
 
-    if (!withdrawal) {
-      logger.warn("Monnify: WithdrawalRequest record not found", {
+    if (!transaction) {
+      logger.warn("Monnify: Transaction record not found", {
         reference,
       });
     } else {
-      logger.info("Monnify: Found WithdrawalRequest record", {
-        withdrawalId: withdrawal._id,
+      logger.info("Monnify: Found Transaction record", {
+        transactionId: transaction._id,
         reference,
       });
     }
@@ -411,21 +417,22 @@ export class MonnifyWebhookService {
     });
 
     // ===
-    // STEP 4: Update WithdrawalRequest Status
+    // STEP 4: Update Transaction Status
     // ===
-    if (withdrawal) {
-      withdrawal.status = "approved";
-      withdrawal.meta = {
-        ...withdrawal.meta,
-        monnifyTransactionReference: metadata.monnifyTransactionReference,
-        completedOn: metadata.completedOn,
-        fee: metadata.fee,
-      };
+    if (transaction) {
+      await this.transactionRepository.update(transaction.id.toString(), {
+        status: "success",
+        providerReference: metadata.monnifyTransactionReference,
+        meta: {
+          ...transaction.meta,
+          monnifyTransactionReference: metadata.monnifyTransactionReference,
+          completedOn: metadata.completedOn,
+          fee: metadata.fee,
+        },
+      });
 
-      await withdrawal.save();
-
-      logger.info("Monnify: WithdrawalRequest updated to success", {
-        withdrawalId: withdrawal._id,
+      logger.info("Monnify: Transaction updated to success", {
+        transactionId: transaction._id,
         reference,
       });
     }
@@ -434,11 +441,11 @@ export class MonnifyWebhookService {
     // STEP 5: Send Success Notification
     // ===
     await this.notificationRepository.create({
-      type: "withdrawal_success",
+      type: "withdrawal_completed",
       notifiableType: "User",
       notifiableId: payment.userId,
       data: {
-        transactionType: withdrawal?.type === "bank_transfer" ? "Bank Transfer" : "WithdrawalRequest",
+        transactionType: transaction?.type === "bank_transfer" ? "Bank Transfer" : "Withdrawal",
         amount: metadata.amount,
         fee: metadata.fee,
         reference: reference,
@@ -457,13 +464,13 @@ export class MonnifyWebhookService {
   }
 
   /**
-   * Handle FAILED_DISBURSEMENT (WithdrawalRequest Failed)
+   * Handle FAILED_DISBURSEMENT (Withdrawal Transaction Failed)
    * 
    * Flow:
    * 1. Find Payment by reference
-   * 2. Find WithdrawalRequest by reference
+   * 2. Find Transaction by reference
    * 3. Update Payment status to "failed"
-   * 4. Update WithdrawalRequest status to "failed"
+   * 4. Update Transaction status to "failed"
    * 5. Refund wallet (credit back)
    * 6. Send failure notification
    */
@@ -519,17 +526,20 @@ export class MonnifyWebhookService {
     });
 
     // ===
-    // STEP 2: Find WithdrawalRequest Record
+    // STEP 2: Find Transaction Record
     // ===
-    const withdrawal = await WithdrawalRequest.findOne({ reference: reference });
+    const transaction = await this.transactionRepository.findOne({
+      reference: reference,
+      type: { $in: ["withdrawal", "bank_transfer"] },
+    });
 
-    if (!withdrawal) {
-      logger.warn("Monnify: WithdrawalRequest record not found", {
+    if (!transaction) {
+      logger.warn("Monnify: Transaction record not found", {
         reference,
       });
     } else {
-      logger.info("Monnify: Found WithdrawalRequest record", {
-        withdrawalId: withdrawal._id,
+      logger.info("Monnify: Found Transaction record", {
+        transactionId: transaction._id,
         reference,
       });
     }
@@ -556,21 +566,22 @@ export class MonnifyWebhookService {
     });
 
     // ===
-    // STEP 4: Update WithdrawalRequest Status
+    // STEP 4: Update Transaction Status
     // ===
-    if (withdrawal) {
-      withdrawal.status = "failed";
-      withdrawal.meta = {
-        ...withdrawal.meta,
-        monnifyTransactionReference: metadata.monnifyTransactionReference,
-        failureReason: metadata.failureReason,
-        completedOn: metadata.completedOn,
-      };
+    if (transaction) {
+      await this.transactionRepository.update(transaction.id.toString(), {
+        status: "failed",
+        providerReference: metadata.monnifyTransactionReference,
+        meta: {
+          ...transaction.meta,
+          monnifyTransactionReference: metadata.monnifyTransactionReference,
+          failureReason: metadata.failureReason,
+          completedOn: metadata.completedOn,
+        },
+      });
 
-      await withdrawal.save();
-
-      logger.info("Monnify: WithdrawalRequest updated to failed", {
-        withdrawalId: withdrawal._id,
+      logger.info("Monnify: Transaction updated to failed", {
+        transactionId: transaction._id,
         reference,
       });
     }
@@ -582,7 +593,7 @@ export class MonnifyWebhookService {
     await this.walletService.creditWallet(
       payment.userId,
       metadata.amount,
-      `WithdrawalRequest refund - ${reference} (Failed)`,
+      `Withdrawal refund - ${reference} (Failed)`,
       "main"
     );
 
@@ -600,7 +611,7 @@ export class MonnifyWebhookService {
       notifiableType: "User",
       notifiableId: payment.userId,
       data: {
-        transactionType: withdrawal?.type === "bank_transfer" ? "Bank Transfer" : "WithdrawalRequest",
+        transactionType: transaction?.type === "bank_transfer" ? "Bank Transfer" : "Withdrawal",
         amount: metadata.amount,
         reference: reference,
         provider: "monnify",
@@ -616,13 +627,13 @@ export class MonnifyWebhookService {
   }
 
   /**
-   * Handle REVERSED_DISBURSEMENT (WithdrawalRequest Reversed)
+   * Handle REVERSED_DISBURSEMENT (Withdrawal Transaction Reversed)
    * 
    * Flow:
    * 1. Find Payment by reference
-   * 2. Find WithdrawalRequest by reference
+   * 2. Find Transaction by reference
    * 3. Update Payment status to "reversed"
-   * 4. Update WithdrawalRequest status to "reversed"
+   * 4. Update Transaction status to "reversed"
    * 5. Refund wallet (credit back)
    * 6. Send reversal notification
    */
@@ -677,17 +688,20 @@ export class MonnifyWebhookService {
     });
 
     // ===
-    // STEP 2: Find WithdrawalRequest Record
+    // STEP 2: Find Transaction Record
     // ===
-    const withdrawal = await WithdrawalRequest.findOne({ reference: reference });
+    const transaction = await this.transactionRepository.findOne({
+      reference: reference,
+      type: { $in: ["withdrawal", "bank_transfer"] },
+    });
 
-    if (!withdrawal) {
-      logger.warn("Monnify: WithdrawalRequest record not found", {
+    if (!transaction) {
+      logger.warn("Monnify: Transaction record not found", {
         reference,
       });
     } else {
-      logger.info("Monnify: Found WithdrawalRequest record", {
-        withdrawalId: withdrawal._id,
+      logger.info("Monnify: Found Transaction record", {
+        transactionId: transaction._id,
         reference,
       });
     }
@@ -713,21 +727,22 @@ export class MonnifyWebhookService {
     });
 
     // ===
-    // STEP 4: Update WithdrawalRequest Status
+    // STEP 4: Update Transaction Status
     // ===
-    if (withdrawal) {
-      withdrawal.status = "reversed";
-      withdrawal.meta = {
-        ...withdrawal.meta,
-        monnifyTransactionReference: metadata.monnifyTransactionReference,
-        reversalReason: "Disbursement reversed by Monnify",
-        completedOn: metadata.completedOn,
-      };
+    if (transaction) {
+      await this.transactionRepository.update(transaction.id.toString(), {
+        status: "reversed",
+        providerReference: metadata.monnifyTransactionReference,
+        meta: {
+          ...transaction.meta,
+          monnifyTransactionReference: metadata.monnifyTransactionReference,
+          reversalReason: "Disbursement reversed by Monnify",
+          completedOn: metadata.completedOn,
+        },
+      });
 
-      await withdrawal.save();
-
-      logger.info("Monnify: WithdrawalRequest updated to reversed", {
-        withdrawalId: withdrawal._id,
+      logger.info("Monnify: Transaction updated to reversed", {
+        transactionId: transaction._id,
         reference,
       });
     }
@@ -739,7 +754,7 @@ export class MonnifyWebhookService {
     await this.walletService.creditWallet(
       payment.userId,
       metadata.amount,
-      `WithdrawalRequest refund - ${reference} (Reversed)`,
+      `Withdrawal refund - ${reference} (Reversed)`,
       "main"
     );
 
@@ -757,7 +772,7 @@ export class MonnifyWebhookService {
       notifiableType: "User",
       notifiableId: payment.userId,
       data: {
-        transactionType: withdrawal?.type === "bank_transfer" ? "Bank Transfer" : "WithdrawalRequest",
+        transactionType: transaction?.type === "bank_transfer" ? "Bank Transfer" : "Withdrawal",
         amount: metadata.amount,
         reference: reference,
         provider: "monnify",
