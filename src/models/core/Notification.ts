@@ -1,8 +1,6 @@
 import mongoose, { Schema, Document, Types } from 'mongoose';
-import { v4 as uuidv4 } from 'uuid';
 
 export interface INotification extends Document {
-  _id: string;
   type: string;
   notifiableType: 'User' | 'Admin';
   notifiableId: Types.ObjectId;
@@ -14,7 +12,6 @@ export interface INotification extends Document {
 
 const NotificationSchema = new Schema<INotification>(
   {
-    _id: { type: String, default: uuidv4 },
     type: { type: String, required: true },
     notifiableType: { type: String, enum: ['User', 'Admin'], required: true },
     notifiableId: { type: Schema.Types.ObjectId, required: true },
@@ -23,7 +20,6 @@ const NotificationSchema = new Schema<INotification>(
   },
   {
     timestamps: true,
-    _id: false,
   }
 );
 

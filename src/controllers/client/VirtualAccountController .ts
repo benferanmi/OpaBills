@@ -121,7 +121,7 @@ export class VirtualAccountController {
         await this.virtualAccountService.createVirtualAccount({
           userId,
           type,
-          provider: "savehaven",
+          provider: "saveHaven",
           identificationType: "bvn",
           identityId: identityId.trim(),
         });

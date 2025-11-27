@@ -1,14 +1,12 @@
 import { Router } from "express";
 import { NotificationController } from "@/controllers/client/NotificationController";
-import { NotificationService } from "@/services/client/NotificationService";
 import { authenticate } from "@/middlewares/auth";
 import { validateQuery } from "@/middlewares/validation";
 import { paginationSchema } from "@/validations/client/transactionValidation";
 
 const router = Router();
 
-const notificationService = new NotificationService();
-const notificationController = new NotificationController(notificationService);
+const notificationController = new NotificationController();
 
 // Routes (all protected)
 router.use(authenticate);
