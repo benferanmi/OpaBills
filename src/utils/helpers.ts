@@ -1,5 +1,7 @@
-import { Response } from 'express';
-import { HTTP_STATUS } from './constants';
+import { Response } from "express";
+import { HTTP_STATUS } from "./constants";
+import crypto from "crypto";
+
 
 export interface SuccessResponse<T> {
   success: true;
@@ -96,7 +98,7 @@ export const sendPaginatedResponse = <T>(
 };
 
 // Reference generation helper
-export const generateReference = (prefix: string = 'TXN'): string => {
+export const generateReference = (prefix: string = "TXN"): string => {
   const timestamp = Date.now();
   const random = Math.random().toString(36).substring(2, 8).toUpperCase();
   return `${prefix}-${timestamp}-${random}`;
@@ -104,10 +106,23 @@ export const generateReference = (prefix: string = 'TXN'): string => {
 
 // RefCode generation helper
 export const generateRefCode = (length: number = 8): string => {
-  const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  let result = '';
+  const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  let result = "";
   for (let i = 0; i < length; i++) {
     result += characters.charAt(Math.floor(Math.random() * characters.length));
   }
   return result;
+};
+
+export const generatePasswordCrypto = (length = 8) => {
+  const chars =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  const bytes = crypto.randomBytes(length);
+  let password = "";
+
+  for (let i = 0; i < length; i++) {
+    password += chars[bytes[i] % chars.length];
+  }
+
+  return password;
 };

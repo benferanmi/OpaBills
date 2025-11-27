@@ -115,6 +115,7 @@ export const ADMIN_PERMISSIONS = {
     UPDATE: "admin.update",
     DELETE: "admin.delete",
     MANAGE_ROLES: "admin.manage_roles",
+    ADMIN_STATS: "admin.stats",
   },
 
   // System permissions

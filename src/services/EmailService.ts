@@ -246,4 +246,114 @@ export class EmailService {
       text: `Hello ${name}, Your 2FA code is: ${otp}. This code will expire in 10 minutes.`,
     });
   }
+
+  //ADMIM
+
+  async sendAdminWelcomeEmail(
+    to: string,
+    name: string,
+    adminLevel: string,
+    temporaryPassword: string
+  ): Promise<void> {
+    const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background-color: #4F46E5; color: white; padding: 20px; text-align: center; }
+          .content { background-color: #f9f9f9; padding: 30px; }
+          .credentials-box { background-color: white; border: 2px solid #4F46E5; padding: 20px; margin: 20px 0; }
+          .password { font-family: monospace; font-size: 18px; font-weight: bold; color: #4F46E5; }
+          .warning { background-color: #FEF3C7; border-left: 4px solid #F59E0B; padding: 15px; margin: 20px 0; }
+          .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>Welcome to BillPadi Admin</h1>
+          </div>
+          <div class="content">
+            <p>Hello ${name},</p>
+            <p>Your admin account has been created successfully! Here are your account details:</p>
+            <div class="credentials-box">
+              <p><strong>Admin Level:</strong> ${adminLevel}</p>
+              <p><strong>Email:</strong> ${to}</p>
+              <p><strong>Temporary Password:</strong></p>
+              <p class="password">${temporaryPassword}</p>
+            </div>
+            <div class="warning">
+              <strong>⚠️ Important:</strong> For security reasons, please change your password immediately after your first login.
+            </div>
+            <p>You can now log in to the admin dashboard and start managing your responsibilities.</p>
+          </div>
+          <div class="footer">
+            <p>&copy; ${new Date().getFullYear()} BillPadi. All rights reserved.</p>
+          </div>
+        </div>
+      </body>
+    </html>
+  `;
+
+    await this.sendEmail({
+      to,
+      subject: "Welcome to BillPadi Admin - Your Account Details",
+      html,
+      text: `Hello ${name}, Your admin account has been created. Admin Level: ${adminLevel}. Temporary Password: ${temporaryPassword}. Please change your password after first login.`,
+    });
+  }
+
+  async sendPasswordResetConfirmation(
+    to: string,
+    name: string,
+    newPassword: string
+  ): Promise<void> {
+    const html = `
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background-color: #4F46E5; color: white; padding: 20px; text-align: center; }
+          .content { background-color: #f9f9f9; padding: 30px; }
+          .password-box { background-color: white; border: 2px solid #4F46E5; padding: 20px; text-align: center; margin: 20px 0; }
+          .password { font-family: monospace; font-size: 20px; font-weight: bold; color: #4F46E5; letter-spacing: 2px; }
+          .warning { background-color: #FEF3C7; border-left: 4px solid #F59E0B; padding: 15px; margin: 20px 0; }
+          .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>Password Reset Successful</h1>
+          </div>
+          <div class="content">
+            <p>Hello ${name},</p>
+            <p>Your password has been reset successfully. Your new temporary password is:</p>
+            <div class="password-box">
+              <p class="password">${newPassword}</p>
+            </div>
+            <div class="warning">
+              <strong>⚠️ Security Notice:</strong> This is a temporary password. Please change it immediately after logging in to maintain account security.
+            </div>
+            <p>If you did not request this password reset, please contact support immediately.</p>
+          </div>
+          <div class="footer">
+            <p>&copy; ${new Date().getFullYear()} BillPadi. All rights reserved.</p>
+          </div>
+        </div>
+      </body>
+    </html>
+  `;
+
+    await this.sendEmail({
+      to,
+      subject: "Password Reset Successful - BillPadi Admin",
+      html,
+      text: `Hello ${name}, Your password has been reset. Your new temporary password is: ${newPassword}. Please change it after logging in. If you didn't request this, contact support immediately.`,
+    });
+  }
 }

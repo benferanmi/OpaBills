@@ -1,137 +1,265 @@
-import { AdminRepository } from '@/repositories/admin/AdminRepository';
-import { RoleRepository } from '@/repositories/admin/RoleRepository';
-import bcrypt from 'bcrypt';
+import { HTTP_STATUS } from "@/utils/constants";
+import logger from "@/logger";
+import { CreateAdminRequest, UpdateAdminRequest } from "@/types/admin";
+import { Admin, IAdmin } from "@/models/admin/Admin";
+import { EmailService } from "../EmailService";
+import { generatePasswordCrypto } from "@/utils/helpers";
+import { AdminRepository } from "@/repositories/admin/AdminRepository";
 
 export class AdminManagementService {
-  private adminRepository: AdminRepository;
-  private roleRepository: RoleRepository;
+  private emailService = new EmailService();
+  private adminRepository = new AdminRepository();
+  async createAdmin(
+    data: CreateAdminRequest,
+    creatorId: string
+  ): Promise<IAdmin> {
+    const { firstName, lastName, email, adminLevel, phone } = data;
 
-  constructor() {
-    this.adminRepository = new AdminRepository();
-    this.roleRepository = new RoleRepository();
+    try {
+      // Check if admin with email already exists
+      const existingAdmin = await this.adminRepository.findByEmail(email);
+      if (existingAdmin) {
+        throw {
+          message: "Admin with this email already exists",
+          statusCode: HTTP_STATUS.CONFLICT,
+        };
+      }
+
+      const newPassword = generatePasswordCrypto();
+      // Create admin data
+      const adminData = {
+        firstName,
+        lastName,
+        email: email.toLowerCase(),
+        password: newPassword,
+        adminLevel,
+        phone,
+        createdBy: creatorId,
+      };
+
+      // Create and save admin
+      const admin = await this.adminRepository.create(adminData);
+
+      await this.emailService.sendAdminWelcomeEmail(
+        admin.email,
+        admin.firstName,
+        admin.adminLevel,
+        newPassword
+      );
+
+      logger.info("Admin account created successfully", {
+        adminId: admin._id.toString(),
+        email: admin.email,
+        adminLevel: admin.adminLevel,
+        createdBy: creatorId,
+      });
+
+      return admin;
+    } catch (error: any) {
+      logger.error("Failed to create admin account", {
+        email,
+        error: error.message,
+        createdBy: creatorId,
+      });
+      throw error;
+    }
   }
 
-  async listAdmins(page: number = 1, limit: number = 20, filters: any = {}) {
-    const query: any = {};
+  async getAllAdmins(query: {
+    page?: number;
+    limit?: number;
+    adminLevel?: string;
+    status?: string;
+    search?: string;
+  }) {
+    const { page = 1, limit = 10, adminLevel, status, search } = query;
 
-    if (filters.status) {
-      query.status = filters.status;
-    }
+    const filter: any = {};
 
-    if (filters.adminLevel) {
-      query.adminLevel = filters.adminLevel;
-    }
-
-    if (filters.search) {
-      query.$or = [
-        { firstName: { $regex: filters.search, $options: 'i' } },
-        { lastName: { $regex: filters.search, $options: 'i' } },
-        { email: { $regex: filters.search, $options: 'i' } },
+    // Build filter object
+    if (adminLevel) filter.adminLevel = adminLevel;
+    if (status) filter.status = status;
+    if (search) {
+      const regex = new RegExp(search, "i");
+      filter.$or = [
+        { firstName: regex },
+        { lastName: regex },
+        { email: regex },
+        { phone: regex },
       ];
     }
 
-    const result = await this.adminRepository.findWithPagination(query, page, limit);
+    const skip = (page - 1) * limit;
+
+    const [admins, total] = await Promise.all([
+      Admin.find(filter).skip(skip).limit(limit).sort({ createdAt: -1 }).exec(),
+      Admin.countDocuments(filter),
+    ]);
 
     return {
-      admins: result.data,
+      admins,
       pagination: {
-        page,
-        limit,
-        total: result.total,
-        totalPages: Math.ceil(result.total / limit),
+        current: page,
+        pages: Math.ceil(total / limit),
+        total,
+        hasNext: page < Math.ceil(total / limit),
+        hasPrev: page > 1,
       },
     };
   }
 
-  async createAdmin(data: any) {
-    const existingAdmin = await this.adminRepository.findByEmail(data.email);
-    if (existingAdmin) {
-      throw new Error('Admin with this email already exists');
-    }
-
-    const temporaryPassword = Math.random().toString(36).slice(-10);
-    const hashedPassword = await bcrypt.hash(temporaryPassword, 10);
-
-    const role = await this.roleRepository.findBySlug(data.adminLevel);
-    if (!role) {
-      throw new Error('Invalid admin level');
-    }
-
-    const adminData = {
-      ...data,
-      password: hashedPassword,
-      permissions: role.permissions,
-    };
-
-    const admin = await this.adminRepository.create(adminData);
-
-    return { 
-      message: 'Admin created successfully', 
-      admin,
-      temporaryPassword 
-    };
-  }
-
-  async getAdminDetails(adminId: string) {
-    const admin = await this.adminRepository.findById(adminId);
+  async getAdminById(adminId: string): Promise<IAdmin> {
+    const admin = await Admin.findById(adminId);
     if (!admin) {
-      throw new Error('Admin not found');
+      throw {
+        message: "Admin not found",
+        statusCode: HTTP_STATUS.NOT_FOUND,
+      };
     }
     return admin;
   }
 
-  async updateAdmin(adminId: string, data: any) {
-    const admin = await this.adminRepository.findById(adminId);
+  async updateAdmin(
+    adminId: string,
+    data: UpdateAdminRequest,
+    updatedBy: string
+  ): Promise<IAdmin> {
+    const admin = await Admin.findById(adminId);
     if (!admin) {
-      throw new Error('Admin not found');
+      throw {
+        message: "Admin not found",
+        statusCode: HTTP_STATUS.NOT_FOUND,
+      };
     }
 
-    if (data.adminLevel) {
-      const role = await this.roleRepository.findBySlug(data.adminLevel);
-      if (!role) {
-        throw new Error('Invalid admin level');
+    // Update allowed fields
+    const allowedUpdates = [
+      "firstName",
+      "lastName",
+      "phone",
+      "status",
+      "permissions",
+      "adminLevel",
+    ];
+
+    allowedUpdates.forEach((field) => {
+      if ((data as any)[field] !== undefined) {
+        (admin as any)[field] = (data as any)[field];
       }
-      data.permissions = role.permissions;
-    }
+    });
 
-    Object.assign(admin, data);
+    admin.updatedBy = updatedBy;
     await admin.save();
 
-    return { message: 'Admin updated successfully', admin };
+    logger.info("Admin account updated", {
+      adminId,
+      updatedBy,
+      updatedFields: Object.keys(data),
+    });
+
+    return admin;
   }
 
-  async updateAdminStatus(adminId: string, status: string) {
-    const admin = await this.adminRepository.findById(adminId);
+  async deactivateAdmin(adminId: string, deactivatedBy: string): Promise<void> {
+    const admin = await Admin.findById(adminId);
     if (!admin) {
-      throw new Error('Admin not found');
+      throw {
+        message: "Admin not found",
+        statusCode: HTTP_STATUS.NOT_FOUND,
+      };
     }
 
-    admin.status = status as any;
-    await admin.save();
+    if (admin.adminLevel === "super_admin") {
+      throw {
+        message: "Cannot delete super admin account",
+        statusCode: HTTP_STATUS.FORBIDDEN,
+      };
+    }
 
-    return { message: 'Admin status updated successfully', status: admin.status };
+    await Admin.findByIdAndDelete(adminId);
+
+    logger.info("Admin account deleted", {
+      adminId,
+      deactivatedBy,
+    });
   }
 
-  async deleteAdmin(adminId: string) {
-    await this.adminRepository.delete(adminId);
-    return { message: 'Admin deleted successfully' };
-  }
-
-  async resetAdminPassword(adminId: string) {
-    const admin = await this.adminRepository.findById(adminId);
+  async resetAdminPassword(adminId: string, resetBy: string): Promise<void> {
+    const admin = await Admin.findById(adminId);
     if (!admin) {
-      throw new Error('Admin not found');
+      throw {
+        message: "Admin not found",
+        statusCode: HTTP_STATUS.NOT_FOUND,
+      };
     }
 
-    const newPassword = Math.random().toString(36).slice(-10);
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    const generatedPassword = generatePasswordCrypto();
 
-    admin.password = hashedPassword;
+    admin.password = generatedPassword;
+    admin.updatedBy = resetBy;
     await admin.save();
 
-    return { 
-      message: 'Password reset successfully', 
-      newPassword 
+    // Send password reset notification
+    await this.emailService.sendPasswordResetConfirmation(
+      admin.email,
+      admin.firstName,
+      generatedPassword
+    );
+
+    logger.info("Admin password reset", {
+      adminId,
+      resetBy,
+    });
+  }
+
+  async getAdminStatistics() {
+    const stats = await Admin.aggregate([
+      {
+        $group: {
+          _id: "$adminLevel",
+          count: { $sum: 1 },
+          active: {
+            $sum: { $cond: [{ $eq: ["$status", "active"] }, 1, 0] },
+          },
+          suspended: {
+            $sum: { $cond: [{ $eq: ["$status", "suspended"] }, 1, 0] },
+          },
+          deactivated: {
+            $sum: { $cond: [{ $eq: ["$status", "deactivated"] }, 1, 0] },
+          },
+        },
+      },
+    ]);
+
+    const totalStats = await Admin.aggregate([
+      {
+        $group: {
+          _id: null,
+          total: { $sum: 1 },
+          active: {
+            $sum: { $cond: [{ $eq: ["$status", "active"] }, 1, 0] },
+          },
+          recentLogins: {
+            $sum: {
+              $cond: [
+                {
+                  $gte: [
+                    "$lastLogin",
+                    new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+                  ],
+                },
+                1,
+                0,
+              ],
+            },
+          },
+        },
+      },
+    ]);
+
+    return {
+      byLevel: stats,
+      overall: totalStats[0] || { total: 0, active: 0, recentLogins: 0 },
     };
   }
 }
