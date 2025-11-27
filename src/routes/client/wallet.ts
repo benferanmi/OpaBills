@@ -52,7 +52,7 @@ router.post(
 // Wallet transfer
 router.post(
   "/transfer",
-  rateLimiter(5, 60000),
+  // rateLimiter(5, 60000),
   walletLock,
   profileComplete,
   validateRequest(transferSchema),
@@ -60,7 +60,7 @@ router.post(
 );
 router.post("/beneficiaries/verify", walletController.verifyBeneficiary);
 router.get("/beneficiaries", walletController.getBeneficiaries);
-router.post("/beneficiaries/search", walletController.searchBeneficiaries);
+router.get("/beneficiaries/:search", walletController.searchBeneficiaries);
 
 // Withdrawal & bank transfer
 router.post(

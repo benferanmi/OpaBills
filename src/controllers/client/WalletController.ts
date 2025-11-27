@@ -112,7 +112,7 @@ export class WalletController {
     } catch (error) {
       next(error);
     }
-  }
+  };
   getBalanceHistory = async (
     req: AuthRequest,
     res: Response,
@@ -256,7 +256,9 @@ export class WalletController {
   ) => {
     try {
       const userId = req.user!.id;
-      const result = await this.walletService.getBeneficiaries(userId);
+      const search = req.query.search as string;
+      console.log(search)
+      const result = await this.walletService.getBeneficiaries(userId, search);
       return sendSuccessResponse(
         res,
         result,
@@ -273,8 +275,8 @@ export class WalletController {
     next: NextFunction
   ) => {
     try {
-      const { query } = req.body;
-      const result = await this.walletService.searchBeneficiaries(query);
+      const search = req.params.search;
+      const result = await this.walletService.searchBeneficiaries(search);
       return sendSuccessResponse(
         res,
         result,

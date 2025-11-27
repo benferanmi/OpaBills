@@ -109,7 +109,6 @@ export class AuthService {
       adminLevel: admin.adminLevel,
       deviceInfo: userAgent,
     });
-    console.log("reached2");
 
     // Store refresh token metadata for reuse detection
     await adminJwtUtil.storeRefreshTokenMetadata(

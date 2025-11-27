@@ -316,7 +316,8 @@ class AdminJWTUtil {
       case "d":
         return value * 24 * 60 * 60;
       default:
-        return 900;
+        //TODO: update back to 900
+        return 90000;
     }
   }
 

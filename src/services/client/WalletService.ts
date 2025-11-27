@@ -681,7 +681,7 @@ export class WalletService {
     };
   }
 
-  async getBeneficiaries(userId: string): Promise<any> {
+  async getBeneficiaries(userId: string, search: string): Promise<any> {
     // Get unique recipients from transaction history
     const transactions = await this.transactionRepository.findWithFilters(
       {
@@ -716,7 +716,26 @@ export class WalletService {
       })
     );
 
-    return beneficiaries.filter(Boolean);
+    let filteredBeneficiaries = beneficiaries.filter(
+      (b): b is NonNullable<typeof b> => b !== null
+    );
+
+    if (search && search.trim()) {
+      const searchLower = search.toLowerCase().trim();
+      filteredBeneficiaries = filteredBeneficiaries.filter((beneficiary) => {
+        return (
+          beneficiary.username?.toLowerCase().includes(searchLower) ||
+          beneficiary.email?.toLowerCase().includes(searchLower) ||
+          beneficiary.firstname?.toLowerCase().includes(searchLower) ||
+          beneficiary.lastname?.toLowerCase().includes(searchLower) ||
+          `${beneficiary.firstname} ${beneficiary.lastname}`
+            .toLowerCase()
+            .includes(searchLower)
+        );
+      });
+    }
+
+    return filteredBeneficiaries;
   }
 
   async searchBeneficiaries(query: string): Promise<any> {

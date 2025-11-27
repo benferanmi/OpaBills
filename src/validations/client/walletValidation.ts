@@ -94,6 +94,14 @@ export const identificationSchema = Joi.object({
       "string.pattern.base": "lastname contains invalid characters",
     }),
 
+  // fullname: Joi.string()
+  //   .pattern(/^[a-zA-Z\s\-']+$/)
+  //   .required()
+  //   .messages({
+  //     "any.required": "fullname is required",
+  //     "string.pattern.base": "fullname contains invalid characters",
+  //   }),
+
   dateOfBirth: Joi.string()
     .pattern(/^\d{4}-\d{2}-\d{2}$/)
     .required()

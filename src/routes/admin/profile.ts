@@ -3,11 +3,10 @@ import { verifyAdminToken } from "@/middlewares/admin/auth";
 import { validateRequest } from "@/middlewares/validation";
 import { AdminAuthenticatedRequest } from "@/types/admin";
 import { rateLimiter } from "@/utils/constants";
-import { updateAdminProfileSchema } from "@/validations/admin/accountValidation";
+import { updateAdminProfileSchema, toggle2FASchema } from "@/validations/admin/accountValidation";
 
 import {
   changePasswordSchema,
-  toggle2FASchema,
 } from "@/validations/client/authValidation";
 import { Router } from "express";
 
@@ -15,7 +14,7 @@ const router = Router();
 const profileController = new ProfileController();
 
 router.use(verifyAdminToken as any);
-router.use(rateLimiter.general);
+// router.use(rateLimiter.general);
 
 router.patch(
   "/change-password",

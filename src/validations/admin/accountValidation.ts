@@ -1,5 +1,6 @@
 import Joi from "joi";
 
+
 export const updateAdminProfileSchema = Joi.object({
   firstName: Joi.string()
     .min(2)
