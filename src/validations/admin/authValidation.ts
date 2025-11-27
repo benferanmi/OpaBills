@@ -182,7 +182,12 @@ export const loginSchema = Joi.object({
     "string.empty": "Password is required",
   }),
 });
-
+export const verify2FA = Joi.object({
+  email: emailSchema,
+  otp: Joi.string().required().messages({
+    "any.required": "Otp is required",
+  }),
+});
 export const verifyOTPSchema = Joi.object({
   email: Joi.string().email().required().messages({
     "string.email": "Please provide a valid email address",

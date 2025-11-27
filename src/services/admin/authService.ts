@@ -401,6 +401,20 @@ export class AuthService {
     }
   }
 
+  async resend2FAOtp(email: string): Promise<void> {
+    const admin = await Admin.findOne({ email });
+    if (!admin) {
+      throw new Error("Admin Account not found");
+      return;
+    }
+
+    const otp = await this.otpService.generateAndStore(
+      admin._id.toString(),
+      "2fa"
+    );
+    await this.emailService.send2FAEmail(email, otp, admin.fullName);
+  }
+
   async forgotPassword(email: string): Promise<void> {
     const admin = await Admin.findOne({ email });
     if (!admin) {

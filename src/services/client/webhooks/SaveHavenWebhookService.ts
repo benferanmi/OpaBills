@@ -132,7 +132,7 @@ export class SaveHavenWebhookService {
       // ===
       const virtualAccount = await this.virtualAccountRepository.findOne({
         accountNumber: metadata.creditAccountNumber,
-        provider: "savehaven",
+        provider: "saveHaven",
         isActive: true,
       });
 

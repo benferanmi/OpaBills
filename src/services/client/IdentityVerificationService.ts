@@ -72,7 +72,7 @@ export class IdentityVerificationService {
       const existingSafeHavenAccount =
         await this.virtualAccountRepository.findOne({
           userId: new Types.ObjectId(userId.toString()),
-          provider: "savehaven",
+          provider: "saveHaven",
           isActive: true,
         });
 

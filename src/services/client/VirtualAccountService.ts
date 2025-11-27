@@ -83,7 +83,7 @@ export class VirtualAccountService {
     // Check if user already has a SafeHaven sub-account
     const existingSafeHaven = await this.virtualAccountRepository.findOne({
       userId: new Types.ObjectId(data.userId),
-      provider: "savehaven",
+      provider: "saveHaven",
       isActive: true,
     });
 
@@ -108,7 +108,7 @@ export class VirtualAccountService {
     // Store SafeHaven account (PRIMARY - shown to user)
     const virtualAccount = await this.virtualAccountRepository.createAccount({
       userId: new Types.ObjectId(data.userId),
-      provider: "savehaven",
+      provider: "saveHaven",
       type: data.type,
       accountNumber: saveHavenAccount.account_number,
       accountName: saveHavenAccount.account_name,
@@ -175,7 +175,7 @@ export class VirtualAccountService {
   async getUserVirtualAccount(userId: string) {
     const account = await this.virtualAccountRepository.findOne({
       userId: new Types.ObjectId(userId),
-      provider: "savehaven",
+      provider: "saveHaven",
       isPrimary: true,
       isActive: true,
     });

@@ -154,6 +154,20 @@ export class AuthController {
     }
   };
 
+  resendOtp = async (req: Request, res: Response): Promise<void> => {
+    try {
+      await this.authService.resend2FAOtp(req.body.email);
+      sendSuccessResponse(res, "Password reset OTP sent successfully");
+    } catch (error: any) {
+      logger.error("Admin resend otp failed", { error: error.message });
+      sendErrorResponse(
+        res,
+        error.message,
+        error.statusCode || HTTP_STATUS.INTERNAL_SERVER_ERROR
+      );
+    }
+  };
+
   resetPassword = async (req: Request, res: Response): Promise<void> => {
     try {
       await this.authService.resetPassword(req.body);

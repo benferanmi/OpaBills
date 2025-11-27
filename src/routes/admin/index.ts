@@ -6,6 +6,7 @@ import depositRoutes from './deposits';
 import withdrawalRoutes from './withdrawals';
 import dashboardRoutes from './dashboard';
 import alertRoutes from './alerts';
+import profileRoutes from './profile';
 import bannerRoutes from './banners';
 import settingsRoutes from './settings';
 import providerRoutes from './providers';
@@ -31,6 +32,7 @@ const router = Router();
 
 // Admin routes
 router.use('/auth', authRoutes);
+router.use("/profile", profileRoutes)
 router.use('/users', userRoutes);
 router.use('/transactions', transactionRoutes);
 router.use('/deposits', depositRoutes);
