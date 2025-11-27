@@ -1,4 +1,3 @@
-import { Payment } from "@/models/wallet/Payment";
 import { NotificationRepository } from "@/repositories/NotificationRepository";
 import { WalletService } from "./WalletService";
 import { generateReference } from "@/utils/helpers";
@@ -12,24 +11,17 @@ import { FlutterwaveService } from "./FlutterwaveService";
 import { ProviderService } from "./ProviderService";
 import { Transaction } from "@/models/wallet/Transaction";
 import { TransactionRepository } from "@/repositories/TransactionRepository";
+import { WalletRepository } from "@/repositories/WalletRepository";
+import { VirtualAccountRepository } from "@/repositories/VirtualAccountRepository";
+import mongoose from "mongoose";
+import { Wallet } from "@/models/wallet/Wallet";
+import { Deposit } from "@/models/banking/Deposit";
 
 export interface InitializePaymentDTO {
   userId: string;
   amount: number;
   method?: string;
   provider?: "monnify" | "saveHaven" | "flutterwave";
-}
-
-export interface ProcessWithdrawalDTO {
-  withdrawalId: string;
-  userId: string;
-  amount: number;
-  accountNumber: string;
-  accountName: string;
-  bankCode: string;
-  bankName: string;
-  reference: string;
-  provider?: "saveHaven" | "monnify" | "flutterwave";
 }
 
 export class PaymentService {
@@ -40,6 +32,8 @@ export class PaymentService {
   private monnifyService: MonnifyService;
   private flutterwaveService: FlutterwaveService;
   private providerService: ProviderService;
+  private walletRepository: WalletRepository;
+  private virtualAccountRepository: VirtualAccountRepository;
 
   constructor() {
     this.walletService = new WalletService();
@@ -49,43 +43,53 @@ export class PaymentService {
     this.flutterwaveService = new FlutterwaveService();
     this.providerService = new ProviderService();
     this.transactionRepository = new TransactionRepository();
+    this.walletRepository = new WalletRepository();
+    this.virtualAccountRepository = new VirtualAccountRepository();
   }
+
   async getProviders(): Promise<any> {
     const result = await this.providerService.getServicesByServiceTypeCode(
       "deposit"
     );
-
     return result;
   }
+
+  /**
+   * Initialize payment by creating virtual account
+   * NO Payment model created - only VirtualAccount
+   */
   async initializePayment(data: InitializePaymentDTO): Promise<any> {
-    const reference = generateReference("PAY");
+    const reference = generateReference("VACCT");
     const provider = data.provider || "saveHaven";
 
-    // Get user details for virtual account creation
-    const user = await User.findById(data.userId);
-    if (!user) {
-      throw new AppError("User not found", 404, ERROR_CODES.NOT_FOUND);
-    }
-
-    if (!user.bvn) {
-      throw new AppError("BVN is required", 400, ERROR_CODES.VALIDATION_ERROR);
-    }
-
-    // Create payment record first
-    const payment = await Payment.create({
-      userId: data.userId,
-      reference,
-      amount: data.amount,
-      type: "deposit",
-      status: "pending",
-      meta: {
-        provider: provider,
-      },
-    });
-
-    let virtualAccountData;
-
     try {
+      // Get user details for virtual account creation
+      const user = await User.findById(data.userId);
+      if (!user) {
+        throw new AppError("User not found", 404, ERROR_CODES.NOT_FOUND);
+      }
+
+      if (!user.bvn) {
+        throw new AppError(
+          "BVN is required",
+          400,
+          ERROR_CODES.VALIDATION_ERROR
+        );
+      }
+
+      // Get user wallet
+      const wallet = await this.walletRepository.findByUserId(data.userId);
+      if (!wallet) {
+        throw new AppError(
+          "Wallet not found",
+          HTTP_STATUS.NOT_FOUND,
+          ERROR_CODES.RESOURCE_NOT_FOUND
+        );
+      }
+
+      let virtualAccountData;
+      let accountType: "permanent" | "temporary" = "temporary";
+
       switch (provider) {
         case "monnify":
           const monnifyAccount = await this.monnifyService.createVirtualAccount(
@@ -100,24 +104,31 @@ export class PaymentService {
 
           // Monnify returns multiple accounts, pick the first one
           const primaryAccount = monnifyAccount.accounts[0];
+          accountType = "permanent"; // Monnify accounts are permanent
 
-          await Payment.findByIdAndUpdate(payment._id, {
-            $set: {
-              "meta.virtualAccount": {
-                accountNumber: primaryAccount.accountNumber,
-                bankName: primaryAccount.bankName,
-                accountName: monnifyAccount.accountName,
-                provider: provider,
-                providerReference: monnifyAccount.accountReference,
-              },
+          // Save virtual account to database
+          await this.virtualAccountRepository.create({
+            userId: user._id,
+            accountNumber: primaryAccount.accountNumber,
+            accountName: monnifyAccount.accountName,
+            bankName: primaryAccount.bankName,
+            bankCode: primaryAccount.bankCode,
+            provider: "monnify",
+            accountReference: monnifyAccount.accountReference,
+            type: accountType,
+            isActive: true,
+            isPrimary: true,
+            meta: {
+              allAccounts: monnifyAccount.accounts,
             },
-          });
+          } as any);
 
           virtualAccountData = {
             account_number: primaryAccount.accountNumber,
             bank_name: primaryAccount.bankName,
             account_name: monnifyAccount.accountName,
-            accounts: monnifyAccount.accounts, // Return all available accounts
+            accounts: monnifyAccount.accounts,
+            type: accountType,
           };
           break;
 
@@ -134,26 +145,34 @@ export class PaymentService {
               amount: data.amount,
             });
 
-          await Payment.findByIdAndUpdate(payment._id, {
-            $set: {
-              "meta.virtualAccount": {
-                accountNumber: flutterwaveAccount.account_number,
-                bankName: flutterwaveAccount.bank_name,
-                accountName: flutterwaveAccount.account_name,
-                provider: provider,
-                orderReference: flutterwaveAccount.account_reference,
-                expiresAt: flutterwaveAccount.expiry_date
-                  ? new Date(flutterwaveAccount.expiry_date)
-                  : new Date(Date.now() + 24 * 60 * 60 * 1000),
-              },
+          // Flutterwave accounts are temporary with expiry
+          const expiresAt = flutterwaveAccount.expiry_date
+            ? new Date(flutterwaveAccount.expiry_date)
+            : new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+          await this.virtualAccountRepository.create({
+            userId: user._id,
+            accountNumber: flutterwaveAccount.account_number,
+            accountName: flutterwaveAccount.account_name,
+            bankName: flutterwaveAccount.bank_name,
+            provider: "flutterwave",
+            accountReference: flutterwaveAccount.account_reference,
+            orderReference: flutterwaveAccount.account_reference,
+            type: accountType,
+            isActive: true,
+            expiredAt: expiresAt,
+            meta: {
+              amount: data.amount,
+              expiryDate: flutterwaveAccount.expiry_date,
             },
-          });
+          } as any);
 
           virtualAccountData = {
             account_number: flutterwaveAccount.account_number,
             bank_name: flutterwaveAccount.bank_name,
             account_name: flutterwaveAccount.account_name,
             expires_at: flutterwaveAccount.expiry_date,
+            type: accountType,
           };
           break;
 
@@ -169,25 +188,30 @@ export class PaymentService {
               bvn: user.bvn,
             });
 
-          await Payment.findByIdAndUpdate(payment._id, {
-            $set: {
-              "meta.virtualAccount": {
-                accountNumber: saveHavenAccount.account_number,
-                bankName: saveHavenAccount.bank_name,
-                accountName: saveHavenAccount.account_name,
-                provider: provider,
-                expiresAt:
-                  saveHavenAccount.expires_at ||
-                  new Date(Date.now() + 24 * 60 * 60 * 1000),
-              },
+          const saveHavenExpiresAt =
+            saveHavenAccount.expires_at ||
+            new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+          await this.virtualAccountRepository.create({
+            userId: user._id,
+            accountNumber: saveHavenAccount.account_number,
+            accountName: saveHavenAccount.account_name,
+            bankName: saveHavenAccount.bank_name,
+            provider: "saveHaven",
+            type: accountType,
+            isActive: true,
+            expiredAt: saveHavenExpiresAt,
+            meta: {
+              amount: data.amount,
             },
-          });
+          } as any);
 
           virtualAccountData = {
             account_number: saveHavenAccount.account_number,
             bank_name: saveHavenAccount.bank_name,
             account_name: saveHavenAccount.account_name,
             expires_at: saveHavenAccount.expires_at,
+            type: accountType,
           };
           break;
 
@@ -205,9 +229,8 @@ export class PaymentService {
       );
 
       return {
-        reference: payment.reference,
-        amount: payment.amount,
-        status: payment.status,
+        reference: reference,
+        amount: data.amount,
         provider: provider,
         virtualAccount: {
           accountNumber: virtualAccountData.account_number,
@@ -215,17 +238,10 @@ export class PaymentService {
           accountName: virtualAccountData.account_name,
           expiresAt: virtualAccountData.expires_at,
           accounts: virtualAccountData.accounts,
+          type: virtualAccountData.type,
         },
       };
     } catch (error: any) {
-      // Update payment status to failed if virtual account creation fails
-      await Payment.findByIdAndUpdate(payment._id, {
-        $set: {
-          status: "failed",
-          "meta.error": error.message,
-        },
-      });
-
       logger.error(`Failed to create virtual account for ${reference}:`, error);
       throw new AppError(
         error.message || "Failed to generate payment account",
@@ -235,74 +251,105 @@ export class PaymentService {
     }
   }
 
+  /**
+   * Verify payment (manual verification by user)
+   * Creates: Deposit (audit) + Transaction (user-facing) + Credits Wallet
+   * NO Payment model involved
+   */
   async verifyPayment(reference: string): Promise<any> {
-    const payment = await Payment.findOne({ reference, type: "deposit" });
-    if (!payment) {
-      throw new AppError(
-        "Payment not found",
-        HTTP_STATUS.NOT_FOUND,
-        ERROR_CODES.NOT_FOUND
-      );
-    }
-
-    // If already successful, return current status
-    if (payment.status === "success") {
-      return {
-        reference: payment.reference,
-        amount: payment.amount,
-        status: payment.status,
-      };
-    }
-
-    const provider = payment.meta?.provider || "saveHaven";
-    let verificationResult;
+    const session = await mongoose.startSession();
+    session.startTransaction();
 
     try {
+      // Find virtual account by reference or account number
+      const virtualAccount = await this.virtualAccountRepository.findOne({
+        $or: [
+          { accountReference: reference },
+          { accountNumber: reference },
+          { orderReference: reference },
+        ],
+        isActive: true,
+      });
+
+      if (!virtualAccount) {
+        throw new AppError(
+          "Virtual account not found",
+          HTTP_STATUS.NOT_FOUND,
+          ERROR_CODES.NOT_FOUND
+        );
+      }
+
+      const provider = virtualAccount.provider;
+      const userId = virtualAccount.userId;
+
+      // Check if already verified (idempotency)
+      const existingTransaction = await Transaction.findOne({
+        $or: [
+          { providerReference: reference },
+          { idempotencyKey: reference },
+          { "meta.verificationReference": reference },
+        ],
+        type: "wallet_funding",
+        status: "success",
+      });
+
+      if (existingTransaction) {
+        await session.abortTransaction();
+        logger.info("Payment already verified", {
+          transactionId: existingTransaction._id,
+          reference,
+        });
+        return {
+          reference: existingTransaction.reference,
+          amount: existingTransaction.amount,
+          status: "success",
+          provider: provider,
+          balance: existingTransaction.balanceAfter,
+        };
+      }
+
+      let verificationResult;
+      let amount = 0;
+
+      // Query provider for payment status
       switch (provider) {
         case "monnify":
           verificationResult = await this.monnifyService.verifyPayment(
             reference
           );
 
-          // Map Monnify status
           if (
-            verificationResult.paymentStatus === "PAID" &&
-            verificationResult.settlementAmount >= payment.amount
+            verificationResult.paymentStatus !== "PAID" ||
+            !verificationResult.settlementAmount
           ) {
-            payment.status = "success";
-            payment.amountPaid = verificationResult.settlementAmount;
-          } else {
             throw new AppError(
-              "Payment not confirmed",
+              "Payment not confirmed by Monnify",
               HTTP_STATUS.BAD_REQUEST,
               ERROR_CODES.VALIDATION_ERROR
             );
           }
+
+          amount = verificationResult.settlementAmount;
           break;
 
         case "flutterwave":
-          // For Flutterwave, we need the transaction ID
-          // This should come from webhook or can be queried by reference
-          const txRef =
-            payment.meta?.virtualAccount?.orderReference || reference;
+          const txRef = virtualAccount.orderReference || reference;
           verificationResult = await this.flutterwaveService.verifyTransaction(
             txRef
           );
 
-          // Map Flutterwave status
           if (
-            verificationResult.status === "successful" &&
-            verificationResult.amount >= payment.amount
+            verificationResult.status !== "successful" ||
+            !verificationResult.amount
           ) {
-            payment.status = "success";
-            payment.amountPaid = verificationResult.amount;
-          } else {
             throw new AppError(
-              "Payment not confirmed",
+              "Payment not confirmed by Flutterwave",
               HTTP_STATUS.BAD_REQUEST,
               ERROR_CODES.VALIDATION_ERROR
             );
           }
+
+          amount = verificationResult.amount;
           break;
 
         case "saveHaven":
@@ -310,16 +357,15 @@ export class PaymentService {
             reference
           );
 
-          if (!verificationResult) {
+          if (!verificationResult || !verificationResult.amount) {
             throw new AppError(
-              "Payment verification failed",
+              "Payment not confirmed by SaveHaven",
               HTTP_STATUS.BAD_REQUEST,
               ERROR_CODES.VALIDATION_ERROR
             );
           }
 
-          payment.status = "success";
-          payment.amountPaid = payment.amount;
+          amount = verificationResult.amount;
           break;
 
         default:
@@ -330,294 +376,127 @@ export class PaymentService {
           );
       }
 
-      payment.meta.verificationData = verificationResult;
-      await payment.save();
+      // Get wallet and capture balance BEFORE any changes
+      const wallet = await this.walletRepository.findByUserId(userId);
+      if (!wallet) {
+        throw new AppError(
+          "Wallet not found",
+          HTTP_STATUS.NOT_FOUND,
+          ERROR_CODES.RESOURCE_NOT_FOUND
+        );
+      }
 
-      // Get wallet
-      const wallet = await this.walletService.getWallet(
-        payment.userId.toString()
+      const balanceBefore = wallet.balance;
+      const balanceAfter = balanceBefore + amount;
+
+      // Create Deposit record (audit trail)
+      const depositReference = generateReference("DEP");
+      const deposit = await Deposit.create(
+        [
+          {
+            userId: userId,
+            walletId: wallet._id,
+            reference: depositReference,
+            provider: provider,
+            amount: amount,
+            status: "success",
+            meta: {
+              verificationData: verificationResult,
+              providerReference: reference,
+              virtualAccountId: virtualAccount._id,
+              manualVerification: true,
+              verifiedAt: new Date(),
+            },
+          },
+        ],
+        { session }
       );
 
-      // Create Transaction record (what user sees!)
+      // Create Transaction record (user-facing)
       const transactionReference = generateReference("TXN");
-      await this.transactionRepository.create({
-        walletId: wallet._id,
-        sourceId: payment.userId,
-        reference: transactionReference,
-        providerReference: payment.providerReference,
-        amount: payment.amount,
-        direction: "CREDIT",
-        type: "wallet_funding",
-        provider: provider,
-        status: "success",
-        purpose: "deposit",
-        meta: {
-          paymentReference: payment.reference,
-          paymentId: payment._id,
-          provider: provider,
-        },
-      });
-
-      // Credit user wallet
-      await this.walletService.creditWallet(
-        payment.userId,
-        payment.amount,
-        `Wallet funding via ${reference}`
+      const transaction = await Transaction.create(
+        [
+          {
+            walletId: wallet._id,
+            sourceId: userId,
+            reference: transactionReference,
+            providerReference: reference,
+            idempotencyKey: reference, // Prevent duplicate verification
+            transactableType: "Deposit",
+            transactableId: deposit[0]._id,
+            amount: amount,
+            direction: "CREDIT",
+            type: "wallet_funding",
+            provider: provider,
+            status: "success",
+            purpose: "Manual deposit verification",
+            balanceBefore,
+            balanceAfter,
+            initiatedBy: userId,
+            initiatedByType: "user",
+            meta: {
+              depositId: deposit[0]._id,
+              depositReference: depositReference,
+              provider: provider,
+              virtualAccountId: virtualAccount._id,
+              verificationData: verificationResult,
+              verificationReference: reference,
+              manualVerification: true,
+            },
+          },
+        ],
+        { session }
       );
 
-      // Send notification
+      // Credit wallet
+      await Wallet.findByIdAndUpdate(
+        wallet._id,
+        { $inc: { balance: amount } },
+        { session }
+      );
+
+      await session.commitTransaction();
+
+      // Send notification (outside session)
       await this.notificationRepository.create({
         type: "payment_success",
         notifiableType: "User",
-        notifiableId: payment.userId,
+        notifiableId: userId,
         data: {
           transactionType: "Wallet Funding",
-          amount: payment.amount,
+          amount: amount,
           reference: transactionReference,
           provider: provider,
+          balance: balanceAfter,
         },
       });
 
       logger.info(
-        `Payment verified successfully: ${reference} via ${provider}`
+        `Payment verified successfully: ${reference} via ${provider}`,
+        {
+          userId,
+          amount,
+          transactionReference,
+        }
       );
 
       return {
         reference: transactionReference,
-        amount: payment.amount,
-        status: payment.status,
+        amount: amount,
+        status: "success",
         provider: provider,
+        balance: balanceAfter,
       };
     } catch (error: any) {
+      await session.abortTransaction();
       logger.error(`Failed to verify payment for ${reference}:`, error);
       throw new AppError(
         error.message || "Payment verification failed",
         error.statusCode || HTTP_STATUS.BAD_REQUEST,
         error.errorCode || ERROR_CODES.VALIDATION_ERROR
       );
-    }
-  }
-
-  async processWithdrawal(data: ProcessWithdrawalDTO): Promise<any> {
-    const provider = data.provider || "saveHaven";
-
-    // Get user details
-    const user = await User.findById(data.userId);
-    if (!user) {
-      throw new AppError("User not found", 404, ERROR_CODES.NOT_FOUND);
-    }
-
-    // Create payment record for withdrawal
-    const payment = await Payment.create({
-      userId: data.userId,
-      reference: data.reference,
-      amount: data.amount,
-      type: "withdrawal",
-      status: "pending",
-      meta: {
-        provider: provider,
-        accountNumber: data.accountNumber,
-        accountName: data.accountName,
-        bankCode: data.bankCode,
-        bankName: data.bankName,
-        withdrawalId: data.withdrawalId,
-      },
-    });
-
-    try {
-      let transferResponse;
-
-      switch (provider) {
-        case "monnify":
-          transferResponse = await this.monnifyService.initiateTransfer({
-            amount: data.amount,
-            destinationBankCode: data.bankCode,
-            destinationAccountNumber: data.accountNumber,
-            narration: `Withdrawal - ${data.reference}`,
-            reference: data.reference,
-          });
-
-          await Payment.findByIdAndUpdate(payment._id, {
-            $set: {
-              status: "processing",
-              "meta.transferId": transferResponse.reference,
-              "meta.transferStatus": transferResponse.status,
-              "meta.providerReference": transferResponse.transactionReference,
-            },
-          });
-
-          break;
-
-        case "flutterwave":
-          transferResponse = await this.flutterwaveService.initiateTransfer({
-            accountBank: data.bankCode,
-            accountNumber: data.accountNumber,
-            amount: data.amount,
-            narration: `Withdrawal - ${data.reference}`,
-            reference: data.reference,
-            beneficiaryName: data.accountName,
-          });
-
-          await Payment.findByIdAndUpdate(payment._id, {
-            $set: {
-              status: "processing",
-              "meta.transferId": transferResponse.id.toString(),
-              "meta.transferStatus": transferResponse.status,
-              "meta.providerReference": transferResponse.reference,
-            },
-          });
-
-          break;
-
-        case "saveHaven":
-          transferResponse = await this.saveHavenService.initiateTransfer({
-            account_number: data.accountNumber,
-            bank_code: data.bankCode,
-            amount: data.amount,
-            narration: `Withdrawal - ${data.reference}`,
-            reference: data.reference,
-          });
-
-          await Payment.findByIdAndUpdate(payment._id, {
-            $set: {
-              status: "processing",
-              "meta.transferId": transferResponse.id,
-              "meta.transferStatus": transferResponse.status,
-              "meta.providerReference": transferResponse.reference,
-            },
-          });
-
-          break;
-
-        default:
-          throw new AppError(
-            "Invalid payment provider",
-            400,
-            ERROR_CODES.INVALID_PROVIDER
-          );
-      }
-
-      logger.info(`Withdrawal initiated for ${data.reference} via ${provider}`);
-
-      return {
-        reference: payment.reference,
-        amount: payment.amount,
-        status: payment.status,
-        provider: provider,
-        transferId: payment.meta.transferId,
-        accountNumber: data.accountNumber,
-        accountName: data.accountName,
-        bankName: data.bankName,
-      };
-    } catch (error: any) {
-      // Update payment status to failed
-      await Payment.findByIdAndUpdate(payment._id, {
-        $set: {
-          status: "failed",
-          "meta.error": error.message,
-        },
-      });
-
-      logger.error(
-        `Failed to process withdrawal for ${data.reference}:`,
-        error
-      );
-
-      throw new AppError(
-        error.message || "Failed to process withdrawal",
-        400,
-        ERROR_CODES.THIRD_PARTY_ERROR
-      );
-    }
-  }
-
-  /**
-   * Verify withdrawal status from provider
-   * @param reference - Payment reference
-   * @returns Withdrawal status
-   */
-  async verifyWithdrawal(reference: string): Promise<any> {
-    const payment = await Payment.findOne({ reference, type: "withdrawal" });
-    if (!payment) {
-      throw new AppError(
-        "Withdrawal not found",
-        HTTP_STATUS.NOT_FOUND,
-        ERROR_CODES.NOT_FOUND
-      );
-    }
-
-    const provider = payment.meta?.provider || "saveHaven";
-    const transferId = payment.meta?.transferId;
-
-    if (!transferId) {
-      throw new AppError(
-        "Transfer ID not found",
-        HTTP_STATUS.BAD_REQUEST,
-        ERROR_CODES.VALIDATION_ERROR
-      );
-    }
-
-    let verificationResult;
-
-    try {
-      switch (provider) {
-        case "monnify":
-          verificationResult = await this.monnifyService.verifyTransfer(
-            reference
-          );
-          break;
-
-        case "flutterwave":
-          verificationResult = await this.flutterwaveService.getTransferStatus(
-            transferId
-          );
-          break;
-
-        case "saveHaven":
-          verificationResult = await this.saveHavenService.verifyPayment(
-            transferId
-          );
-          break;
-
-        default:
-          throw new AppError(
-            "Invalid payment provider",
-            400,
-            ERROR_CODES.INVALID_PROVIDER
-          );
-      }
-
-      // Update payment status based on verification
-      const status = this.mapProviderStatus(
-        verificationResult.status,
-        provider
-      );
-
-      await Payment.findByIdAndUpdate(payment._id, {
-        $set: {
-          status: status,
-          "meta.verificationResult": verificationResult,
-        },
-      });
-
-      logger.info(
-        `Withdrawal verified: ${reference} - Status: ${status} via ${provider}`
-      );
-
-      return {
-        reference: payment.reference,
-        amount: payment.amount,
-        status: status,
-        provider: provider,
-        providerStatus: verificationResult.status,
-      };
-    } catch (error: any) {
-      logger.error(`Failed to verify withdrawal for ${reference}:`, error);
-      throw new AppError(
-        error.message || "Failed to verify withdrawal",
-        400,
-        ERROR_CODES.THIRD_PARTY_ERROR
-      );
+    } finally {
+      session.endSession();
     }
   }
 

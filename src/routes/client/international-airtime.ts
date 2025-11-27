@@ -15,7 +15,7 @@ const billPaymentController = new BillPaymentController();
 
 // All routes require authentication and service check
 router.use(authenticate);
-router.use(serviceCheck("international-airtime"));
+router.use(serviceCheck("internationalAirtime"));
 
 router.get(
   "/countries",

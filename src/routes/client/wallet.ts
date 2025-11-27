@@ -31,7 +31,6 @@ router.get("/balance-history", walletController.getBalanceHistory);
 
 // Wallet transactions
 router.get("/transactions", walletController.getWalletTransactions);
-router.get("/ledger", walletController.getLedgerEntries);
 
 // Wallet funding
 router.post(

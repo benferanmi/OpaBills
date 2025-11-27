@@ -100,7 +100,6 @@ export class ProviderService {
       const serviceType = await ServiceType.findOne({
         code: serviceTypeCode,
         isActive: true,
-        deletedAt: null,
       });
 
       if (!serviceType) {
@@ -901,7 +900,7 @@ export class ProviderService {
       }
 
       // Otherwise, use database configured provider
-      const provider = await this.getActiveApiProvider("internationalAirtime");
+      const provider = await this.getActiveApiProvider("internationalairtime");
       logger.info(
         `Processing international airtime with ${provider.code}`,
         data
@@ -987,7 +986,7 @@ export class ProviderService {
       }
 
       // Otherwise, use database configured provider
-      const provider = await this.getActiveApiProvider("internationalData");
+      const provider = await this.getActiveApiProvider("internationaldata");
       logger.info(`Processing international data with ${provider.code}`, data);
 
       switch (provider.code.toLowerCase()) {

@@ -10,7 +10,7 @@ const serviceStatus = new Map<string, boolean>([
   ['tv', true],
   ['betting', true],
   ['education', true],
-  ['international-airtime', true],
+  ['internationalAirtime', true],
   ['internationalData', true],
   ['giftcard', true],
   ['crypto', true],

@@ -1,5 +1,4 @@
 import { WalletRepository } from "@/repositories/WalletRepository";
-import { LedgerRepository } from "@/repositories/LedgerRepository";
 import { NotificationService } from "@/services/client/NotificationService";
 import { Types } from "mongoose";
 import { TransactionRepository } from "@/repositories/TransactionRepository";
@@ -7,13 +6,11 @@ import { TransactionRepository } from "@/repositories/TransactionRepository";
 export class WithdrawalManagementService {
   private transactionRepository: TransactionRepository;
   private walletRepository: WalletRepository;
-  private ledgerRepository: LedgerRepository;
   private notificationService: NotificationService;
 
   constructor() {
     this.transactionRepository = new TransactionRepository();
     this.walletRepository = new WalletRepository();
-    this.ledgerRepository = new LedgerRepository();
     this.notificationService = new NotificationService();
   }
 
@@ -149,27 +146,34 @@ export class WithdrawalManagementService {
     wallet.balance += withdrawal.amount;
     await wallet.save();
 
-    // Create ledger entry for refund
-    await this.ledgerRepository.create({
-      ledgerableType: "Wallet",
-      ledgerableId: wallet.id,
-      source: "SYSTEM",
-      destination: wallet.userId.toString(),
-      oldBalance: previousBalance,
-      newBalance: wallet.balance,
-      type: "credit",
-      reason: `Withdrawal declined: ${reason}`,
+    await this.transactionRepository.create({
+      walletId: wallet.id,
+      sourceId: wallet.userId,
+      reference: `REFUND-${withdrawal.reference}`,
       amount: withdrawal.amount,
-      currencyCode: "NGN",
+      direction: "CREDIT",
+      type: "refund",
+      status: "success",
+      purpose: `Withdrawal declined: ${reason}`,
+      remark: reason,
+      balanceBefore: previousBalance,
+      balanceAfter: wallet.balance,
+      initiatedByType: "admin",
+      transactableType: "Transaction",
+      transactableId: withdrawal.id,
+      meta: {
+        declinedBy,
+        originalWithdrawalId: withdrawal._id,
+        declineReason: reason,
+      },
     });
 
     // Update withdrawal status
-    //TOCHECK: Why commented out?
-
+    // TOCHECK: Why commented out?
     // withdrawal.status = "declined";
-    // withdrawal.declinedAt = new Date();
-    // withdrawal.declinedBy = declinedBy;
-    // withdrawal.declineReason = reason;
+    withdrawal.declinedAt = new Date();
+    withdrawal.declinedBy = new Types.ObjectId(declinedBy);
+    withdrawal.declineReason = reason;
     await withdrawal.save();
 
     // Send notification

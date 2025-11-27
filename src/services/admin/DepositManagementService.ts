@@ -1,20 +1,20 @@
-import { DepositRepository } from "@/repositories/DepositRepository";
+import { DepositRequestRepository } from "@/repositories/DepositRepository";
+import { TransactionRepository } from "@/repositories/TransactionRepository";
 import { WalletRepository } from "@/repositories/WalletRepository";
-import { LedgerRepository } from "@/repositories/LedgerRepository";
 import { NotificationService } from "@/services/client/NotificationService";
 import { Types } from "mongoose";
 
 export class DepositManagementService {
-  private depositRepository: DepositRepository;
+  private depositRequestRepository: DepositRequestRepository;
   private walletRepository: WalletRepository;
-  private ledgerRepository: LedgerRepository;
   private notificationService: NotificationService;
+  private transactionRepository: TransactionRepository;
 
   constructor() {
-    this.depositRepository = new DepositRepository();
+    this.depositRequestRepository = new DepositRequestRepository();
     this.walletRepository = new WalletRepository();
-    this.ledgerRepository = new LedgerRepository();
     this.notificationService = new NotificationService();
+    this.transactionRepository = new TransactionRepository();
   }
 
   async listDeposits(page: number = 1, limit: number = 20, filters: any = {}) {
@@ -22,6 +22,14 @@ export class DepositManagementService {
 
     if (filters.status) {
       query.status = filters.status;
+    }
+
+    if (filters.userId) {
+      query.userId = filters.userId;
+    }
+
+    if (filters.provider) {
+      query.provider = filters.provider;
     }
 
     if (filters.startDate && filters.endDate) {
@@ -37,10 +45,16 @@ export class DepositManagementService {
       if (filters.maxAmount) query.amount.$lte = parseFloat(filters.maxAmount);
     }
 
-    const result = await this.depositRepository.findWithPagination(
+    const populate = [
+      { path: "userId", select: "firstName lastName email phone" },
+    ];
+
+    const result = await this.depositRequestRepository.findWithPagination(
       query,
       page,
-      limit
+      limit,
+      { createdAt: -1 },
+      populate
     );
 
     return {
@@ -55,24 +69,27 @@ export class DepositManagementService {
   }
 
   async getDepositDetails(depositId: string) {
-    const deposit = await this.depositRepository.findById(depositId);
+    const deposit = await this.depositRequestRepository.findById(depositId);
 
     if (!deposit) {
-      throw new Error("Deposit not found");
+      throw new Error("Deposit request not found");
     }
+
+    // Populate user details
+    await deposit.populate("userId", "firstName lastName email phone");
 
     return deposit;
   }
 
   async approveDeposit(depositId: string, approvedBy: string) {
-    const deposit = await this.depositRepository.findById(depositId);
+    const deposit = await this.depositRequestRepository.findById(depositId);
 
     if (!deposit) {
-      throw new Error("Deposit not found");
+      throw new Error("Deposit request not found");
     }
 
     if (deposit.status !== "pending") {
-      throw new Error("Can only approve pending deposits");
+      throw new Error("Can only approve pending deposit requests");
     }
 
     // Find user's main wallet
@@ -82,7 +99,7 @@ export class DepositManagementService {
     });
 
     if (!wallet) {
-      throw new Error("Wallet not found");
+      throw new Error("User wallet not found");
     }
 
     // Credit wallet
@@ -90,19 +107,28 @@ export class DepositManagementService {
     wallet.balance += deposit.amount;
     await wallet.save();
 
-    // Create ledger entry
-    await this.ledgerRepository.createLedgerEntry({
-      userId: deposit.userId,
+    await this.transactionRepository.create({
       walletId: wallet.id,
-      type: "credit",
+      sourceId: deposit.userId,
+      reference: `TXN_${deposit.reference}`,
       amount: deposit.amount,
+      direction: "CREDIT",
+      type: "manual_deposit",
+      status: "success",
+      purpose: "Manual deposit approved",
+      remark: `Deposit request approved - ${deposit.reference}`,
       balanceBefore: previousBalance,
       balanceAfter: wallet.balance,
-      reference: deposit.reference,
-      description: "Deposit approved",
+      initiatedBy: new Types.ObjectId(approvedBy),
+      initiatedByType: "admin",
+      transactableType: "DepositRequest",
+      transactableId: new Types.ObjectId(depositId),
+      approvalStatus: "approved",
+      approvedBy: new Types.ObjectId(approvedBy),
+      approvedAt: new Date(),
     });
 
-    // Update deposit status
+    // Update deposit request status
     deposit.status = "approved";
     deposit.approvedAt = new Date();
     deposit.approvedBy = approvedBy;
@@ -125,26 +151,38 @@ export class DepositManagementService {
     });
 
     return {
-      message: "Deposit approved successfully",
+      message: "Deposit request approved successfully",
       deposit: {
         id: deposit._id,
         amount: deposit.amount,
         status: deposit.status,
+        reference: deposit.reference,
+        approvedAt: deposit.approvedAt,
+        approvedBy: deposit.approvedBy,
+      },
+      wallet: {
+        balance: wallet.balance,
+        previousBalance,
       },
     };
   }
 
   async declineDeposit(depositId: string, reason: string, declinedBy: string) {
-    const deposit = await this.depositRepository.findById(depositId);
+    if (!reason || reason.trim().length === 0) {
+      throw new Error("Decline reason is required");
+    }
+
+    const deposit = await this.depositRequestRepository.findById(depositId);
 
     if (!deposit) {
-      throw new Error("Deposit not found");
+      throw new Error("Deposit request not found");
     }
 
     if (deposit.status !== "pending") {
-      throw new Error("Can only decline pending deposits");
+      throw new Error("Can only decline pending deposit requests");
     }
 
+    // Update deposit request status
     deposit.status = "declined";
     deposit.declinedAt = new Date();
     deposit.declinedBy = declinedBy;
@@ -169,13 +207,89 @@ export class DepositManagementService {
     });
 
     return {
-      message: "Deposit declined successfully",
+      message: "Deposit request declined successfully",
       deposit: {
         id: deposit._id,
         amount: deposit.amount,
         status: deposit.status,
+        reference: deposit.reference,
         reason,
+        declinedAt: deposit.declinedAt,
+        declinedBy: deposit.declinedBy,
       },
+    };
+  }
+
+  async getDepositStatistics(filters: any = {}) {
+    const matchStage: any = {};
+
+    if (filters.startDate && filters.endDate) {
+      matchStage.createdAt = {
+        $gte: new Date(filters.startDate),
+        $lte: new Date(filters.endDate),
+      };
+    }
+
+    if (filters.userId) {
+      matchStage.userId = new Types.ObjectId(filters.userId);
+    }
+
+    const stats = await this.depositRequestRepository.aggregate([
+      { $match: matchStage },
+      {
+        $group: {
+          _id: "$status",
+          count: { $sum: 1 },
+          totalAmount: { $sum: "$amount" },
+        },
+      },
+    ]);
+
+    const summary = {
+      pending: { count: 0, totalAmount: 0 },
+      approved: { count: 0, totalAmount: 0 },
+      declined: { count: 0, totalAmount: 0 },
+      total: { count: 0, totalAmount: 0 },
+    };
+
+    stats.forEach((stat) => {
+      if (stat._id in summary) {
+        summary[stat._id as keyof typeof summary] = {
+          count: stat.count,
+          totalAmount: stat.totalAmount,
+        };
+      }
+      summary.total.count += stat.count;
+      summary.total.totalAmount += stat.totalAmount;
+    });
+
+    return summary;
+  }
+
+  async bulkApproveDeposits(depositIds: string[], approvedBy: string) {
+    const results = {
+      successful: [] as any[],
+      failed: [] as any[],
+    };
+
+    for (const depositId of depositIds) {
+      try {
+        const result = await this.approveDeposit(depositId, approvedBy);
+        results.successful.push({
+          depositId,
+          ...result,
+        });
+      } catch (error) {
+        results.failed.push({
+          depositId,
+          error: error instanceof Error ? error.message : "Unknown error",
+        });
+      }
+    }
+
+    return {
+      message: `Processed ${depositIds.length} deposits: ${results.successful.length} approved, ${results.failed.length} failed`,
+      results,
     };
   }
 }

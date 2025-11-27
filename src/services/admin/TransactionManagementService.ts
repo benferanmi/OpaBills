@@ -1,16 +1,13 @@
 import { TransactionRepository } from "@/repositories/TransactionRepository";
 import { WalletRepository } from "@/repositories/WalletRepository";
-import { LedgerRepository } from "@/repositories/LedgerRepository";
 
 export class TransactionManagementService {
   private transactionRepository: TransactionRepository;
   private walletRepository: WalletRepository;
-  private ledgerRepository: LedgerRepository;
 
   constructor() {
     this.transactionRepository = new TransactionRepository();
     this.walletRepository = new WalletRepository();
-    this.ledgerRepository = new LedgerRepository();
   }
 
   async listTransactions(
@@ -112,16 +109,21 @@ export class TransactionManagementService {
         wallet.balance += transaction.amount;
         await wallet.save();
 
-        // Create refund ledger entry
-        await this.ledgerRepository.createLedgerEntry({
-          userId: wallet.userId,
+        await this.transactionRepository.create({
           walletId: wallet.id,
-          type: "credit",
+          sourceId: wallet.userId,
+          reference: `REFUND-${transaction.reference}`,
           amount: transaction.amount,
+          direction: "CREDIT",
+          type: "refund",
+          status: "success",
+          purpose: "Refund for failed transaction",
+          remark: `Refund for failed transaction ${transaction.reference}`,
           balanceBefore,
           balanceAfter: wallet.balance,
-          reference: `REFUND-${transaction.reference}`,
-          description: `Refund for failed transaction ${transaction.reference}`,
+          initiatedByType: "system",
+          transactableType: "Transaction",
+          transactableId: transaction.id,
         });
       }
     }
@@ -132,62 +134,6 @@ export class TransactionManagementService {
         id: transaction._id,
         status: transaction.status,
         reference: transaction.reference,
-      },
-    };
-  }
-
-  async reverseTransaction(transactionId: string, reason: string) {
-    const transaction = await this.transactionRepository.findById(
-      transactionId
-    );
-
-    if (!transaction) {
-      throw new Error("Transaction not found");
-    }
-
-    if (transaction.status === "reversed") {
-      throw new Error("Transaction already reversed");
-    }
-    
-    if (transaction.status !== "success") {
-      throw new Error("Can only reverse successful transactions");
-    }
-
-    // Refund the user
-    if (transaction.walletId) {
-      const wallet = await this.walletRepository.findById(
-        transaction.walletId.toString()
-      );
-      if (wallet) {
-        const balanceBefore = wallet.balance;
-        wallet.balance += transaction.amount;
-        await wallet.save();
-
-        // Create reversal ledger entry
-        await this.ledgerRepository.createLedgerEntry({
-          userId: wallet.userId,
-          walletId: wallet.id,
-          type: "credit",
-          amount: transaction.amount,
-          balanceBefore,
-          balanceAfter: wallet.balance,
-          reference: `REVERSE-${transaction.reference}`,
-          description: `Reversal: ${reason}`,
-        });
-      }
-    }
-
-    transaction.status = "reversed";
-    transaction.remark = reason;
-    await transaction.save();
-
-    return {
-      message: "Transaction reversed successfully",
-      transaction: {
-        id: transaction._id,
-        status: transaction.status,
-        reference: transaction.reference,
-        amount: transaction.amount,
       },
     };
   }

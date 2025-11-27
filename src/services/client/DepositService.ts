@@ -184,15 +184,12 @@ export class DepositService {
 
     // Create Deposit record
     const deposit = await this.depositRepository.create({
-      _id: uuidv4(),
       userId: request.userId,
       walletId: wallet._id,
       reference: request.reference,
       provider: request.provider,
       amount: request.amount,
       status: "success",
-      approvedAt: new Date(),
-      approvedBy: adminId,
       meta: {
         depositRequestId: requestId,
         proof: request.proof,

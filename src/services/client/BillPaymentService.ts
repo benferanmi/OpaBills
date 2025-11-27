@@ -1,7 +1,5 @@
 import { TransactionRepository } from "@/repositories/TransactionRepository";
-import { NotificationRepository } from "@/repositories/NotificationRepository";
 import { WalletService } from "./WalletService";
-import { ProductRepository } from "@/repositories/ProductRepository";
 import { ProviderService } from "./ProviderService";
 import { HTTP_STATUS, ERROR_CODES } from "@/utils/constants";
 import { Types } from "mongoose";
@@ -11,7 +9,7 @@ import { Product } from "@/models/reference/Product";
 import { IUser } from "@/models/core/User";
 import { ServiceRepository } from "@/repositories/ServiceRepository";
 import logger from "@/logger";
-import { ServiceTypeProvider } from "@/models/reference/ServiceTypeProvider";
+import { NotificationService } from "./NotificationService";
 
 interface BettingData {
   userId: string;
@@ -24,23 +22,20 @@ interface BettingData {
 export class BillPaymentService {
   private transactionRepository: TransactionRepository;
   private walletService: WalletService;
-  private productRepository: ProductRepository;
   private providerService: ProviderService;
-  private notificationRepository?: NotificationRepository;
   private serviceRepository: ServiceRepository;
+  private notificationService: NotificationService;
 
   constructor() {
     this.transactionRepository = new TransactionRepository();
     this.walletService = new WalletService();
-    this.productRepository = new ProductRepository();
     this.providerService = new ProviderService();
-    this.notificationRepository = new NotificationRepository();
     this.serviceRepository = new ServiceRepository();
+    this.notificationService = new NotificationService();
   }
 
-  /**
-   * AIRTIME METHODS
-   */
+  // AIRTIME METHODS
+
   async purchaseAirtime(data: {
     userId: string;
     phone: string;
@@ -75,32 +70,29 @@ export class BillPaymentService {
       );
     }
 
-    await this.walletService.debitWallet(
+    // Debit wallet atomically with transaction creation
+    const debitResult = await this.walletService.debitWallet(
       data.userId,
       data.amount,
       "Airtime purchase",
-      "main"
+      "main",
+      {
+        type: "airtime",
+        provider: service.name,
+        idempotencyKey: reference,
+        initiatedBy: new Types.ObjectId(data.userId),
+        initiatedByType: "user",
+        meta: {
+          phone: data.phone,
+          network: data.network,
+          serviceCode: service.code,
+          serviceName: service.name,
+          logo: service.logo || "",
+        },
+      }
     );
 
-    const transaction = await this.transactionRepository.create({
-      walletId: wallet._id,
-      sourceId: new Types.ObjectId(data.userId),
-      reference,
-      amount: data.amount,
-      type: "airtime",
-      remark: `Airtime purchase for ${data.phone}`,
-      purpose: "airtime_purchase",
-      direction: "DEBIT",
-      status: "pending",
-      provider: service.name,
-      meta: {
-        phone: data.phone,
-        network: data.network,
-        serviceCode: service.code,
-        serviceName: service.name,
-        logo: service.logo || "",
-      },
-    });
+    const transaction = debitResult.transaction;
 
     try {
       const providerResponse = await this.providerService.purchaseAirtime({
@@ -136,8 +128,8 @@ export class BillPaymentService {
       }
 
       // Send notification for success
-      if (this.notificationRepository && status === "success") {
-        await this.notificationRepository.create({
+      if (status === "success") {
+        await this.notificationService.createNotification({
           type: "transaction_success",
           notifiableType: "User",
           notifiableId: new Types.ObjectId(data.userId),
@@ -146,6 +138,9 @@ export class BillPaymentService {
             amount: data.amount,
             reference,
           },
+          sendEmail: true,
+          sendSMS: false,
+          sendPush: true,
         });
       }
 
@@ -155,25 +150,37 @@ export class BillPaymentService {
           data.userId,
           data.amount,
           "Airtime purchase failed - refund",
-          "main"
+          "main",
+          {
+            type: "refund",
+            provider: service.name,
+            providerReference: providerResponse.providerReference,
+            idempotencyKey: `${reference}_refund`,
+            initiatedByType: "system",
+            meta: {
+              originalReference: reference,
+              reason: "transaction_failed",
+            },
+          }
         );
 
-        if (this.notificationRepository) {
-          await this.notificationRepository.create({
-            type: "transaction_failed",
-            notifiableType: "User",
-            notifiableId: new Types.ObjectId(data.userId),
-            data: {
-              transactionType: "Airtime",
-              amount: data.amount,
-              reference,
-            },
-          });
-        }
+        await this.notificationService.createNotification({
+          type: "transaction_failed",
+          notifiableType: "User",
+          notifiableId: new Types.ObjectId(data.userId),
+          data: {
+            transactionType: "Airtime",
+            amount: data.amount,
+            reference,
+          },
+          sendEmail: true,
+          sendSMS: false,
+          sendPush: true,
+        });
       }
 
       return {
-        result,
+        result: this.sanitizeTransaction(result),
         providerStatus: providerResponse.status,
         pending: status === "pending",
       };
@@ -183,7 +190,14 @@ export class BillPaymentService {
         data.userId,
         data.amount,
         "Airtime purchase error - refund",
-        "main"
+        "main",
+        {
+          type: "refund",
+          provider: service.name,
+          idempotencyKey: `${reference}_error_refund`,
+          initiatedByType: "system",
+          meta: { originalReference: reference, reason: "error" },
+        }
       );
       throw error;
     }
@@ -343,9 +357,8 @@ export class BillPaymentService {
     );
   }
 
-  /**
-   * INTERNATIONAL AIRTIME METHODS
-   */
+  // INTERNATIONAL AIRTIME METHODS
+
   async getInternationalAirtimeCountries() {
     return this.providerService.getInternationalAirtimeCountries();
   }
@@ -392,31 +405,28 @@ export class BillPaymentService {
       );
     }
 
-    await this.walletService.debitWallet(
+    // Debit wallet atomically with transaction creation
+    const debitResult = await this.walletService.debitWallet(
       data.userId,
       data.amount,
       "International airtime purchase",
-      "main"
+      "main",
+      {
+        type: "internationalAirtime",
+        provider: "vtpass",
+        idempotencyKey: reference,
+        initiatedBy: new Types.ObjectId(data.userId),
+        initiatedByType: "user",
+        meta: {
+          phone: data.phone,
+          countryCode: data.countryCode,
+          operatorId: data.operatorId,
+          email: data.email,
+        },
+      }
     );
 
-    const transaction = await this.transactionRepository.create({
-      walletId: wallet._id,
-      sourceId: new Types.ObjectId(data.userId),
-      reference,
-      amount: data.amount,
-      type: "internationalAirtime",
-      provider: "vtpass",
-      remark: `International airtime purchase for ${data.phone}`,
-      purpose: "internationalAirtime_purchase",
-      direction: "DEBIT",
-      status: "pending",
-      meta: {
-        phone: data.phone,
-        countryCode: data.countryCode,
-        operatorId: data.operatorId,
-        email: data.email,
-      },
-    });
+    const transaction = debitResult.transaction;
 
     try {
       const providerResponse =
@@ -427,7 +437,7 @@ export class BillPaymentService {
           operatorId: data.operatorId,
           reference,
           variationCode: data.productCode,
-          email: "",
+          email: data.email,
         });
 
       let status: "success" | "pending" | "failed";
@@ -446,8 +456,8 @@ export class BillPaymentService {
         providerReference: providerResponse.providerReference,
       });
 
-      if (this.notificationRepository && status === "success") {
-        await this.notificationRepository.create({
+      if (status === "success") {
+        await this.notificationService.createNotification({
           type: "transaction_success",
           notifiableType: "User",
           notifiableId: new Types.ObjectId(data.userId),
@@ -456,6 +466,9 @@ export class BillPaymentService {
             amount: data.amount,
             reference,
           },
+          sendEmail: true,
+          sendSMS: false,
+          sendPush: true,
         });
       }
 
@@ -464,25 +477,37 @@ export class BillPaymentService {
           data.userId,
           data.amount,
           "International airtime purchase failed - refund",
-          "main"
+          "main",
+          {
+            type: "refund",
+            provider: "vtpass",
+            providerReference: providerResponse.providerReference,
+            idempotencyKey: `${reference}_refund`,
+            initiatedByType: "system",
+            meta: {
+              originalReference: reference,
+              reason: "transaction_failed",
+            },
+          }
         );
 
-        if (this.notificationRepository) {
-          await this.notificationRepository.create({
-            type: "transaction_failed",
-            notifiableType: "User",
-            notifiableId: new Types.ObjectId(data.userId),
-            data: {
-              transactionType: "International Airtime",
-              amount: data.amount,
-              reference,
-            },
-          });
-        }
+        await this.notificationService.createNotification({
+          type: "transaction_failed",
+          notifiableType: "User",
+          notifiableId: new Types.ObjectId(data.userId),
+          data: {
+            transactionType: "International Airtime",
+            amount: data.amount,
+            reference,
+          },
+          sendEmail: true,
+          sendSMS: false,
+          sendPush: true,
+        });
       }
 
       return {
-        result,
+        result: this.sanitizeTransaction(result),
         providerStatus: providerResponse.status,
         pending: status === "pending",
       };
@@ -492,7 +517,14 @@ export class BillPaymentService {
         data.userId,
         data.amount,
         "International airtime purchase error - refund",
-        "main"
+        "main",
+        {
+          type: "refund",
+          provider: "vtpass",
+          idempotencyKey: `${reference}_error_refund`,
+          initiatedByType: "system",
+          meta: { originalReference: reference, reason: "error" },
+        }
       );
       throw error;
     }
@@ -509,9 +541,8 @@ export class BillPaymentService {
       limit
     );
   }
-  /**
-   * DATA METHODS
-   */
+
+  // DATA METHODS
   async purchaseData(data: {
     userId: string;
     phone: string;
@@ -574,34 +605,31 @@ export class BillPaymentService {
       );
     }
 
-    await this.walletService.debitWallet(
+    // Debit wallet atomically with transaction creation
+    const debitResult = await this.walletService.debitWallet(
       data.userId,
       totalAmount,
       "Data bundle purchase",
-      "main"
+      "main",
+      {
+        type: "data",
+        provider: service.name,
+        idempotencyKey: reference,
+        initiatedBy: new Types.ObjectId(data.userId),
+        initiatedByType: "user",
+        transactableType: "Product",
+        transactableId: product.id,
+        meta: {
+          phone: data.phone,
+          productName: product.name,
+          serviceCode: service.code,
+          serviceName: service.name,
+          logo: service.logo || "",
+        },
+      }
     );
 
-    const transaction = await this.transactionRepository.create({
-      walletId: wallet._id,
-      sourceId: new Types.ObjectId(data.userId),
-      transactableType: "Product",
-      transactableId: product.id,
-      reference,
-      amount: totalAmount,
-      direction: "DEBIT",
-      type: "data",
-      remark: `Data purchase: ${product.name} for ${data.phone}`,
-      purpose: "data_purchase",
-      provider: service.name,
-      status: "pending",
-      meta: {
-        phone: data.phone,
-        productName: product.name,
-        serviceCode: service.code,
-        serviceName: service.name,
-        logo: service.logo || "",
-      },
-    });
+    const transaction = debitResult.transaction;
 
     try {
       const providerResponse = await this.providerService.purchaseData({
@@ -644,12 +672,23 @@ export class BillPaymentService {
           data.userId,
           totalAmount,
           "Data purchase failed - refund",
-          "main"
+          "main",
+          {
+            type: "refund",
+            provider: service.name,
+            providerReference: providerResponse.providerReference,
+            idempotencyKey: `${reference}_refund`,
+            initiatedByType: "system",
+            meta: {
+              originalReference: reference,
+              reason: "transaction_failed",
+            },
+          }
         );
       }
 
       return {
-        result,
+        result: this.sanitizeTransaction(result),
         providerStatus: providerResponse.status,
         pending: status === "pending",
       };
@@ -659,7 +698,14 @@ export class BillPaymentService {
         data.userId,
         totalAmount,
         "Data purchase error - refund",
-        "main"
+        "main",
+        {
+          type: "refund",
+          provider: service.name,
+          idempotencyKey: `${reference}_error_refund`,
+          initiatedByType: "system",
+          meta: { originalReference: reference, reason: "error" },
+        }
       );
       throw error;
     }
@@ -705,21 +751,6 @@ export class BillPaymentService {
   }) {
     const reference = generateReference("INT_DATA");
 
-    // Fetch product details from provider or database
-    // const productDetails =
-    //   await this.providerService.getInternationalDataProductDetails(
-    //     data.productId,
-    //     data.operator
-    //   );
-
-    // if (!productDetails) {
-    //   throw new AppError(
-    //     "Product not found",
-    //     HTTP_STATUS.NOT_FOUND,
-    //     ERROR_CODES.RESOURCE_NOT_FOUND
-    //   );
-    // }
-
     const wallet = await this.walletService.getWallet(data.userId);
     if (!wallet) {
       throw new AppError(
@@ -738,31 +769,28 @@ export class BillPaymentService {
       );
     }
 
-    await this.walletService.debitWallet(
+    // Debit wallet atomically with transaction creation
+    const debitResult = await this.walletService.debitWallet(
       data.userId,
       totalAmount,
       "International data purchase",
-      "main"
+      "main",
+      {
+        type: "internationalData",
+        provider: "vtpass",
+        idempotencyKey: reference,
+        initiatedBy: new Types.ObjectId(data.userId),
+        initiatedByType: "user",
+        meta: {
+          phone: data.phone,
+          productCode: data.productCode,
+          operatorId: data.operatorId,
+          countryCode: data.countryCode,
+        },
+      }
     );
 
-    const transaction = await this.transactionRepository.create({
-      walletId: wallet._id,
-      sourceId: new Types.ObjectId(data.userId),
-      reference,
-      amount: totalAmount,
-      direction: "DEBIT",
-      type: "internationalData",
-      remark: `International data  for ${data.phone}`,
-      purpose: "internationalData_purchase",
-      provider: "vtpass",
-      status: "pending",
-      meta: {
-        phone: data.phone,
-        productCode: data.productCode,
-        operatorId: data.operatorId,
-        countryCode: data.countryCode,
-      },
-    });
+    const transaction = debitResult.transaction;
 
     try {
       const providerResponse =
@@ -792,8 +820,8 @@ export class BillPaymentService {
         providerReference: providerResponse.providerReference,
       });
 
-      if (this.notificationRepository && status === "success") {
-        await this.notificationRepository.create({
+      if (status === "success") {
+        await this.notificationService.createNotification({
           type: "transaction_success",
           notifiableType: "User",
           notifiableId: new Types.ObjectId(data.userId),
@@ -802,6 +830,9 @@ export class BillPaymentService {
             amount: totalAmount,
             reference,
           },
+          sendEmail: true,
+          sendSMS: false,
+          sendPush: true,
         });
       }
 
@@ -810,25 +841,37 @@ export class BillPaymentService {
           data.userId,
           totalAmount,
           "International data purchase failed - refund",
-          "main"
+          "main",
+          {
+            type: "refund",
+            provider: "vtpass",
+            providerReference: providerResponse.providerReference,
+            idempotencyKey: `${reference}_refund`,
+            initiatedByType: "system",
+            meta: {
+              originalReference: reference,
+              reason: "transaction_failed",
+            },
+          }
         );
 
-        if (this.notificationRepository) {
-          await this.notificationRepository.create({
-            type: "transaction_failed",
-            notifiableType: "User",
-            notifiableId: new Types.ObjectId(data.userId),
-            data: {
-              transactionType: "International Data",
-              amount: totalAmount,
-              reference,
-            },
-          });
-        }
+        await this.notificationService.createNotification({
+          type: "transaction_failed",
+          notifiableType: "User",
+          notifiableId: new Types.ObjectId(data.userId),
+          data: {
+            transactionType: "International Data",
+            amount: totalAmount,
+            reference,
+          },
+          sendEmail: true,
+          sendSMS: false,
+          sendPush: true,
+        });
       }
 
       return {
-        result,
+        result: this.sanitizeTransaction(result),
         providerStatus: providerResponse.status,
         pending: status === "pending",
       };
@@ -838,7 +881,14 @@ export class BillPaymentService {
         data.userId,
         totalAmount,
         "International data purchase error - refund",
-        "main"
+        "main",
+        {
+          type: "refund",
+          provider: "vtpass",
+          idempotencyKey: `${reference}_error_refund`,
+          initiatedByType: "system",
+          meta: { originalReference: reference, reason: "error" },
+        }
       );
       throw error;
     }
@@ -856,9 +906,7 @@ export class BillPaymentService {
     );
   }
 
-  /**
-   * CABLE TV METHODS
-   */
+  // CABLE TV METHODS
   async purchaseCableTv(data: {
     userId: string;
     user: IUser;
@@ -913,34 +961,32 @@ export class BillPaymentService {
       );
     }
 
-    await this.walletService.debitWallet(
+    // Debit wallet atomically with transaction creation
+    const debitResult = await this.walletService.debitWallet(
       data.userId,
       product.amount,
       "Cable TV subscription",
-      "main"
+      "main",
+      {
+        type: "cable_tv",
+        provider: service.name,
+        idempotencyKey: reference,
+        initiatedBy: new Types.ObjectId(data.userId),
+        initiatedByType: "user",
+        transactableType: "Product",
+        transactableId: product.id,
+        meta: {
+          smartCardNumber: data.smartCardNumber,
+          productName: product.name,
+          serviceCode: service.code,
+          serviceName: service.name,
+          logo: service.logo || "",
+          subscriptionType: data.type,
+        },
+      }
     );
 
-    const transaction = await this.transactionRepository.create({
-      walletId: wallet._id,
-      sourceId: new Types.ObjectId(data.userId),
-      transactableType: "Product",
-      transactableId: product.id,
-      reference,
-      amount: product.amount,
-      direction: "DEBIT",
-      type: "cable_tv",
-      remark: `Cable TV: ${product.name} for ${data.smartCardNumber}`,
-      purpose: "cable_tv_subscription",
-      status: "pending",
-      meta: {
-        smartCardNumber: data.smartCardNumber,
-        productName: product.name,
-        serviceCode: service.code,
-        serviceName: service.name,
-        logo: service.logo || "",
-        subscriptionType: data.type,
-      },
-    });
+    const transaction = debitResult.transaction;
 
     try {
       const providerResponse = await this.providerService.purchaseCableTv({
@@ -964,7 +1010,7 @@ export class BillPaymentService {
         status = "failed";
       }
 
-      await this.transactionRepository.update(transaction.id, {
+      const result = await this.transactionRepository.update(transaction.id, {
         status,
         provider: providerResponse.providerCode,
         providerReference: providerResponse.providerReference,
@@ -984,12 +1030,24 @@ export class BillPaymentService {
           data.userId,
           product.amount,
           "Cable TV subscription failed - refund",
-          "main"
+          "main",
+          {
+            type: "refund",
+            provider: service.name,
+            providerReference: providerResponse.providerReference,
+            idempotencyKey: `${reference}_refund`,
+            initiatedByType: "system",
+            meta: {
+              originalReference: reference,
+              reason: "transaction_failed",
+            },
+          }
         );
       }
 
       return {
-        ...transaction.toObject(),
+        result: this.sanitizeTransaction(result),
+        providerStatus: providerResponse.status,
         status,
         pending: status === "pending",
       };
@@ -999,7 +1057,14 @@ export class BillPaymentService {
         data.userId,
         product.amount,
         "Cable TV subscription error - refund",
-        "main"
+        "main",
+        {
+          type: "refund",
+          provider: service.name,
+          idempotencyKey: `${reference}_error_refund`,
+          initiatedByType: "system",
+          meta: { originalReference: reference, reason: "error" },
+        }
       );
       throw error;
     }
@@ -1029,9 +1094,7 @@ export class BillPaymentService {
     );
   }
 
-  /**
-   * ELECTRICITY METHODS
-   */
+  // ELECTRICITY METHODS
   async purchaseElectricity(data: {
     userId: string;
     meterNumber: string;
@@ -1072,34 +1135,31 @@ export class BillPaymentService {
       );
     }
 
-    await this.walletService.debitWallet(
+    // Debit wallet atomically with transaction creation
+    const debitResult = await this.walletService.debitWallet(
       data.userId,
       data.amount,
       "Electricity bill payment",
-      "main"
+      "main",
+      {
+        type: "electricity",
+        provider: service.code,
+        idempotencyKey: reference,
+        initiatedBy: new Types.ObjectId(data.userId),
+        initiatedByType: "user",
+        transactableType: "Product",
+        transactableId: service.id,
+        meta: {
+          meterNumber: data.meterNumber,
+          meterType: data.meterType,
+          serviceCode: service.code,
+          serviceName: service.name,
+          logo: service.logo || "",
+        },
+      }
     );
 
-    const transaction = await this.transactionRepository.create({
-      walletId: wallet._id,
-      sourceId: new Types.ObjectId(data.userId),
-      transactableType: "Product",
-      transactableId: service.id,
-      reference,
-      amount: data.amount,
-      direction: "DEBIT",
-      type: "electricity",
-      remark: `Electricity: ${service.name} for ${data.meterNumber}`,
-      purpose: "electricity_payment",
-      status: "pending",
-      provider: service.code,
-      meta: {
-        meterNumber: data.meterNumber,
-        meterType: data.meterType,
-        serviceCode: service.code,
-        serviceName: service.name,
-        logo: service.logo || "",
-      },
-    });
+    const transaction = debitResult.transaction;
 
     try {
       const providerResponse = await this.providerService.purchaseElectricity({
@@ -1123,14 +1183,14 @@ export class BillPaymentService {
         status = "failed";
       }
 
-      await this.transactionRepository.update(transaction.id, {
+      const result = await this.transactionRepository.update(transaction.id, {
         provider: providerResponse.providerCode,
         providerReference: providerResponse.providerReference,
         status,
         meta: {
           ...transaction.meta,
           token: providerResponse.token,
-        }
+        },
       });
 
       if (status === "pending" && providerResponse.providerReference) {
@@ -1146,14 +1206,25 @@ export class BillPaymentService {
           data.userId,
           data.amount,
           "Electricity payment failed - refund",
-          "main"
+          "main",
+          {
+            type: "refund",
+            provider: service.code,
+            providerReference: providerResponse.providerReference,
+            idempotencyKey: `${reference}_refund`,
+            initiatedByType: "system",
+            meta: {
+              originalReference: reference,
+              reason: "transaction_failed",
+            },
+          }
         );
       }
 
       return {
-        ...transaction.toObject(),
+        result: this.sanitizeTransaction(result),
         status,
-        // providerResponse,
+        providerStatus: providerResponse.status,
         token: providerResponse.token,
         pending: status === "pending",
       };
@@ -1163,7 +1234,14 @@ export class BillPaymentService {
         data.userId,
         data.amount,
         "Electricity payment error - refund",
-        "main"
+        "main",
+        {
+          type: "refund",
+          provider: service.code,
+          idempotencyKey: `${reference}_error_refund`,
+          initiatedByType: "system",
+          meta: { originalReference: reference, reason: "error" },
+        }
       );
       throw error;
     }
@@ -1201,9 +1279,7 @@ export class BillPaymentService {
     );
   }
 
-  /**
-   * BETTING METHODS
-   */
+  // BETTING METHODS
   async fundBetting(data: BettingData) {
     const { userId, customerId, amount, providerId } = data;
     const reference = generateReference("BET");
@@ -1225,13 +1301,6 @@ export class BillPaymentService {
       );
     }
 
-    await this.walletService.debitWallet(
-      userId,
-      amount,
-      "Betting funding",
-      "main"
-    );
-
     const service = await this.serviceRepository.findById(providerId);
 
     if (!service) {
@@ -1244,19 +1313,23 @@ export class BillPaymentService {
 
     const serviceCode = service.code;
 
-    const transaction = await this.transactionRepository.create({
-      walletId: wallet._id,
-      reference,
-      sourceId: new Types.ObjectId(userId),
+    // Debit wallet atomically with transaction creation
+    const debitResult = await this.walletService.debitWallet(
+      userId,
       amount,
-      type: "betting",
-      provider: serviceCode,
-      direction: "DEBIT",
-      purpose: "betting_funding",
-      remark: `Betting funding for ${service.name} for ${customerId}`,
-      status: "pending",
-      meta: { customerId, serviceCode },
-    });
+      "Betting funding",
+      "main",
+      {
+        type: "betting",
+        provider: serviceCode,
+        idempotencyKey: reference,
+        initiatedBy: new Types.ObjectId(userId),
+        initiatedByType: "user",
+        meta: { customerId, serviceCode },
+      }
+    );
+
+    const transaction = debitResult.transaction;
 
     try {
       const providerResult = await this.providerService.fundBetting({
@@ -1290,8 +1363,8 @@ export class BillPaymentService {
         );
       }
 
-      if (this.notificationRepository && status === "success") {
-        await this.notificationRepository.create({
+      if (status === "success") {
+        await this.notificationService.createNotification({
           type: "transaction_success",
           notifiableType: "User",
           notifiableId: new Types.ObjectId(userId),
@@ -1300,6 +1373,9 @@ export class BillPaymentService {
             amount,
             reference,
           },
+          sendEmail: true,
+          sendSMS: false,
+          sendPush: true,
         });
       }
 
@@ -1309,12 +1385,23 @@ export class BillPaymentService {
           userId,
           amount,
           "Betting funding failed - refund",
-          "main"
+          "main",
+          {
+            type: "refund",
+            provider: serviceCode,
+            providerReference: providerResult.providerReference,
+            idempotencyKey: `${reference}_refund`,
+            initiatedByType: "system",
+            meta: {
+              originalReference: reference,
+              reason: "transaction_failed",
+            },
+          }
         );
       }
 
       return {
-        result,
+        result: this.sanitizeTransaction(result),
         providerStatus: providerResult.status,
         pending: status === "pending",
       };
@@ -1324,7 +1411,14 @@ export class BillPaymentService {
         userId,
         amount,
         "Betting funding error - refund",
-        "main"
+        "main",
+        {
+          type: "refund",
+          provider: serviceCode,
+          idempotencyKey: `${reference}_error_refund`,
+          initiatedByType: "system",
+          meta: { originalReference: reference, reason: "error" },
+        }
       );
       throw error;
     }
@@ -1365,9 +1459,8 @@ export class BillPaymentService {
     );
   }
 
-  /**
-   * E-PIN METHODS
-   */
+  // E-PIN METHODS
+
   async getEPinServices() {
     return this.providerService.getServicesByServiceTypeCode("education");
   }
@@ -1428,35 +1521,32 @@ export class BillPaymentService {
       );
     }
 
-    await this.walletService.debitWallet(
+    // Debit wallet atomically with transaction creation
+    const debitResult = await this.walletService.debitWallet(
       data.userId,
       totalAmount,
       "E-Pin purchase",
-      "main"
+      "main",
+      {
+        type: "e_pin",
+        provider: service.name,
+        idempotencyKey: reference,
+        initiatedBy: new Types.ObjectId(data.userId),
+        initiatedByType: "user",
+        transactableType: "Product",
+        transactableId: product.id,
+        meta: {
+          productName: product.name,
+          serviceCode: service.code,
+          serviceName: service.name,
+          logo: service.logo || "",
+          profileId: data.profileId,
+          phone: data.user.phone,
+        },
+      }
     );
 
-    const transaction = await this.transactionRepository.create({
-      walletId: wallet._id,
-      sourceId: new Types.ObjectId(data.userId),
-      transactableType: "Product",
-      transactableId: product.id,
-      reference,
-      amount: totalAmount,
-      direction: "DEBIT",
-      provider: service.name,
-      type: "e_pin",
-      remark: `E-Pin: ${product.name} for Profile ${data.profileId}`,
-      purpose: "e_pin_purchase",
-      status: "pending",
-      meta: {
-        productName: product.name,
-        serviceCode: service.code,
-        serviceName: service.name,
-        logo: service.logo || "",
-        profileId: data.profileId,
-        phone: data.user.phone,
-      },
-    });
+    const transaction = debitResult.transaction;
 
     try {
       const providerResponse = await this.providerService.purchaseEducation({
@@ -1478,7 +1568,7 @@ export class BillPaymentService {
         status = "failed";
       }
 
-      await this.transactionRepository.update(transaction.id, {
+      const result = await this.transactionRepository.update(transaction.id, {
         status,
         provider: providerResponse.providerCode,
         providerReference: providerResponse.providerReference,
@@ -1492,8 +1582,8 @@ export class BillPaymentService {
         );
       }
 
-      if (this.notificationRepository && status === "success") {
-        await this.notificationRepository.create({
+      if (status === "success") {
+        await this.notificationService.createNotification({
           type: "transaction_success",
           notifiableType: "User",
           notifiableId: new Types.ObjectId(data.userId),
@@ -1503,6 +1593,9 @@ export class BillPaymentService {
             reference,
             pin: providerResponse.token,
           },
+          sendEmail: true,
+          sendSMS: false,
+          sendPush: true,
         });
       }
 
@@ -1512,27 +1605,39 @@ export class BillPaymentService {
           data.userId,
           totalAmount,
           "E-Pin purchase failed - refund",
-          "main"
+          "main",
+          {
+            type: "refund",
+            provider: service.name,
+            providerReference: providerResponse.providerReference,
+            idempotencyKey: `${reference}_refund`,
+            initiatedByType: "system",
+            meta: {
+              originalReference: reference,
+              reason: "transaction_failed",
+            },
+          }
         );
 
-        if (this.notificationRepository) {
-          await this.notificationRepository.create({
-            type: "transaction_failed",
-            notifiableType: "User",
-            notifiableId: new Types.ObjectId(data.userId),
-            data: {
-              transactionType: "E-Pin",
-              amount: totalAmount,
-              reference,
-            },
-          });
-        }
+        await this.notificationService.createNotification({
+          type: "transaction_failed",
+          notifiableType: "User",
+          notifiableId: new Types.ObjectId(data.userId),
+          data: {
+            transactionType: "E-Pin",
+            amount: totalAmount,
+            reference,
+          },
+          sendEmail: true,
+          sendSMS: false,
+          sendPush: true,
+        });
       }
 
       return {
-        ...transaction.toObject(),
+        result: this.sanitizeTransaction(result),
         status,
-        // providerResponse,
+        providerStatus: providerResponse.status,
         pin: providerResponse.token,
         pending: status === "pending",
       };
@@ -1542,7 +1647,14 @@ export class BillPaymentService {
         data.userId,
         totalAmount,
         "E-Pin purchase error - refund",
-        "main"
+        "main",
+        {
+          type: "refund",
+          provider: service.name,
+          idempotencyKey: `${reference}_error_refund`,
+          initiatedByType: "system",
+          meta: { originalReference: reference, reason: "error" },
+        }
       );
       throw error;
     }
@@ -1560,9 +1672,7 @@ export class BillPaymentService {
     );
   }
 
-  /**
-   * GENERAL METHODS
-   */
+  // GENERAL METHODS
   async getBillPaymentTransactions(
     userId: string,
     filters: any = {},
@@ -1671,5 +1781,25 @@ export class BillPaymentService {
       );
       // Don't throw - this shouldn't break the transaction
     }
+  }
+
+  private sanitizeTransaction(transaction: any) {
+    return {
+      id: transaction._id || transaction.id,
+      reference: transaction.reference,
+      amount: transaction.amount,
+      direction: transaction.direction,
+      type: transaction.type,
+      status: transaction.status,
+      purpose: transaction.purpose,
+      provider: transaction.provider,
+      providerReference: transaction.providerReference,
+      remark: transaction.remark,
+      createdAt: transaction.createdAt,
+      updatedAt: transaction.updatedAt,
+      // Include meta tokens/pins if present
+      ...(transaction.meta?.token && { token: transaction.meta.token }),
+      ...(transaction.meta?.pin && { pin: transaction.meta.pin }),
+    };
   }
 }

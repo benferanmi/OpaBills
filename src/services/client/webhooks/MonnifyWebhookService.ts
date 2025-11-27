@@ -1,39 +1,52 @@
-import { Payment } from "@/models/wallet/Payment";
 import { Transaction } from "@/models/wallet/Transaction";
+import { Wallet } from "@/models/wallet/Wallet";
+import { Deposit } from "@/models/banking/Deposit";
+import { VirtualAccount } from "@/models/banking/VirtualAccount";
 import { NotificationRepository } from "@/repositories/NotificationRepository";
 import { TransactionRepository } from "@/repositories/TransactionRepository";
+import { VirtualAccountRepository } from "@/repositories/VirtualAccountRepository";
+import { WalletRepository } from "@/repositories/WalletRepository";
+import { DepositRepository } from "@/repositories/DepositRepository";
 import { WebhookProcessResult } from "@/services/WebhookService";
 import { AppError } from "@/middlewares/errorHandler";
 import { HTTP_STATUS, ERROR_CODES } from "@/utils/constants";
 import logger from "@/logger";
 import { generateReference } from "@/utils/helpers";
-import { Types } from "mongoose";
-import { VirtualAccount } from "@/models/banking/VirtualAccount";
-import { WalletService } from "../WalletService";
+import mongoose from "mongoose";
 
 /**
- * MONNIFY WEBHOOK SERVICE
+ * MONNIFY WEBHOOK SERVICE (REFACTORED)
  * Handles business logic for Monnify webhook events
- * 
+ *
+ * ✅ NEW ARCHITECTURE:
+ * - NO Payment model usage
+ * - Transaction is single source of truth
+ * - Deposit model for audit trail only
+ * - Atomic operations with sessions
+ *
  * Responsibilities:
  * 1. Process wallet funding (SUCCESSFUL_TRANSACTION)
  * 2. Process withdrawal success (SUCCESSFUL_DISBURSEMENT)
  * 3. Process withdrawal failure (FAILED_DISBURSEMENT)
  * 4. Process withdrawal reversal (REVERSED_DISBURSEMENT)
  * 5. Handle unsolicited payments
- * 6. Update Payment/Transaction records
+ * 6. Update Transaction records
  * 7. Credit/debit wallets
  * 8. Send notifications
  */
 export class MonnifyWebhookService {
-  private walletService: WalletService;
   private notificationRepository: NotificationRepository;
   private transactionRepository: TransactionRepository;
+  private virtualAccountRepository: VirtualAccountRepository;
+  private walletRepository: WalletRepository;
+  private depositRepository: DepositRepository;
 
   constructor() {
-    this.walletService = new WalletService();
     this.notificationRepository = new NotificationRepository();
     this.transactionRepository = new TransactionRepository();
+    this.virtualAccountRepository = new VirtualAccountRepository();
+    this.walletRepository = new WalletRepository();
+    this.depositRepository = new DepositRepository();
   }
 
   /**
@@ -41,14 +54,31 @@ export class MonnifyWebhookService {
    * Routes to appropriate handler based on metadata.eventType
    */
   async processWebhook(webhookData: WebhookProcessResult): Promise<void> {
+    const { providerTransactionId, metadata } = webhookData;
+
     try {
-      logger.info("Monnify webhook service: Processing webhook", {
-        reference: webhookData.reference,
-        eventType: webhookData.metadata?.eventType,
+      logger.info("Monnify webhook service: Processing started", {
+        providerTransactionId,
+        eventType: metadata?.eventType,
         status: webhookData.status,
       });
 
-      const eventType = webhookData.metadata?.eventType;
+      // ===
+      // STEP 1: Check Idempotency
+      // Prevent duplicate processing
+      // ===
+      const isDuplicate = await this.checkIdempotency(providerTransactionId);
+      if (isDuplicate) {
+        logger.info("Monnify webhook: Duplicate transaction, skipping", {
+          providerTransactionId,
+        });
+        return;
+      }
+
+      // ===
+      // STEP 2: Route based on event type
+      // ===
+      const eventType = metadata?.eventType;
 
       switch (eventType) {
         case "SUCCESSFUL_TRANSACTION":
@@ -80,15 +110,13 @@ export class MonnifyWebhookService {
       }
 
       logger.info("Monnify webhook service: Processing completed", {
-        reference: webhookData.reference,
+        providerTransactionId,
         eventType,
-        status: webhookData.status,
       });
-    } catch (error: any) {
+    } catch (error) {
       logger.error("Monnify webhook service: Processing error", {
-        error: error.message,
-        stack: error.stack,
-        webhookData,
+        error,
+        providerTransactionId,
       });
       throw error;
     }
@@ -96,694 +124,672 @@ export class MonnifyWebhookService {
 
   /**
    * Handle SUCCESSFUL_TRANSACTION (Wallet Funding)
-   * 
-   * Flow:
-   * 1. Check idempotency (avoid duplicate processing)
-   * 2. Find existing Payment by reference OR
-   * 3. Find VirtualAccount by accountNumber (for unsolicited payments)
-   * 4. Create/Update Payment record
-   * 5. Credit user wallet
-   * 6. Send notification
+   *
+   * ✅ NEW FLOW (No Payment Model):
+   * 1. Find user by virtual account
+   * 2. Create Deposit record (audit trail)
+   * 3. Create Transaction record (user-facing)
+   * 4. Credit wallet if successful
+   * 5. Send notification
    */
   private async handleSuccessfulTransaction(
     webhookData: WebhookProcessResult
   ): Promise<void> {
-    const { reference, providerReference, providerTransactionId, metadata } =
+    const { providerTransactionId, providerReference, status, metadata } =
       webhookData;
 
-    logger.info("Monnify: Processing successful transaction (wallet funding)", {
-      reference,
-      providerTransactionId,
-      settlementAmount: metadata.settlementAmount,
-      virtualAccountNumber: metadata.virtualAccountNumber,
-    });
+    const session = await mongoose.startSession();
+    session.startTransaction();
 
-    // ===
-    // STEP 1: Check Idempotency
-    // Avoid processing the same webhook multiple times
-    // ===
-    const existingPayment = await Payment.findOne({
-      providerTransactionId: providerTransactionId,
-      "meta.provider": "monnify",
-    });
-
-    if (existingPayment && existingPayment.status === "success") {
-      logger.info(
-        "Monnify: Transaction already processed (idempotency check)",
-        {
-          reference,
-          providerTransactionId,
-          existingPaymentId: existingPayment._id,
-        }
-      );
-      return; // Already processed
-    }
-
-    // ===
-    // STEP 2: Try to find Payment by reference
-    // This handles solicited payments (user initiated funding)
-    // ===
-    let payment = await Payment.findOne({
-      reference: reference,
-      type: "deposit",
-    });
-
-    let userId: Types.ObjectId;
-    let isSolicited = true;
-
-    if (payment) {
-      // Solicited payment - User initiated this funding
-      userId = payment.userId;
-      logger.info("Monnify: Found existing Payment record (solicited)", {
-        reference,
-        paymentId: payment._id,
-        userId,
-      });
-    } else {
-      // ===
-      // STEP 3: Unsolicited Payment
-      // User transferred money without initiating payment in app
-      // Find VirtualAccount by accountNumber to identify user
-      // ===
-      isSolicited = false;
-
-      logger.info("Monnify: No Payment record found, checking VirtualAccount", {
-        reference,
+    try {
+      logger.info("Monnify: Processing wallet funding", {
+        providerTransactionId,
         virtualAccountNumber: metadata.virtualAccountNumber,
+        settlementAmount: metadata.settlementAmount,
+        status,
       });
 
-      const virtualAccount = await VirtualAccount.findOne({
+      // ===
+      // STEP 1: Find user by virtual account number
+      // ===
+      const virtualAccount = await this.virtualAccountRepository.findOne({
         accountNumber: metadata.virtualAccountNumber,
         provider: "monnify",
         isActive: true,
       });
 
       if (!virtualAccount) {
-        logger.error(
-          "Monnify: VirtualAccount not found for unsolicited payment",
-          {
-            reference,
-            virtualAccountNumber: metadata.virtualAccountNumber,
-            providerTransactionId,
-          }
-        );
+        await session.abortTransaction();
+        logger.error("Monnify: Virtual account not found", {
+          accountNumber: metadata.virtualAccountNumber,
+          providerTransactionId,
+        });
         throw new AppError(
           "Virtual account not found",
           HTTP_STATUS.NOT_FOUND,
-          ERROR_CODES.NOT_FOUND
+          ERROR_CODES.RESOURCE_NOT_FOUND
         );
       }
 
-      userId = virtualAccount.userId;
+      const userId = virtualAccount.userId;
 
-      logger.info("Monnify: Found VirtualAccount (unsolicited payment)", {
-        reference,
+      logger.info("Monnify: Found virtual account", {
         virtualAccountId: virtualAccount._id,
         userId,
-        accountNumber: virtualAccount.accountNumber,
+        accountNumber: metadata.virtualAccountNumber,
       });
 
-      // Create new Payment record for unsolicited payment
-      payment = await Payment.create({
-        userId: userId,
-        reference: generateReference("DEP"), // Generate new reference
-        providerReference: providerReference,
-        providerTransactionId: providerTransactionId,
-        amount: metadata.amountPaid,
-        amountPaid: metadata.settlementAmount,
-        type: "deposit",
-        status: "success",
-        meta: {
-          provider: "monnify",
-          originalReference: reference, // Store original reference from webhook
-          unsolicited: true,
-          monnifyTransactionReference: metadata.monnifyTransactionReference,
-          monnifyPaymentReference: metadata.monnifyPaymentReference,
-          virtualAccountNumber: metadata.virtualAccountNumber,
-          virtualBankName: metadata.virtualBankName,
-          paymentMethod: metadata.paymentMethod,
+      // ===
+      // STEP 2: Check if deposit already processed (idempotency)
+      // ===
+      const existingTransaction = await Transaction.findOne({
+        $or: [
+          { providerReference: providerReference },
+          { providerReference: metadata.monnifyTransactionReference },
+          { "meta.monnifyPaymentReference": metadata.monnifyPaymentReference },
+          { "meta.providerTransactionId": providerTransactionId },
+        ],
+        provider: "monnify",
+        type: "wallet_funding",
+      });
+
+      if (existingTransaction) {
+        await session.abortTransaction();
+        logger.info("Monnify: Deposit already processed", {
+          transactionId: existingTransaction._id,
+          providerReference,
+        });
+        return;
+      }
+
+      // ===
+      // STEP 3: Get wallet and capture balance
+      // ===
+      const wallet = await this.walletRepository.findByUserId(userId);
+      if (!wallet) {
+        await session.abortTransaction();
+        throw new AppError(
+          "Wallet not found",
+          HTTP_STATUS.NOT_FOUND,
+          ERROR_CODES.RESOURCE_NOT_FOUND
+        );
+      }
+
+      const balanceBefore = wallet.balance;
+      const amountToCredit = metadata.settlementAmount; // After fees
+      const balanceAfter = balanceBefore + amountToCredit;
+
+      // ===
+      // STEP 4: Create Deposit record (audit trail only)
+      // ===
+      const depositReference = generateReference("DEP");
+      const deposit = await Deposit.create(
+        [
+          {
+            userId: userId,
+            walletId: wallet._id,
+            reference: depositReference,
+            provider: "monnify",
+            amount: amountToCredit,
+            status: "success",
+            meta: {
+              webhookData: metadata,
+              providerReference: providerReference,
+              providerTransactionId: providerTransactionId,
+              virtualAccountId: virtualAccount._id,
+              monnifyTransactionReference: metadata.monnifyTransactionReference,
+              monnifyPaymentReference: metadata.monnifyPaymentReference,
+              fees: metadata.fees,
+              grossAmount: metadata.amountPaid,
+              netAmount: metadata.settlementAmount,
+              virtualAccountNumber: metadata.virtualAccountNumber,
+              virtualBankName: metadata.virtualBankName,
+              paymentMethod: metadata.paymentMethod,
+              paymentSourceInformation: metadata.paymentSourceInformation,
+              customer: metadata.customer,
+              paidOn: metadata.paidOn,
+              unsolicited: true, // Webhook-based deposits are unsolicited
+            },
+          },
+        ],
+        { session }
+      );
+
+      logger.info("Monnify: Deposit record created", {
+        depositId: deposit[0]._id,
+        reference: depositReference,
+        userId,
+      });
+
+      // ===
+      // STEP 5: Create Transaction record (user-facing)
+      // ===
+      const transactionReference = generateReference("TXN");
+      const transaction = await Transaction.create(
+        [
+          {
+            walletId: wallet._id,
+            sourceId: userId,
+            reference: transactionReference,
+            providerReference:
+              metadata.monnifyTransactionReference || providerReference,
+            idempotencyKey:
+              metadata.monnifyPaymentReference || providerReference,
+            transactableType: "Deposit",
+            transactableId: deposit[0]._id,
+            amount: amountToCredit,
+            direction: "CREDIT",
+            type: "wallet_funding",
+            provider: "monnify",
+            status: "success",
+            purpose: "Wallet funding via Monnify",
+            balanceBefore,
+            balanceAfter,
+            initiatedBy: userId,
+            initiatedByType: "system", // Webhook-initiated
+            meta: {
+              depositId: deposit[0]._id,
+              depositReference: depositReference,
+              provider: "monnify",
+              virtualAccount: {
+                accountNumber: metadata.virtualAccountNumber,
+                accountName: virtualAccount.accountName,
+                bankName: metadata.virtualBankName || virtualAccount.bankName,
+              },
+              monnifyTransactionReference: metadata.monnifyTransactionReference,
+              monnifyPaymentReference: metadata.monnifyPaymentReference,
+              fees: metadata.fees,
+              grossAmount: metadata.amountPaid,
+              netAmount: metadata.settlementAmount,
+              paymentMethod: metadata.paymentMethod,
+              paymentSourceInformation: metadata.paymentSourceInformation,
+              customer: metadata.customer,
+              paidOn: metadata.paidOn,
+              providerTransactionId: providerTransactionId,
+            },
+          },
+        ],
+        { session }
+      );
+
+      logger.info("Monnify: Transaction record created", {
+        transactionId: transaction[0]._id,
+        reference: transactionReference,
+        userId,
+      });
+
+      // ===
+      // STEP 6: Credit wallet
+      // ===
+      await Wallet.findByIdAndUpdate(
+        wallet._id,
+        { $inc: { balance: amountToCredit } },
+        { session }
+      );
+
+      logger.info("Monnify: Wallet credited", {
+        userId: userId.toString(),
+        amount: amountToCredit,
+        reference: transactionReference,
+      });
+
+      // Commit all changes atomically
+      await session.commitTransaction();
+
+      // ===
+      // STEP 7: Send notification (outside session)
+      // ===
+      await this.notificationRepository.create({
+        type: "payment_success",
+        notifiableType: "User",
+        notifiableId: userId,
+        data: {
+          transactionType: "Wallet Funding",
+          amount: amountToCredit,
+          amountPaid: metadata.amountPaid,
           fees: metadata.fees,
-          paymentSourceInformation: metadata.paymentSourceInformation,
-          customer: metadata.customer,
-          paidOn: metadata.paidOn,
-          webhookReceivedAt: metadata.webhookReceivedAt,
+          reference: transactionReference,
+          provider: "Monnify",
+          paymentMethod: metadata.paymentMethod,
+          balance: balanceAfter,
         },
       });
 
-      logger.info("Monnify: Created Payment record for unsolicited payment", {
-        paymentId: payment._id,
-        reference: payment.reference,
-        originalReference: reference,
-        userId,
+      logger.info("Monnify: Wallet funded successfully", {
+        userId: userId.toString(),
+        amount: amountToCredit,
+        reference: transactionReference,
+        providerTransactionId,
       });
-    }
-
-    // ===
-    // STEP 4: Update Payment Record (if solicited)
-    // ===
-    if (isSolicited) {
-      payment.status = "success";
-      payment.providerReference = providerReference;
-      payment.providerTransactionId = providerTransactionId;
-      payment.amountPaid = metadata.settlementAmount;
-      payment.meta = {
-        ...payment.meta,
-        monnifyTransactionReference: metadata.monnifyTransactionReference,
-        monnifyPaymentReference: metadata.monnifyPaymentReference,
-        virtualAccountNumber: metadata.virtualAccountNumber,
-        virtualBankName: metadata.virtualBankName,
-        paymentMethod: metadata.paymentMethod,
-        fees: metadata.fees,
-        settlementAmount: metadata.settlementAmount,
-        paymentSourceInformation: metadata.paymentSourceInformation,
-        customer: metadata.customer,
-        paidOn: metadata.paidOn,
-        webhookReceivedAt: metadata.webhookReceivedAt,
-      };
-
-      await payment.save();
-
-      logger.info("Monnify: Updated Payment record", {
-        paymentId: payment._id,
-        reference: payment.reference,
-        status: payment.status,
+    } catch (error) {
+      await session.abortTransaction();
+      logger.error("Monnify: Wallet funding error", {
+        error,
+        providerTransactionId,
       });
+      throw error;
+    } finally {
+      session.endSession();
     }
-
-    // ===
-    // STEP 5: Credit User Wallet
-    // Use settlement amount (amount after fees)
-    // ===
-    await this.walletService.creditWallet(
-      userId,
-      metadata.settlementAmount,
-      `Wallet funding - ${payment.reference} (Monnify)`,
-      "main"
-    );
-
-    logger.info("Monnify: Wallet credited", {
-      userId,
-      amount: metadata.settlementAmount,
-      reference: payment.reference,
-    });
-
-    // ===
-    // STEP 6: Send Notification
-    // ===
-    await this.notificationRepository.create({
-      type: isSolicited ? "payment_success" : "unsolicited_payment",
-      notifiableType: "User",
-      notifiableId: userId,
-      data: {
-        transactionType: "Wallet Funding",
-        amount: metadata.settlementAmount,
-        amountPaid: metadata.amountPaid,
-        fees: metadata.fees,
-        reference: payment.reference,
-        provider: "monnify",
-        paymentMethod: metadata.paymentMethod,
-        paidOn: metadata.paidOn,
-        unsolicited: !isSolicited,
-      },
-    });
-
-    logger.info("Monnify: Notification sent", {
-      userId,
-      type: isSolicited ? "payment_success" : "unsolicited_payment",
-      reference: payment.reference,
-    });
   }
 
   /**
-   * Handle SUCCESSFUL_DISBURSEMENT (Withdrawal Transaction Success)
-   * 
-   * Flow:
-   * 1. Find Payment by reference
-   * 2. Find Transaction by reference
-   * 3. Update Payment status to "success"
-   * 4. Update Transaction status to "success"
-   * 5. Send success notification
+   * Handle SUCCESSFUL_DISBURSEMENT (Withdrawal completion)
+   *
+   * ✅ NEW FLOW (No Payment Model):
+   * 1. Find Transaction record by reference
+   * 2. Update Transaction status
+   * 3. Send notification
    */
   private async handleSuccessfulDisbursement(
     webhookData: WebhookProcessResult
   ): Promise<void> {
-    const { reference, providerReference, providerTransactionId, metadata } =
-      webhookData;
-
-    logger.info("Monnify: Processing successful disbursement (withdrawal)", {
+    const {
       reference,
       providerTransactionId,
-      amount: metadata.amount,
-      destinationAccount: metadata.destinationAccountNumber,
-    });
+      providerReference,
+      status,
+      metadata,
+    } = webhookData;
 
-    // ===
-    // STEP 1: Find Payment Record
-    // ===
-    const payment = await Payment.findOne({
-      reference: reference,
-      type: "withdrawal",
-    });
-
-    if (!payment) {
-      logger.error("Monnify: Payment not found for disbursement", {
+    try {
+      logger.info("Monnify: Processing withdrawal webhook", {
         reference,
         providerTransactionId,
+        amount: metadata.amount,
+        destinationAccount: metadata.destinationAccountNumber,
+        status,
       });
-      throw new AppError(
-        "Payment not found",
-        HTTP_STATUS.NOT_FOUND,
-        ERROR_CODES.NOT_FOUND
-      );
-    }
 
-    // Check idempotency
-    if (payment.status === "success") {
-      logger.info(
-        "Monnify: Disbursement already processed (idempotency check)",
-        {
+      // ===
+      // STEP 1: Find Transaction record by reference
+      // ===
+      const transaction = await this.transactionRepository.findOne({
+        reference: reference,
+        type: { $in: ["withdrawal", "bank_transfer"] },
+        provider: "monnify",
+      });
+
+      if (!transaction) {
+        logger.error("Monnify: Withdrawal transaction not found", {
           reference,
-          paymentId: payment._id,
-        }
-      );
-      return;
-    }
+          providerTransactionId,
+        });
+        throw new AppError(
+          "Withdrawal transaction not found",
+          HTTP_STATUS.NOT_FOUND,
+          ERROR_CODES.RESOURCE_NOT_FOUND
+        );
+      }
 
-    logger.info("Monnify: Found Payment record", {
-      paymentId: payment._id,
-      reference,
-      userId: payment.userId,
-    });
-
-    // ===
-    // STEP 2: Find Transaction Record
-    // ===
-    const transaction = await this.transactionRepository.findOne({
-      reference: reference,
-      type: { $in: ["withdrawal", "bank_transfer"] },
-    });
-
-    if (!transaction) {
-      logger.warn("Monnify: Transaction record not found", {
-        reference,
-      });
-    } else {
-      logger.info("Monnify: Found Transaction record", {
+      logger.info("Monnify: Found transaction record", {
         transactionId: transaction._id,
         reference,
+        userId: transaction.sourceId,
+        currentStatus: transaction.status,
       });
-    }
 
-    // ===
-    // STEP 3: Update Payment Status
-    // ===
-    payment.status = "success";
-    payment.providerTransactionId = providerTransactionId;
-    payment.meta = {
-      ...payment.meta,
-      monnifyTransactionReference: metadata.monnifyTransactionReference,
-      sessionId: metadata.sessionId,
-      transactionDescription: metadata.transactionDescription,
-      fee: metadata.fee,
-      completedOn: metadata.completedOn,
-      webhookReceivedAt: metadata.webhookReceivedAt,
-    };
+      // ===
+      // STEP 2: Check if already processed (idempotency)
+      // ===
+      if (transaction.status === "success" || transaction.status === "failed") {
+        logger.info("Monnify: Withdrawal already processed", {
+          transactionId: transaction._id,
+          currentStatus: transaction.status,
+          webhookStatus: status,
+        });
+        return;
+      }
 
-    await payment.save();
-
-    logger.info("Monnify: Payment updated to success", {
-      paymentId: payment._id,
-      reference,
-    });
-
-    // ===
-    // STEP 4: Update Transaction Status
-    // ===
-    if (transaction) {
+      // ===
+      // STEP 3: Update Transaction
+      // ===
       await this.transactionRepository.update(transaction.id.toString(), {
         status: "success",
         providerReference: metadata.monnifyTransactionReference,
         meta: {
           ...transaction.meta,
           monnifyTransactionReference: metadata.monnifyTransactionReference,
-          completedOn: metadata.completedOn,
+          sessionId: metadata.sessionId,
+          transactionDescription: metadata.transactionDescription,
           fee: metadata.fee,
+          providerTransactionId: providerTransactionId,
+          webhookData: metadata,
+          completedOn: metadata.completedOn,
         },
       });
 
       logger.info("Monnify: Transaction updated to success", {
         transactionId: transaction._id,
-        reference,
+        monnifyTransactionReference: metadata.monnifyTransactionReference,
       });
+
+      // ===
+      // STEP 4: Send notification
+      // ===
+      const userId = transaction.sourceId;
+      const amount = transaction.amount;
+      const transactionType =
+        transaction.type === "bank_transfer" ? "Bank Transfer" : "Withdrawal";
+
+      await this.notificationRepository.create({
+        type: "withdrawal_completed",
+        notifiableType: "User",
+        notifiableId: userId,
+        data: {
+          transactionType,
+          amount,
+          fee: metadata.fee,
+          reference,
+          provider: "Monnify",
+          destinationAccountNumber: metadata.destinationAccountNumber,
+          destinationAccountName: metadata.destinationAccountName,
+          destinationBankName: metadata.destinationBankName,
+          completedOn: metadata.completedOn,
+        },
+      });
+
+      logger.info("Monnify: Withdrawal completed successfully", {
+        reference,
+        amount,
+        providerTransactionId,
+      });
+    } catch (error) {
+      logger.error("Monnify: Withdrawal processing error", {
+        error,
+        reference,
+        providerTransactionId,
+      });
+      throw error;
     }
-
-    // ===
-    // STEP 5: Send Success Notification
-    // ===
-    await this.notificationRepository.create({
-      type: "withdrawal_completed",
-      notifiableType: "User",
-      notifiableId: payment.userId,
-      data: {
-        transactionType: transaction?.type === "bank_transfer" ? "Bank Transfer" : "Withdrawal",
-        amount: metadata.amount,
-        fee: metadata.fee,
-        reference: reference,
-        provider: "monnify",
-        destinationAccountNumber: metadata.destinationAccountNumber,
-        destinationAccountName: metadata.destinationAccountName,
-        destinationBankName: metadata.destinationBankName,
-        completedOn: metadata.completedOn,
-      },
-    });
-
-    logger.info("Monnify: Success notification sent", {
-      userId: payment.userId,
-      reference,
-    });
   }
 
   /**
-   * Handle FAILED_DISBURSEMENT (Withdrawal Transaction Failed)
-   * 
-   * Flow:
-   * 1. Find Payment by reference
-   * 2. Find Transaction by reference
-   * 3. Update Payment status to "failed"
-   * 4. Update Transaction status to "failed"
-   * 5. Refund wallet (credit back)
-   * 6. Send failure notification
+   * Handle FAILED_DISBURSEMENT (Withdrawal failure)
+   *
+   * ✅ NEW FLOW (No Payment Model):
+   * 1. Find Transaction record by reference
+   * 2. Update Transaction status to failed
+   * 3. Refund wallet
+   * 4. Send notification
    */
   private async handleFailedDisbursement(
     webhookData: WebhookProcessResult
   ): Promise<void> {
-    const { reference, providerReference, providerTransactionId, metadata } =
-      webhookData;
+    const { reference, providerTransactionId, metadata } = webhookData;
 
-    logger.info("Monnify: Processing failed disbursement (withdrawal)", {
-      reference,
-      providerTransactionId,
-      amount: metadata.amount,
-      failureReason: metadata.failureReason,
-    });
-
-    // ===
-    // STEP 1: Find Payment Record
-    // ===
-    const payment = await Payment.findOne({
-      reference: reference,
-      type: "withdrawal",
-    });
-
-    if (!payment) {
-      logger.error("Monnify: Payment not found for failed disbursement", {
+    try {
+      logger.info("Monnify: Processing failed disbursement", {
         reference,
         providerTransactionId,
+        amount: metadata.amount,
+        failureReason: metadata.failureReason,
       });
-      throw new AppError(
-        "Payment not found",
-        HTTP_STATUS.NOT_FOUND,
-        ERROR_CODES.NOT_FOUND
-      );
-    }
 
-    // Check idempotency
-    if (payment.status === "failed") {
-      logger.info(
-        "Monnify: Failed disbursement already processed (idempotency check)",
-        {
+      // ===
+      // STEP 1: Find Transaction record
+      // ===
+      const transaction = await this.transactionRepository.findOne({
+        reference: reference,
+        type: { $in: ["withdrawal", "bank_transfer"] },
+        provider: "monnify",
+      });
+
+      if (!transaction) {
+        logger.error("Monnify: Transaction not found for failed disbursement", {
           reference,
-          paymentId: payment._id,
-        }
-      );
-      return;
-    }
+        });
+        throw new AppError(
+          "Transaction not found",
+          HTTP_STATUS.NOT_FOUND,
+          ERROR_CODES.RESOURCE_NOT_FOUND
+        );
+      }
 
-    logger.info("Monnify: Found Payment record", {
-      paymentId: payment._id,
-      reference,
-      userId: payment.userId,
-    });
+      // Check if already processed
+      if (transaction.status === "failed") {
+        logger.info("Monnify: Transaction already marked as failed", {
+          transactionId: transaction._id,
+        });
+        return;
+      }
 
-    // ===
-    // STEP 2: Find Transaction Record
-    // ===
-    const transaction = await this.transactionRepository.findOne({
-      reference: reference,
-      type: { $in: ["withdrawal", "bank_transfer"] },
-    });
-
-    if (!transaction) {
-      logger.warn("Monnify: Transaction record not found", {
-        reference,
-      });
-    } else {
-      logger.info("Monnify: Found Transaction record", {
-        transactionId: transaction._id,
-        reference,
-      });
-    }
-
-    // ===
-    // STEP 3: Update Payment Status
-    // ===
-    payment.status = "failed";
-    payment.providerTransactionId = providerTransactionId;
-    payment.meta = {
-      ...payment.meta,
-      monnifyTransactionReference: metadata.monnifyTransactionReference,
-      failureReason: metadata.failureReason,
-      transactionDescription: metadata.transactionDescription,
-      completedOn: metadata.completedOn,
-      webhookReceivedAt: metadata.webhookReceivedAt,
-    };
-
-    await payment.save();
-
-    logger.info("Monnify: Payment updated to failed", {
-      paymentId: payment._id,
-      reference,
-    });
-
-    // ===
-    // STEP 4: Update Transaction Status
-    // ===
-    if (transaction) {
+      // ===
+      // STEP 2: Update Transaction status
+      // ===
       await this.transactionRepository.update(transaction.id.toString(), {
         status: "failed",
-        providerReference: metadata.monnifyTransactionReference,
         meta: {
           ...transaction.meta,
           monnifyTransactionReference: metadata.monnifyTransactionReference,
           failureReason: metadata.failureReason,
+          transactionDescription: metadata.transactionDescription,
+          providerTransactionId: providerTransactionId,
+          webhookData: metadata,
           completedOn: metadata.completedOn,
         },
       });
 
-      logger.info("Monnify: Transaction updated to failed", {
+      logger.info("Monnify: Transaction marked as failed", {
         transactionId: transaction._id,
+      });
+
+      // ===
+      // STEP 3: Refund wallet
+      // ===
+      const session = await mongoose.startSession();
+      session.startTransaction();
+
+      try {
+        await Wallet.findByIdAndUpdate(
+          transaction.walletId,
+          { $inc: { balance: transaction.amount } },
+          { session }
+        );
+
+        await session.commitTransaction();
+
+        logger.info("Monnify: Wallet refunded for failed withdrawal", {
+          userId: transaction.sourceId?.toString(),
+          amount: transaction.amount,
+          reference,
+        });
+      } catch (refundError) {
+        await session.abortTransaction();
+        logger.error("Monnify: Refund failed", {
+          error: refundError,
+          transactionId: transaction._id,
+        });
+        throw refundError;
+      } finally {
+        session.endSession();
+      }
+
+      // ===
+      // STEP 4: Send notification
+      // ===
+      await this.notificationRepository.create({
+        type: "withdrawal_failed",
+        notifiableType: "User",
+        notifiableId: transaction.sourceId,
+        data: {
+          transactionType:
+            transaction.type === "bank_transfer"
+              ? "Bank Transfer"
+              : "Withdrawal",
+          amount: transaction.amount,
+          reference,
+          provider: "Monnify",
+          failureReason: metadata.failureReason,
+          refunded: true,
+        },
+      });
+
+      logger.info("Monnify: Failed disbursement processed and refunded", {
+        reference,
+        amount: transaction.amount,
+      });
+    } catch (error) {
+      logger.error("Monnify: Failed disbursement processing error", {
+        error,
         reference,
       });
+      throw error;
     }
-
-    // ===
-    // STEP 5: Refund Wallet
-    // Credit back the amount that was debited during withdrawal initiation
-    // ===
-    await this.walletService.creditWallet(
-      payment.userId,
-      metadata.amount,
-      `Withdrawal refund - ${reference} (Failed)`,
-      "main"
-    );
-
-    logger.info("Monnify: Wallet refunded", {
-      userId: payment.userId,
-      amount: metadata.amount,
-      reference,
-    });
-
-    // ===
-    // STEP 6: Send Failure Notification
-    // ===
-    await this.notificationRepository.create({
-      type: "withdrawal_failed",
-      notifiableType: "User",
-      notifiableId: payment.userId,
-      data: {
-        transactionType: transaction?.type === "bank_transfer" ? "Bank Transfer" : "Withdrawal",
-        amount: metadata.amount,
-        reference: reference,
-        provider: "monnify",
-        failureReason: metadata.failureReason,
-        refunded: true,
-      },
-    });
-
-    logger.info("Monnify: Failure notification sent", {
-      userId: payment.userId,
-      reference,
-    });
   }
 
   /**
-   * Handle REVERSED_DISBURSEMENT (Withdrawal Transaction Reversed)
-   * 
-   * Flow:
-   * 1. Find Payment by reference
-   * 2. Find Transaction by reference
-   * 3. Update Payment status to "reversed"
-   * 4. Update Transaction status to "reversed"
-   * 5. Refund wallet (credit back)
-   * 6. Send reversal notification
+   * Handle REVERSED_DISBURSEMENT (Withdrawal reversal)
+   *
+   * ✅ NEW FLOW (No Payment Model):
+   * 1. Find Transaction record by reference
+   * 2. Update Transaction status to reversed
+   * 3. Refund wallet
+   * 4. Send notification
    */
   private async handleReversedDisbursement(
     webhookData: WebhookProcessResult
   ): Promise<void> {
-    const { reference, providerReference, providerTransactionId, metadata } =
-      webhookData;
+    const { reference, providerTransactionId, metadata } = webhookData;
 
-    logger.info("Monnify: Processing reversed disbursement (withdrawal)", {
-      reference,
-      providerTransactionId,
-      amount: metadata.amount,
-    });
-
-    // ===
-    // STEP 1: Find Payment Record
-    // ===
-    const payment = await Payment.findOne({
-      reference: reference,
-      type: "withdrawal",
-    });
-
-    if (!payment) {
-      logger.error("Monnify: Payment not found for reversed disbursement", {
+    try {
+      logger.info("Monnify: Processing reversed disbursement", {
         reference,
         providerTransactionId,
+        amount: metadata.amount,
       });
-      throw new AppError(
-        "Payment not found",
-        HTTP_STATUS.NOT_FOUND,
-        ERROR_CODES.NOT_FOUND
-      );
-    }
 
-    // Check idempotency
-    if (payment.status === "reversed") {
-      logger.info(
-        "Monnify: Reversed disbursement already processed (idempotency check)",
-        {
-          reference,
-          paymentId: payment._id,
-        }
-      );
-      return;
-    }
-
-    logger.info("Monnify: Found Payment record", {
-      paymentId: payment._id,
-      reference,
-      userId: payment.userId,
-    });
-
-    // ===
-    // STEP 2: Find Transaction Record
-    // ===
-    const transaction = await this.transactionRepository.findOne({
-      reference: reference,
-      type: { $in: ["withdrawal", "bank_transfer"] },
-    });
-
-    if (!transaction) {
-      logger.warn("Monnify: Transaction record not found", {
-        reference,
+      // ===
+      // STEP 1: Find Transaction record
+      // ===
+      const transaction = await this.transactionRepository.findOne({
+        reference: reference,
+        type: { $in: ["withdrawal", "bank_transfer"] },
+        provider: "monnify",
       });
-    } else {
-      logger.info("Monnify: Found Transaction record", {
-        transactionId: transaction._id,
-        reference,
-      });
-    }
 
-    // ===
-    // STEP 3: Update Payment Status
-    // ===
-    payment.status = "reversed";
-    payment.providerTransactionId = providerTransactionId;
-    payment.meta = {
-      ...payment.meta,
-      monnifyTransactionReference: metadata.monnifyTransactionReference,
-      reversalReason: "Disbursement reversed by Monnify",
-      completedOn: metadata.completedOn,
-      webhookReceivedAt: metadata.webhookReceivedAt,
-    };
+      if (!transaction) {
+        logger.error(
+          "Monnify: Transaction not found for reversed disbursement",
+          { reference }
+        );
+        throw new AppError(
+          "Transaction not found",
+          HTTP_STATUS.NOT_FOUND,
+          ERROR_CODES.RESOURCE_NOT_FOUND
+        );
+      }
 
-    await payment.save();
+      // Check if already processed
+      if (transaction.status === "reversed") {
+        logger.info("Monnify: Transaction already marked as reversed", {
+          transactionId: transaction._id,
+        });
+        return;
+      }
 
-    logger.info("Monnify: Payment updated to reversed", {
-      paymentId: payment._id,
-      reference,
-    });
-
-    // ===
-    // STEP 4: Update Transaction Status
-    // ===
-    if (transaction) {
+      // ===
+      // STEP 2: Update Transaction status
+      // ===
       await this.transactionRepository.update(transaction.id.toString(), {
         status: "reversed",
-        providerReference: metadata.monnifyTransactionReference,
         meta: {
           ...transaction.meta,
           monnifyTransactionReference: metadata.monnifyTransactionReference,
           reversalReason: "Disbursement reversed by Monnify",
+          providerTransactionId: providerTransactionId,
+          webhookData: metadata,
           completedOn: metadata.completedOn,
         },
       });
 
-      logger.info("Monnify: Transaction updated to reversed", {
+      logger.info("Monnify: Transaction marked as reversed", {
         transactionId: transaction._id,
+      });
+
+      // ===
+      // STEP 3: Refund wallet
+      // ===
+      const session = await mongoose.startSession();
+      session.startTransaction();
+
+      try {
+        await Wallet.findByIdAndUpdate(
+          transaction.walletId,
+          { $inc: { balance: transaction.amount } },
+          { session }
+        );
+
+        await session.commitTransaction();
+
+        logger.info("Monnify: Wallet refunded for reversed withdrawal", {
+          userId: transaction.sourceId?.toString(),
+          amount: transaction.amount,
+          reference,
+        });
+      } catch (refundError) {
+        await session.abortTransaction();
+        logger.error("Monnify: Refund failed", {
+          error: refundError,
+          transactionId: transaction._id,
+        });
+        throw refundError;
+      } finally {
+        session.endSession();
+      }
+
+      // ===
+      // STEP 4: Send notification
+      // ===
+      await this.notificationRepository.create({
+        type: "withdrawal_reversed",
+        notifiableType: "User",
+        notifiableId: transaction.sourceId,
+        data: {
+          transactionType:
+            transaction.type === "bank_transfer"
+              ? "Bank Transfer"
+              : "Withdrawal",
+          amount: transaction.amount,
+          reference,
+          provider: "Monnify",
+          reason: "Disbursement reversed by provider",
+          refunded: true,
+        },
+      });
+
+      logger.info("Monnify: Reversed disbursement processed and refunded", {
+        reference,
+        amount: transaction.amount,
+      });
+    } catch (error) {
+      logger.error("Monnify: Reversed disbursement processing error", {
+        error,
         reference,
       });
+      throw error;
     }
+  }
 
-    // ===
-    // STEP 5: Refund Wallet
-    // Credit back the amount that was debited
-    // ===
-    await this.walletService.creditWallet(
-      payment.userId,
-      metadata.amount,
-      `Withdrawal refund - ${reference} (Reversed)`,
-      "main"
-    );
+  /**
+   * Check if transaction has already been processed (idempotency)
+   * Checks Transaction model instead of Payment
+   */
+  private async checkIdempotency(
+    providerTransactionId?: string
+  ): Promise<boolean> {
+    if (!providerTransactionId) return false;
 
-    logger.info("Monnify: Wallet refunded (reversal)", {
-      userId: payment.userId,
-      amount: metadata.amount,
-      reference,
+    // Check if Transaction with this providerTransactionId exists
+    const existingTransaction = await this.transactionRepository.findOne({
+      $or: [
+        { providerReference: providerTransactionId },
+        { "meta.providerTransactionId": providerTransactionId },
+        { "meta.monnifyTransactionReference": providerTransactionId },
+      ],
+      provider: "monnify",
     });
 
-    // ===
-    // STEP 6: Send Reversal Notification
-    // ===
-    await this.notificationRepository.create({
-      type: "withdrawal_reversed",
-      notifiableType: "User",
-      notifiableId: payment.userId,
-      data: {
-        transactionType: transaction?.type === "bank_transfer" ? "Bank Transfer" : "Withdrawal",
-        amount: metadata.amount,
-        reference: reference,
-        provider: "monnify",
-        reason: "Disbursement reversed by provider",
-        refunded: true,
-      },
-    });
-
-    logger.info("Monnify: Reversal notification sent", {
-      userId: payment.userId,
-      reference,
-    });
+    return !!existingTransaction;
   }
 }

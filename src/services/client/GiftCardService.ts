@@ -5,14 +5,13 @@ import {
 } from "@/repositories/GiftCardRepository";
 import { BankAccountRepository } from "@/repositories/BankAccountRepository";
 import { TransactionRepository } from "@/repositories/TransactionRepository";
-import { NotificationRepository } from "@/repositories/NotificationRepository";
 import { WalletService } from "./WalletService";
 import { ReloadlyService } from "./providers/ReloadlyService";
 import { HTTP_STATUS, ERROR_CODES } from "@/utils/constants";
 import { Types } from "mongoose";
-import { v4 as uuidv4 } from "uuid";
 import { AppError } from "@/middlewares/errorHandler";
 import { generateReference } from "@/utils/helpers";
+import { NotificationService } from "./NotificationService";
 import { IUser } from "@/models/core/User";
 import logger from "@/logger";
 
@@ -40,7 +39,7 @@ export class GiftCardService {
   private transactionRepository: TransactionRepository;
   private walletService: WalletService;
   private reloadlyService: ReloadlyService;
-  private notificationRepository: NotificationRepository;
+  private notificationService: NotificationService;
 
   constructor() {
     this.giftCardRepository = new GiftCardRepository();
@@ -50,12 +49,10 @@ export class GiftCardService {
     this.transactionRepository = new TransactionRepository();
     this.walletService = new WalletService();
     this.reloadlyService = new ReloadlyService();
-    this.notificationRepository = new NotificationRepository();
+    this.notificationService = new NotificationService();
   }
 
-  /**
-   * CATEGORY METHODS
-   */
+  // CATEGORY METHODS
   async getCategories(
     page: number = 1,
     limit: number = 10,
@@ -78,9 +75,7 @@ export class GiftCardService {
     return category;
   }
 
-  /**
-   * GIFTCARD PRODUCTS METHODS
-   */
+  // GIFTCARD PRODUCTS METHODS
   async getGiftCards(filters: any = {}, page: number = 1, limit: number = 10) {
     const result = await this.giftCardRepository.findAll(filters, page, limit);
     return result;
@@ -194,9 +189,7 @@ export class GiftCardService {
     }));
   }
 
-  /**
-   * BREAKDOWN CALCULATION
-   */
+  // BREAKDOWN CALCULATION
   async calculateBreakdown(data: {
     giftCardId: string;
     amount: number;
@@ -340,9 +333,7 @@ export class GiftCardService {
     };
   }
 
-  /**
-   * BUY GIFTCARD (Automated via Reloadly)
-   */
+  // BUY GIFTCARD (via Reloadly)
   async buyGiftCard(data: {
     userId: string;
     user: IUser;
@@ -401,13 +392,29 @@ export class GiftCardService {
       );
     }
 
-    await this.walletService.debitWallet(
+    // Debit wallet atomically with transaction creation
+    const debitResult = await this.walletService.debitWallet(
       data.userId,
       totalAmount,
       "Gift card purchase",
-      "main"
+      "main",
+      {
+        type: "gift_card_purchase",
+        provider: "reloadly",
+        idempotencyKey: reference,
+        initiatedBy: new Types.ObjectId(data.userId),
+        initiatedByType: "user",
+        meta: {
+          giftCardName: giftCard.name,
+          quantity: data.quantity,
+          productId: giftCard.productId,
+        },
+      }
     );
 
+    const transaction = debitResult.transaction;
+
+    // Create gift card transaction
     const giftCardTransaction = await this.giftCardTransactionRepository.create(
       {
         giftCardId: giftCard.id,
@@ -421,6 +428,7 @@ export class GiftCardService {
         payableAmount: totalAmount,
         status: "pending",
         preorder: false,
+        transactionId: transaction.id,
         meta: {
           recipientEmail: data.user.email,
           recipientPhone: data.user.phone,
@@ -428,28 +436,10 @@ export class GiftCardService {
       }
     );
 
-    const transaction = await this.transactionRepository.create({
-      walletId: wallet._id,
-      sourceId: new Types.ObjectId(data.userId),
+    // Update transaction with gift card transaction link
+    await this.transactionRepository.update(transaction.id, {
       transactableType: "GiftCardTransaction",
       transactableId: giftCardTransaction.id,
-      reference,
-      amount: totalAmount,
-      type: "gift_card_purchase",
-      direction: "DEBIT",
-      provider: "reloadly",
-      remark: `Gift card purchase: ${giftCard.name}`,
-      purpose: "gift_card_purchase",
-      status: "pending",
-      meta: {
-        giftCardName: giftCard.name,
-        quantity: data.quantity,
-        productId: giftCard.productId,
-      },
-    });
-
-    await this.giftCardTransactionRepository.update(giftCardTransaction.id, {
-      transactionId: transaction.id,
     });
 
     try {
@@ -489,10 +479,13 @@ export class GiftCardService {
             providerReference: providerResponse.providerReference,
           }
         );
+        await this.transactionRepository.update(transaction.id, {
+          providerReference: providerResponse.providerReference,
+        });
       }
 
-      if (this.notificationRepository && status === "success") {
-        await this.notificationRepository.create({
+      if (status === "success") {
+        await this.notificationService.createNotification({
           type: "transaction_success",
           notifiableType: "User",
           notifiableId: new Types.ObjectId(data.userId),
@@ -502,6 +495,9 @@ export class GiftCardService {
             reference,
             giftCardName: giftCard.name,
           },
+          sendEmail: true,
+          sendSMS: false,
+          sendPush: true,
         });
       }
 
@@ -510,44 +506,22 @@ export class GiftCardService {
           data.userId,
           totalAmount,
           "Gift card purchase failed - refund",
-          "main"
-        );
-
-        if (this.notificationRepository) {
-          await this.notificationRepository.create({
-            type: "transaction_failed",
-            notifiableType: "User",
-            notifiableId: new Types.ObjectId(data.userId),
-            data: {
-              transactionType: "Gift Card Purchase",
-              amount: totalAmount,
-              reference,
+          "main",
+          {
+            type: "refund",
+            provider: "reloadly",
+            providerReference: providerResponse.providerReference,
+            idempotencyKey: `${reference}_refund`,
+            initiatedByType: "system",
+            meta: {
+              originalReference: reference,
+              reason: "transaction_failed",
               giftCardName: giftCard.name,
             },
-          });
-        }
-      }
+          }
+        );
 
-      return {
-        ...transaction.toObject(),
-        status,
-        pending: status === "pending",
-      };
-    } catch (error) {
-      await this.giftCardTransactionRepository.updateStatus(
-        giftCardTransaction.id,
-        "failed"
-      );
-      await this.transactionRepository.updateStatus(transaction.id, "failed");
-      await this.walletService.creditWallet(
-        data.userId,
-        totalAmount,
-        "Gift card purchase error - refund",
-        "main"
-      );
-
-      if (this.notificationRepository) {
-        await this.notificationRepository.create({
+        await this.notificationService.createNotification({
           type: "transaction_failed",
           notifiableType: "User",
           notifiableId: new Types.ObjectId(data.userId),
@@ -557,23 +531,69 @@ export class GiftCardService {
             reference,
             giftCardName: giftCard.name,
           },
+          sendEmail: true,
+          sendSMS: false,
+          sendPush: true,
         });
       }
+
+      return {
+        ...this.sanitizeGiftCardTransaction(transaction),
+        status,
+        pending: status === "pending",
+      };
+    } catch (error) {
+      await this.giftCardTransactionRepository.updateStatus(
+        giftCardTransaction.id,
+        "failed"
+      );
+      await this.transactionRepository.updateStatus(transaction.id, "failed");
+
+      await this.walletService.creditWallet(
+        data.userId,
+        totalAmount,
+        "Gift card purchase error - refund",
+        "main",
+        {
+          type: "refund",
+          provider: "reloadly",
+          idempotencyKey: `${reference}_error_refund`,
+          initiatedByType: "system",
+          meta: {
+            originalReference: reference,
+            reason: "error",
+            giftCardName: giftCard.name,
+          },
+        }
+      );
+
+      await this.notificationService.createNotification({
+        type: "transaction_failed",
+        notifiableType: "User",
+        notifiableId: new Types.ObjectId(data.userId),
+        data: {
+          transactionType: "Gift Card Purchase",
+          amount: totalAmount,
+          reference,
+          giftCardName: giftCard.name,
+        },
+        sendEmail: true,
+        sendSMS: false,
+        sendPush: true,
+      });
 
       throw error;
     }
   }
 
-  /**
-   * SELL GIFTCARD (Manual - Pending Admin Review)
-   */
+  //  SELL GIFTCARD (Manual - Pending Admin Review)
   async sellGiftCard(data: {
     userId: string;
     giftCardId: string;
     amount: number;
     quantity: number;
     cardType: "physical" | "ecode";
-    cards: string[]; // Array of card images
+    cards: string[];
     comment?: string;
     bankAccountId: string;
   }) {
@@ -581,7 +601,7 @@ export class GiftCardService {
     const groupTag = generateReference("GP");
 
     const giftCard = await this.getGiftCardById(data.giftCardId);
-    //TODO: instead of running a new query for the category i can just populate the giftcard's category in the getGiftCardById method
+
     const category = await this.giftCardCategoryRepository.findById(
       giftCard.categoryId.toString()
     );
@@ -690,21 +710,22 @@ export class GiftCardService {
       }
     );
 
-    // Send notification
-    if (this.notificationRepository) {
-      await this.notificationRepository.create({
-        type: "giftcard_sell_submitted",
-        notifiableType: "User",
-        notifiableId: new Types.ObjectId(data.userId),
-        data: {
-          transactionType: "Gift Card Sale",
-          amount: payableAmount,
-          reference,
-          giftCardName: giftCard.name,
-          status: "pending_review",
-        },
-      });
-    }
+    // Send notification using NotificationService
+    await this.notificationService.createNotification({
+      type: "giftcard_sell_submitted",
+      notifiableType: "User",
+      notifiableId: new Types.ObjectId(data.userId),
+      data: {
+        transactionType: "Gift Card Sale",
+        amount: payableAmount,
+        reference,
+        giftCardName: giftCard.name,
+        status: "pending_review",
+      },
+      sendEmail: true,
+      sendSMS: false,
+      sendPush: true,
+    });
 
     return {
       transaction: giftCardTransaction,
@@ -714,9 +735,7 @@ export class GiftCardService {
     };
   }
 
-  /**
-   * GET REDEEM CODE
-   */
+  // GET REDEEM CODE
   async getRedeemCode(transactionId: string, userId: string) {
     const transaction = await this.giftCardTransactionRepository.findById(
       transactionId
@@ -855,7 +874,9 @@ export class GiftCardService {
 
   async getTransaction(reference: string, userId: string): Promise<any> {
     const transaction =
-      await this.giftCardTransactionRepository.findByReferenceWithoutPopulate(reference);
+      await this.giftCardTransactionRepository.findByReferenceWithoutPopulate(
+        reference
+      );
 
     if (!transaction) {
       throw new AppError(
@@ -890,7 +911,7 @@ export class GiftCardService {
           transaction._id
         );
       return {
-        ...transaction.toObject(),
+        ...this.sanitizeGiftCardTransaction(transaction),
         children,
       };
     }
@@ -1199,5 +1220,49 @@ export class GiftCardService {
     }
 
     return null;
+  }
+
+  private sanitizeGiftCardTransaction(transaction: any) {
+    return {
+      id: transaction._id || transaction.id,
+      reference: transaction.reference,
+      tradeType: transaction.tradeType,
+
+      // Card details
+      cardType: transaction.cardType,
+      cards: transaction.cards,
+      comment: transaction.comment,
+
+      // Amounts
+      amount: transaction.amount,
+      quantity: transaction.quantity,
+      rate: transaction.rate,
+      serviceCharge: transaction.serviceCharge,
+      payableAmount: transaction.payableAmount,
+
+      // Status & grouping
+      status: transaction.status,
+      preorder: transaction.preorder,
+      groupTag: transaction.groupTag,
+
+      // Provider reference (for buy transactions)
+      providerReference: transaction.providerReference,
+
+      // Review info (user-facing only)
+      reviewNote: transaction.reviewNote,
+
+      // Bank details (if exists - for sell transactions)
+      ...(transaction.accountNumber && {
+        bankDetails: {
+          accountName: transaction.accountName,
+          accountNumber: transaction.accountNumber,
+          bankCode: transaction.bankCode,
+        },
+      }),
+
+      // Timestamps
+      createdAt: transaction.createdAt,
+      updatedAt: transaction.updatedAt,
+    };
   }
 }

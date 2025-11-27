@@ -1,5 +1,4 @@
 import { WalletRepository } from "@/repositories/WalletRepository";
-import { LedgerRepository } from "@/repositories/LedgerRepository";
 import { TransactionRepository } from "@/repositories/TransactionRepository";
 import { UserRepository } from "@/repositories/UserRepository";
 import { NotificationService } from "./NotificationService";
@@ -9,15 +8,17 @@ import {
   ERROR_CODES,
   CACHE_KEYS,
   WALLET_TYPES,
-  LEDGER_TYPE,
 } from "@/utils/constants";
 import { Types } from "mongoose";
 import { generateReference } from "@/utils/helpers";
 import { CacheService } from "../CacheService";
+import logger from "@/logger";
+import { Transaction } from "@/models/wallet/Transaction";
+import mongoose from "mongoose";
+import { Wallet } from "@/models/wallet/Wallet";
 
 export class WalletService {
   private walletRepository: WalletRepository;
-  private ledgerRepository: LedgerRepository;
   private cacheService: CacheService;
   private transactionRepository: TransactionRepository;
   private userRepository: UserRepository;
@@ -25,11 +26,10 @@ export class WalletService {
 
   constructor() {
     this.walletRepository = new WalletRepository();
-    this.ledgerRepository = new LedgerRepository();
     this.cacheService = new CacheService();
     this.transactionRepository = new TransactionRepository();
     this.userRepository = new UserRepository();
-    this.notificationService = new NotificationService(); // Added
+    this.notificationService = new NotificationService();
   }
 
   async getWallet(
@@ -67,132 +67,276 @@ export class WalletService {
     userId: string | Types.ObjectId,
     amount: number,
     reason: string,
-    walletType: "main" | "bonus" | "commission" = "main"
-  ): Promise<any> {
-    const wallet = await this.walletRepository.findByUserId(userId);
-    if (!wallet) {
-      throw new AppError(
-        "Wallet not found",
-        HTTP_STATUS.NOT_FOUND,
-        ERROR_CODES.NOT_FOUND
-      );
+    walletType: "main" | "bonus" | "commission" = "main",
+    options?: {
+      type?: string;
+      provider?: string;
+      providerReference?: string;
+      transactableType?: string;
+      transactableId?: Types.ObjectId;
+      idempotencyKey?: string;
+      initiatedBy?: Types.ObjectId;
+      initiatedByType?: "user" | "system" | "admin";
+      meta?: any;
     }
+  ): Promise<any> {
+    const session = await mongoose.startSession();
+    session.startTransaction();
 
-    const oldBalance = wallet.balance;
-    const newBalance = oldBalance + Number(amount);
+    try {
+      // Check for duplicate transaction (idempotency)
+      if (options?.idempotencyKey) {
+        const existingTransaction = await Transaction.findOne({
+          idempotencyKey: options.idempotencyKey,
+        });
+        if (existingTransaction) {
+          logger.warn(`Duplicate credit attempt: ${options.idempotencyKey}`);
+          await session.abortTransaction();
+          return existingTransaction;
+        }
+      }
 
-    // Update wallet balance
-    await this.walletRepository.updateBalance(wallet.id.toString(), newBalance);
+      // Get wallet BEFORE any changes
+      const wallet = await this.walletRepository.findByUserId(userId);
+      if (!wallet) {
+        throw new AppError(
+          "Wallet not found",
+          HTTP_STATUS.NOT_FOUND,
+          ERROR_CODES.NOT_FOUND
+        );
+      }
 
-    // Create ledger entry
-    await this.ledgerRepository.create({
-      ledgerableType: "Wallet",
-      ledgerableId: wallet.id,
-      source: "system",
-      destination: wallet.id.toString(),
-      oldBalance,
-      newBalance,
-      type: LEDGER_TYPE.CREDIT,
-      reason,
-      amount,
-      currencyCode: "NGN",
-    });
+      // Capture balance BEFORE credit
+      const balanceBefore = wallet.balance;
+      const balanceAfter = balanceBefore + Number(amount);
 
-    // Invalidate cache
-    await this.cacheService.delete(CACHE_KEYS.USER_WALLET(userId.toString()));
+      // Update wallet balance atomically
+      await Wallet.findByIdAndUpdate(
+        wallet._id,
+        { $inc: { balance: amount } },
+        { session }
+      );
 
-    // Send notification using NotificationService
-    await this.notificationService.createNotification({
-      type: "wallet_credit",
-      notifiableType: "User",
-      notifiableId: userId as Types.ObjectId,
-      data: {
+      // Generate reference
+      const reference = generateReference("TXN");
+
+      // Create transaction record
+      const [transaction] = await Transaction.create(
+        [
+          {
+            walletId: wallet._id,
+            sourceId:
+              options?.transactableType === "User"
+                ? options.transactableId
+                : userId,
+            recipientId: new Types.ObjectId(userId),
+            transactableType: options?.transactableType,
+            transactableId: options?.transactableId,
+            reference,
+            providerReference: options?.providerReference,
+            amount: Number(amount),
+            direction: "CREDIT",
+            type: options?.type || "wallet_credit",
+            provider: options?.provider || "internal",
+            remark: reason,
+            purpose: reason,
+            status: "success",
+            balanceBefore,
+            balanceAfter,
+            idempotencyKey: options?.idempotencyKey,
+            initiatedBy: options?.initiatedBy,
+            initiatedByType: options?.initiatedByType || "system",
+            meta: options?.meta,
+          },
+        ],
+        { session }
+      );
+
+      // Commit all changes atomically
+      await session.commitTransaction();
+
+      // Invalidate cache (outside session)
+      await this.cacheService.delete(CACHE_KEYS.USER_WALLET(userId.toString()));
+
+      // Send notification (outside session)
+      await this.notificationService.createNotification({
+        type: "wallet_credit",
+        notifiableType: "User",
+        notifiableId: userId as Types.ObjectId,
+        data: {
+          amount,
+          balance: balanceAfter,
+          reason,
+          reference,
+        },
+        sendEmail: true,
+        sendSMS: false,
+        sendPush: true,
+      });
+
+      logger.info(
+        `Wallet credited: ${reference} - User: ${userId}, Amount: ${amount}`
+      );
+
+      return {
+        walletId: wallet._id,
+        reference,
+        balanceBefore,
+        balanceAfter,
         amount,
-        balance: newBalance,
-        reason,
-      },
-      sendEmail: true,
-      sendSMS: false,
-      sendPush: true,
-    });
-
-    return {
-      walletId: wallet._id,
-      oldBalance,
-      newBalance,
-      amount,
-      type: LEDGER_TYPE.CREDIT,
-    };
+        direction: "CREDIT",
+        transaction,
+      };
+    } catch (error: any) {
+      await session.abortTransaction();
+      logger.error("Credit wallet failed:", error);
+      throw error;
+    } finally {
+      session.endSession();
+    }
   }
 
   async debitWallet(
     userId: string | Types.ObjectId,
     amount: number,
     reason: string,
-    walletType: "main" | "bonus" | "commission" = "main"
+    walletType: "main" | "bonus" | "commission" = "main",
+    options?: {
+      type?: string;
+      provider?: string;
+      providerReference?: string;
+      transactableType?: string;
+      transactableId?: Types.ObjectId;
+      idempotencyKey?: string;
+      initiatedBy?: Types.ObjectId;
+      initiatedByType?: "user" | "system" | "admin";
+      meta?: any;
+    }
   ): Promise<any> {
-    const wallet = await this.walletRepository.findByUserId(userId);
-    if (!wallet) {
-      throw new AppError(
-        "Wallet not found",
-        HTTP_STATUS.NOT_FOUND,
-        ERROR_CODES.NOT_FOUND
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+      // Check for duplicate transaction (idempotency)
+      if (options?.idempotencyKey) {
+        const existingTransaction = await Transaction.findOne({
+          idempotencyKey: options.idempotencyKey,
+        });
+        if (existingTransaction) {
+          logger.warn(`Duplicate debit attempt: ${options.idempotencyKey}`);
+          await session.abortTransaction();
+          return existingTransaction;
+        }
+      }
+
+      // Get wallet BEFORE any changes
+      const wallet = await this.walletRepository.findByUserId(userId);
+      if (!wallet) {
+        throw new AppError(
+          "Wallet not found",
+          HTTP_STATUS.NOT_FOUND,
+          ERROR_CODES.NOT_FOUND
+        );
+      }
+
+      // Capture balance BEFORE debit
+      const balanceBefore = wallet.balance;
+
+      // Check sufficient balance
+      if (balanceBefore < amount) {
+        throw new AppError(
+          "Insufficient balance",
+          HTTP_STATUS.BAD_REQUEST,
+          ERROR_CODES.INSUFFICIENT_BALANCE
+        );
+      }
+
+      const balanceAfter = balanceBefore - Number(amount);
+
+      // Update wallet balance atomically
+      await Wallet.findByIdAndUpdate(
+        wallet._id,
+        { $inc: { balance: -amount } },
+        { session }
       );
-    }
 
-    const oldBalance = wallet.balance;
-    if (oldBalance < amount) {
-      throw new AppError(
-        "Insufficient balance",
-        HTTP_STATUS.BAD_REQUEST,
-        ERROR_CODES.INSUFFICIENT_BALANCE
+      // Generate reference
+      const reference = generateReference("TXN");
+
+      // Create transaction record
+      const [transaction] = await Transaction.create(
+        [
+          {
+            walletId: wallet._id,
+            sourceId: new Types.ObjectId(userId),
+            recipientId:
+              options?.transactableType === "User"
+                ? options.transactableId
+                : undefined,
+            transactableType: options?.transactableType,
+            transactableId: options?.transactableId,
+            reference,
+            providerReference: options?.providerReference,
+            amount: Number(amount),
+            direction: "DEBIT",
+            type: options?.type || "wallet_debit",
+            provider: options?.provider || "internal",
+            remark: reason,
+            purpose: reason,
+            status: "success",
+            balanceBefore,
+            balanceAfter,
+            idempotencyKey: options?.idempotencyKey,
+            initiatedBy: options?.initiatedBy,
+            initiatedByType: options?.initiatedByType || "system",
+            meta: options?.meta,
+          },
+        ],
+        { session }
       );
-    }
 
-    const newBalance = oldBalance - amount;
+      // Commit all changes atomically
+      await session.commitTransaction();
 
-    // Update wallet balance
-    await this.walletRepository.updateBalance(wallet.id.toString(), newBalance);
+      // Invalidate cache (outside session)
+      await this.cacheService.delete(CACHE_KEYS.USER_WALLET(userId.toString()));
 
-    // Create ledger entry
-    await this.ledgerRepository.create({
-      ledgerableType: "Wallet",
-      ledgerableId: wallet.id,
-      source: wallet.id.toString(),
-      destination: "system",
-      oldBalance,
-      newBalance,
-      type: LEDGER_TYPE.DEBIT,
-      reason,
-      amount,
-      currencyCode: "NGN",
-    });
+      // Send notification (outside session)
+      await this.notificationService.createNotification({
+        type: "wallet_debit",
+        notifiableType: "User",
+        notifiableId: userId as Types.ObjectId,
+        data: {
+          amount,
+          balance: balanceAfter,
+          reason,
+          reference,
+        },
+        sendEmail: true,
+        sendSMS: false,
+        sendPush: true,
+      });
 
-    // Invalidate cache
-    await this.cacheService.delete(CACHE_KEYS.USER_WALLET(userId.toString()));
+      logger.info(
+        `Wallet debited: ${reference} - User: ${userId}, Amount: ${amount}`
+      );
 
-    // Send notification using NotificationService
-    await this.notificationService.createNotification({
-      type: "wallet_debit",
-      notifiableType: "User",
-      notifiableId: userId as Types.ObjectId,
-      data: {
+      return {
+        walletId: wallet._id,
+        reference,
+        balanceBefore,
+        balanceAfter,
         amount,
-        balance: newBalance,
-        reason,
-      },
-      sendEmail: true,
-      sendSMS: false,
-      sendPush: true,
-    });
-
-    return {
-      walletId: wallet._id,
-      oldBalance,
-      newBalance,
-      amount,
-      type: LEDGER_TYPE.DEBIT,
-    };
+        direction: "DEBIT",
+        transaction,
+      };
+    } catch (error: any) {
+      await session.abortTransaction();
+      logger.error("Debit wallet failed:", error);
+      throw error;
+    } finally {
+      session.endSession();
+    }
   }
 
   async getWalletTransactions(
@@ -224,34 +368,6 @@ export class WalletService {
     return this.transactionRepository.findWithFilters(query, page, limit);
   }
 
-  async getLedgerEntries(
-    userId: string,
-    filters: any = {},
-    page: number = 1,
-    limit: number = 20
-  ): Promise<any> {
-    const wallets = await this.walletRepository.findAllByUserId(userId);
-    const walletIds = wallets.map((w) => w._id);
-
-    const query: any = { ledgerableId: { $in: walletIds } };
-
-    if (filters.type) {
-      query.type = filters.type;
-    }
-
-    if (filters.startDate || filters.endDate) {
-      query.createdAt = {};
-      if (filters.startDate) {
-        query.createdAt.$gte = new Date(filters.startDate);
-      }
-      if (filters.endDate) {
-        query.createdAt.$lte = new Date(filters.endDate);
-      }
-    }
-
-    return this.ledgerRepository.findWithFilters(query, page, limit);
-  }
-
   async getBalanceHistory(
     userId: string,
     walletType: "main" | "bonus" | "commission" = "main",
@@ -269,9 +385,9 @@ export class WalletService {
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - days);
 
-    const ledgerEntries = await this.ledgerRepository.findWithFilters(
+    const transactions = await this.transactionRepository.findWithFilters(
       {
-        ledgerableId: wallet._id,
+        walletId: wallet._id,
         createdAt: { $gte: startDate },
       },
       1,
@@ -280,12 +396,14 @@ export class WalletService {
 
     return {
       currentBalance: wallet.balance,
-      history: ledgerEntries.data.map((entry: any) => ({
-        date: entry.createdAt,
-        balance: entry.newBalance,
-        amount: entry.amount,
-        type: entry.type,
-        reason: entry.reason,
+      history: transactions.data.map((txn: any) => ({
+        date: txn.createdAt,
+        balance: txn.balanceAfter,
+        amount: txn.amount,
+        direction: txn.direction,
+        type: txn.type,
+        reference: txn.reference,
+        status: txn.status,
       })),
     };
   }
@@ -296,116 +414,221 @@ export class WalletService {
     amount: number,
     remark?: string
   ): Promise<any> {
-    // Find recipient by username, email, or refCode
-    let recipient = await this.userRepository.findByUsername(
-      recipientIdentifier
-    );
-    if (!recipient) {
-      recipient = await this.userRepository.findByEmail(recipientIdentifier);
-    }
-    if (!recipient) {
-      recipient = await this.userRepository.findByRefCode(recipientIdentifier);
-    }
+    const session = await mongoose.startSession();
+    session.startTransaction();
 
-    if (!recipient) {
-      throw new AppError(
-        "Recipient not found",
-        HTTP_STATUS.NOT_FOUND,
-        ERROR_CODES.NOT_FOUND
+    try {
+      // Find recipient by username, email, or refCode
+      let recipient = await this.userRepository.findByUsername(
+        recipientIdentifier
       );
-    }
+      if (!recipient) {
+        recipient = await this.userRepository.findByEmail(recipientIdentifier);
+      }
+      if (!recipient) {
+        recipient = await this.userRepository.findByRefCode(
+          recipientIdentifier
+        );
+      }
 
-    if (recipient.id.toString() === senderId) {
-      throw new AppError(
-        "Cannot transfer to yourself",
-        HTTP_STATUS.BAD_REQUEST,
-        ERROR_CODES.VALIDATION_ERROR
+      if (!recipient) {
+        throw new AppError(
+          "Recipient not found",
+          HTTP_STATUS.NOT_FOUND,
+          ERROR_CODES.NOT_FOUND
+        );
+      }
+
+      if (recipient.id.toString() === senderId) {
+        throw new AppError(
+          "Cannot transfer to yourself",
+          HTTP_STATUS.BAD_REQUEST,
+          ERROR_CODES.VALIDATION_ERROR
+        );
+      }
+
+      // Generate transfer ID and references
+      const transferId = generateReference("TRF");
+      const senderReference = generateReference("TXN");
+      const recipientReference = generateReference("TXN");
+
+      // Check for duplicate transfer (idempotency)
+      const existingTransfer = await Transaction.findOne({
+        idempotencyKey: transferId,
+      });
+      if (existingTransfer) {
+        logger.warn(`Duplicate transfer attempt: ${transferId}`);
+        await session.abortTransaction();
+        return existingTransfer;
+      }
+
+      // Get wallets BEFORE any changes (need balances)
+      const senderWallet = await this.walletRepository.findByUserId(senderId);
+      const recipientWallet = await this.walletRepository.findByUserId(
+        recipient.id
       );
-    }
 
-    // Get wallets before debit/credit
-    const senderWallet = await this.walletRepository.findByUserId(senderId);
-    const recipientWallet = await this.walletRepository.findByUserId(
-      recipient.id
-    );
+      if (!senderWallet || !recipientWallet) {
+        throw new AppError(
+          "Wallet not found",
+          HTTP_STATUS.NOT_FOUND,
+          ERROR_CODES.NOT_FOUND
+        );
+      }
 
-    if (!senderWallet || !recipientWallet) {
-      throw new AppError(
-        "Wallet not found",
-        HTTP_STATUS.NOT_FOUND,
-        ERROR_CODES.NOT_FOUND
+      // Capture balances BEFORE transfer
+      const senderBalanceBefore = senderWallet.balance;
+      const recipientBalanceBefore = recipientWallet.balance;
+
+      // Check sender has sufficient balance
+      if (senderBalanceBefore < amount) {
+        throw new AppError(
+          "Insufficient balance",
+          HTTP_STATUS.BAD_REQUEST,
+          ERROR_CODES.INSUFFICIENT_BALANCE
+        );
+      }
+
+      const senderBalanceAfter = senderBalanceBefore - amount;
+      const recipientBalanceAfter = recipientBalanceBefore + amount;
+
+      // Debit sender wallet
+      await Wallet.findByIdAndUpdate(
+        senderWallet._id,
+        { $inc: { balance: -amount } },
+        { session }
       );
-    }
 
-    // Debit sender (creates ledger entry + notification)
-    await this.debitWallet(
-      senderId,
-      amount,
-      `Transfer to ${recipient.username || recipient.email}`,
-      "main"
-    );
+      // Credit recipient wallet
+      await Wallet.findByIdAndUpdate(
+        recipientWallet._id,
+        { $inc: { balance: amount } },
+        { session }
+      );
 
-    // Credit recipient (creates ledger entry + notification)
-    await this.creditWallet(
-      recipient.id,
-      amount,
-      `Transfer from sender`,
-      "main"
-    );
+      // Create sender transaction (DEBIT)
+      await Transaction.create(
+        [
+          {
+            walletId: senderWallet._id,
+            sourceId: new Types.ObjectId(senderId),
+            recipientId: recipient.id,
+            reference: senderReference,
+            idempotencyKey: transferId, // Link both transactions
+            amount,
+            direction: "DEBIT",
+            type: "wallet_transfer",
+            provider: "internal",
+            remark,
+            purpose: "wallet_to_wallet_transfer",
+            status: "success",
+            balanceBefore: senderBalanceBefore,
+            balanceAfter: senderBalanceAfter,
+            initiatedBy: new Types.ObjectId(senderId),
+            initiatedByType: "user",
+            meta: {
+              transferId,
+              recipientUsername: recipient.username,
+              recipientEmail: recipient.email,
+              recipientId: recipient.id.toString(),
+            },
+          },
+        ],
+        { session }
+      );
 
-    // Generate reference for both transactions
+      // Create recipient transaction (CREDIT)
+      await Transaction.create(
+        [
+          {
+            walletId: recipientWallet._id,
+            sourceId: new Types.ObjectId(senderId),
+            recipientId: recipient.id,
+            reference: recipientReference,
+            idempotencyKey: `${transferId}_recipient`, // Different key for recipient
+            amount,
+            direction: "CREDIT",
+            type: "wallet_transfer",
+            provider: "internal",
+            remark,
+            purpose: "wallet_to_wallet_transfer",
+            status: "success",
+            balanceBefore: recipientBalanceBefore,
+            balanceAfter: recipientBalanceAfter,
+            initiatedBy: new Types.ObjectId(senderId), // Sender initiated
+            initiatedByType: "user",
+            meta: {
+              transferId,
+              senderInfo: "Transfer received",
+              senderId: senderId,
+            },
+          },
+        ],
+        { session }
+      );
 
-    const transferId = generateReference("TRF");
+      // Commit all changes atomically
+      await session.commitTransaction();
 
-    const senderReference = generateReference("TXN");
-    const recipientReference = generateReference("TXN");
+      // Invalidate cache (outside session)
+      await this.cacheService.delete(CACHE_KEYS.USER_WALLET(senderId));
+      await this.cacheService.delete(
+        CACHE_KEYS.USER_WALLET(recipient.id.toString())
+      );
 
-    await this.transactionRepository.create({
-      walletId: senderWallet.id,
-      sourceId: new Types.ObjectId(senderId),
-      recipientId: recipient.id,
-      reference: senderReference,
-      amount,
-      direction: "DEBIT",
-      type: "wallet_transfer",
-      provider: "internal",
-      remark,
-      purpose: "wallet_to_wallet_transfer",
-      status: "success",
-      meta: {
+      // Send notifications (outside session)
+      await this.notificationService.createNotification({
+        type: "wallet_debit",
+        notifiableType: "User",
+        notifiableId: new Types.ObjectId(senderId),
+        data: {
+          amount,
+          balance: senderBalanceAfter,
+          reason: `Transfer to ${recipient.username || recipient.email}`,
+          reference: senderReference,
+        },
+        sendEmail: true,
+        sendSMS: false,
+        sendPush: true,
+      });
+
+      await this.notificationService.createNotification({
+        type: "wallet_credit",
+        notifiableType: "User",
+        notifiableId: recipient.id,
+        data: {
+          amount,
+          balance: recipientBalanceAfter,
+          reason: "Transfer received",
+          reference: recipientReference,
+        },
+        sendEmail: true,
+        sendSMS: false,
+        sendPush: true,
+      });
+
+      logger.info(
+        `Transfer completed: ${transferId} - ${senderId} → ${recipient.id}`
+      );
+
+      return {
+        reference: senderReference,
         transferId,
-        recipientUsername: recipient.username,
-        recipientEmail: recipient.email,
-      },
-    });
-
-    await this.transactionRepository.create({
-      walletId: recipientWallet.id,
-      sourceId: new Types.ObjectId(senderId),
-      recipientId: recipient.id,
-      reference: recipientReference,
-      amount,
-      direction: "CREDIT",
-      type: "wallet_transfer",
-      provider: "internal",
-      remark,
-      purpose: "wallet_to_wallet_transfer",
-      status: "success",
-      meta: {
-        transferId,
-        senderInfo: "Transfer received",
-      },
-    });
-
-    return {
-      reference: senderReference,
-      amount,
-      recipient: {
-        id: recipient._id,
-        username: recipient.username,
-        email: recipient.email,
-      },
-    };
+        amount,
+        senderBalance: senderBalanceAfter,
+        recipient: {
+          id: recipient._id,
+          username: recipient.username,
+          email: recipient.email,
+        },
+      };
+    } catch (error: any) {
+      await session.abortTransaction();
+      logger.error("Transfer failed:", error);
+      throw error;
+    } finally {
+      session.endSession();
+    }
   }
 
   async fundWallet(userId: string, amount: number): Promise<any> {

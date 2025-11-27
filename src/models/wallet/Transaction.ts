@@ -24,6 +24,22 @@ export interface ITransaction extends Document {
     stopReason?: "completed" | "failed" | "timeout" | "max_attempts";
     providerOrderId?: string;
   };
+  idempotencyKey?: string; // Prevent duplicate processing
+  initiatedBy?: Types.ObjectId;
+  initiatedByType?: "user" | "system" | "admin";
+  balanceBefore: number; // ← For reconciliation
+  balanceAfter: number; // ← For reconciliation
+
+  // Approval workflow (for manual deposits)
+  approvalStatus?: "pending" | "approved" | "declined";
+  approvedBy?: Types.ObjectId;
+  approvedAt?: Date;
+  declinedBy?: Types.ObjectId;
+  declinedAt?: Date;
+  declineReason?: string;
+
+  // Soft delete
+  deletedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -52,8 +68,33 @@ const TransactionSchema = new Schema<ITransaction>(
       enum: ["pending", "processing", "success", "failed", "reversed"],
       default: "pending",
     },
+
+    idempotencyKey: { type: String, index: true },
+    initiatedBy: { type: Schema.Types.ObjectId, ref: "User" },
+    initiatedByType: {
+      type: String,
+      enum: ["user", "system", "admin"],
+      default: "user",
+    },
+
+    // Approval workflow (for manual deposits)
+    approvalStatus: {
+      type: String,
+      enum: ["pending", "approved", "declined"],
+      default: "pending",
+    },
+    approvedBy: { type: Schema.Types.ObjectId, ref: "Admin" },
+    approvedAt: { type: Date },
+    declinedBy: { type: Schema.Types.ObjectId, ref: "Admin" },
+    declinedAt: { type: Date },
+    declineReason: { type: String },
+
+    balanceBefore: { type: Number, required: true },
+    balanceAfter: { type: Number, required: true },
     meta: { type: Schema.Types.Mixed },
     polling: { type: Schema.Types.Mixed },
+
+    deletedAt: { type: Date },
   },
   {
     timestamps: true,

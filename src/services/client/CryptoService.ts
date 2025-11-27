@@ -4,13 +4,12 @@ import {
 } from "@/repositories/CryptoRepository";
 import { TransactionRepository } from "@/repositories/TransactionRepository";
 import { BankAccountRepository } from "@/repositories/BankAccountRepository";
-import { NotificationRepository } from "@/repositories/NotificationRepository";
 import { WalletService } from "./WalletService";
-import { ProviderService } from "./ProviderService";
 import { AppError } from "@/middlewares/errorHandler";
 import { HTTP_STATUS, ERROR_CODES } from "@/utils/constants";
 import { Types } from "mongoose";
 import { generateReference } from "@/utils/helpers";
+import { NotificationService } from "./NotificationService";
 
 interface BuyCryptoData {
   userId: string;
@@ -36,8 +35,7 @@ export class CryptoService {
   private transactionRepository: TransactionRepository;
   private bankAccountRepository: BankAccountRepository;
   private walletService: WalletService;
-  private providerService: ProviderService;
-  private notificationRepository: NotificationRepository;
+  private notificationService: NotificationService;
 
   constructor() {
     this.cryptoRepository = new CryptoRepository();
@@ -45,8 +43,7 @@ export class CryptoService {
     this.transactionRepository = new TransactionRepository();
     this.bankAccountRepository = new BankAccountRepository();
     this.walletService = new WalletService();
-    this.providerService = new ProviderService();
-    this.notificationRepository = new NotificationRepository();
+    this.notificationService = new NotificationService();
   }
 
   // Get list of available cryptos with filters
@@ -266,13 +263,28 @@ export class CryptoService {
       );
     }
 
-    // Deduct from wallet
-    await this.walletService.debitWallet(
+    // Debit wallet atomically with transaction creation
+    const debitResult = await this.walletService.debitWallet(
       data.userId,
       breakdown.totalAmount,
       `Crypto purchase: ${breakdown.cryptoAmount} ${crypto.code}`,
-      "main"
+      "main",
+      {
+        type: "crypto_purchase",
+        provider: "internal",
+        idempotencyKey: reference,
+        initiatedBy: new Types.ObjectId(data.userId),
+        initiatedByType: "user",
+        meta: {
+          cryptoName: crypto.name,
+          cryptoCode: crypto.code,
+          network: network.name,
+          walletAddress,
+        },
+      }
     );
+
+    const transaction = debitResult.transaction;
 
     // Create crypto transaction with network snapshot
     const cryptoTransaction = await this.cryptoTransactionRepository.create({
@@ -296,37 +308,17 @@ export class CryptoService {
       networkFee: breakdown.networkFee,
       totalAmount: breakdown.totalAmount,
       status: "pending",
-    });
-
-    // Create main transaction record
-    const transaction = await this.transactionRepository.create({
-      walletId: wallet._id,
-      sourceId: new Types.ObjectId(data.userId),
-      transactableType: "CryptoTransaction",
-      transactableId: cryptoTransaction.id,
-      reference,
-      amount: breakdown.totalAmount,
-      direction: "DEBIT",
-      type: "crypto_purchase",
-      provider: "internal",
-      remark: `Buy ${breakdown.cryptoAmount} ${crypto.code} via ${network.name}`,
-      purpose: "crypto_purchase",
-      status: "pending",
-      meta: {
-        cryptoName: crypto.name,
-        cryptoCode: crypto.code,
-        network: network.name,
-        walletAddress,
-      },
-    });
-
-    // Update crypto transaction with transaction ID
-    await this.cryptoTransactionRepository.update(cryptoTransaction.id, {
       transactionId: transaction.id.toString(),
     });
 
+    // Update transaction with crypto transaction link
+    await this.transactionRepository.update(transaction.id, {
+      transactableType: "CryptoTransaction",
+      transactableId: cryptoTransaction.id,
+    });
+
     // Send notification to admin
-    await this.notificationRepository.create({
+    await this.notificationService.createNotification({
       type: "admin_crypto_buy_pending",
       notifiableType: "Admin",
       notifiableId: new Types.ObjectId(data.userId), // TODO: Use actual admin ID
@@ -339,10 +331,13 @@ export class CryptoService {
         walletAddress,
         fiatAmount: breakdown.fiatAmount,
       },
+      sendEmail: true,
+      sendSMS: false,
+      sendPush: false,
     });
 
     // Send notification to user
-    await this.notificationRepository.create({
+    await this.notificationService.createNotification({
       type: "transaction_pending",
       notifiableType: "User",
       notifiableId: new Types.ObjectId(data.userId),
@@ -354,10 +349,13 @@ export class CryptoService {
         amount: breakdown.totalAmount,
         status: "pending",
       },
+      sendEmail: true,
+      sendSMS: false,
+      sendPush: true,
     });
 
     return {
-      ...cryptoTransaction.toObject(),
+      ...this.sanitizeCryptoTransaction(cryptoTransaction),
       crypto: {
         name: crypto.name,
         code: crypto.code,
@@ -438,7 +436,7 @@ export class CryptoService {
       networkId: data.networkId,
     });
 
-    // Create crypto transaction
+    // Create crypto transaction (no wallet debit for sell - user gets credited after verification)
     const cryptoTransaction = await this.cryptoTransactionRepository.create({
       cryptoId: new Types.ObjectId(data.cryptoId),
       userId: new Types.ObjectId(data.userId),
@@ -469,7 +467,7 @@ export class CryptoService {
     });
 
     // Send notification to admin for review
-    await this.notificationRepository.create({
+    await this.notificationService.createNotification({
       type: "admin_crypto_sell_pending",
       notifiableType: "Admin",
       notifiableId: new Types.ObjectId(data.userId), // TODO: Use actual admin ID
@@ -489,10 +487,13 @@ export class CryptoService {
         },
         proof: data.proof || "",
       },
+      sendEmail: true,
+      sendSMS: false,
+      sendPush: false,
     });
 
     // Send notification to user
-    await this.notificationRepository.create({
+    await this.notificationService.createNotification({
       type: "transaction_pending",
       notifiableType: "User",
       notifiableId: new Types.ObjectId(data.userId),
@@ -505,10 +506,13 @@ export class CryptoService {
         status: "pending",
         instructions: `Send exactly ${breakdown.cryptoAmount} ${crypto.code} to ${network.platformDepositAddress} on ${network.name} network`,
       },
+      sendEmail: true,
+      sendSMS: false,
+      sendPush: true,
     });
 
     return {
-      ...cryptoTransaction.toObject(),
+      ...this.sanitizeCryptoTransaction(cryptoTransaction),
       crypto: {
         name: crypto.name,
         code: crypto.code,
@@ -820,7 +824,7 @@ export class CryptoService {
     );
 
     // Notify admin about proof upload
-    await this.notificationRepository.create({
+    await this.notificationService.createNotification({
       type: "admin_crypto_proof_uploaded",
       notifiableType: "Admin",
       notifiableId: transaction.userId, // TODO: Use actual admin ID
@@ -830,113 +834,58 @@ export class CryptoService {
         cryptoCode: transaction.cryptoId,
         proof,
       },
+      sendEmail: true,
+      sendSMS: false,
+      sendPush: false,
     });
 
     return updated;
   }
+  private sanitizeCryptoTransaction(transaction: any) {
+    return {
+      id: transaction._id || transaction.id,
+      reference: transaction.reference,
+      tradeType: transaction.tradeType,
 
-  // Generate receipt for crypto transaction
+      // Network info
+      network: transaction.network,
+      walletAddress: transaction.walletAddress,
 
-  // ==================== ADMIN METHODS ====================
+      // Amounts
+      cryptoAmount: transaction.cryptoAmount,
+      fiatAmount: transaction.fiatAmount,
+      exchangeRate: transaction.exchangeRate,
+      serviceFee: transaction.serviceFee,
+      networkFee: transaction.networkFee,
+      totalAmount: transaction.totalAmount,
 
-  // Update transaction status (Admin)
-  async updateTransactionStatus(
-    transactionId: string,
-    status: string,
-    adminId: string,
-    data?: {
-      txHash?: string;
-      reviewNote?: string;
-      reviewProof?: string;
-    }
-  ) {
-    const transaction = await this.getCryptoTransactionById(transactionId);
+      // Status
+      status: transaction.status,
 
-    const updateData: any = {
-      status,
-      reviewedBy: new Types.ObjectId(adminId),
-      reviewedAt: new Date(),
+      // Blockchain details (if available)
+      txHash: transaction.txHash,
+      confirmations: transaction.confirmations,
+      blockNumber: transaction.blockNumber,
+
+      // User-facing fields
+      comment: transaction.comment,
+      proof: transaction.proof,
+      reviewNote: transaction.reviewNote,
+
+      // Bank details for SELL (if exists)
+      ...(transaction.accountNumber && {
+        bankDetails: {
+          accountName: transaction.accountName,
+          accountNumber: transaction.accountNumber,
+          bankCode: transaction.bankCode,
+        },
+      }),
+
+      // Timestamps
+      createdAt: transaction.createdAt,
+      updatedAt: transaction.updatedAt,
+      processedAt: transaction.processedAt,
+      completedAt: transaction.completedAt,
     };
-
-    if (data?.txHash) {
-      updateData.txHash = data.txHash;
-    }
-    if (data?.reviewNote) {
-      updateData.reviewNote = data.reviewNote;
-    }
-    if (data?.reviewProof) {
-      updateData.reviewProof = data.reviewProof;
-    }
-
-    if (status === "processing") {
-      updateData.processedAt = new Date();
-    }
-    if (status === "success") {
-      updateData.completedAt = new Date();
-    }
-
-    // Handle refunds for failed/declined transactions
-    if (
-      (status === "failed" || status === "declined") &&
-      transaction.tradeType === "buy" &&
-      transaction.status === "pending"
-    ) {
-      // Refund user's wallet
-      await this.walletService.creditWallet(
-        transaction.userId.toString(),
-        transaction.totalAmount,
-        `Refund for ${status} crypto purchase`,
-        "main"
-      );
-      updateData.status = "refunded";
-    }
-
-    const updated = await this.cryptoTransactionRepository.update(
-      transactionId,
-      updateData
-    );
-
-    // Send notification to user
-    await this.notificationRepository.create({
-      type: status === "success" ? "transaction_success" : "transaction_failed",
-      notifiableType: "User",
-      notifiableId: transaction.userId,
-      data: {
-        transactionType:
-          transaction.tradeType === "buy" ? "Crypto Purchase" : "Crypto Sale",
-        reference: transaction.reference,
-        status,
-        note: data?.reviewNote,
-      },
-    });
-
-    return updated;
-  }
-
-  // Verify blockchain transaction (Admin/Automated)
-  async verifyBlockchainTransaction(
-    transactionId: string,
-    txHash: string,
-    confirmations: number,
-    blockNumber?: number
-  ) {
-    const transaction = await this.getCryptoTransactionById(transactionId);
-
-    const updateData: any = {
-      txHash,
-      confirmations,
-    };
-
-    if (blockNumber) {
-      updateData.blockNumber = blockNumber;
-    }
-
-    // Auto-approve if confirmations meet requirement
-    if (confirmations >= transaction.network.confirmationsRequired) {
-      updateData.status = "approved";
-      updateData.processedAt = new Date();
-    }
-
-    return this.cryptoTransactionRepository.update(transactionId, updateData);
   }
 }

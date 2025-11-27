@@ -1,41 +1,49 @@
-import { Payment } from "@/models/wallet/Payment";
 import { Transaction } from "@/models/wallet/Transaction";
+import { Wallet } from "@/models/wallet/Wallet";
+import { Deposit } from "@/models/banking/Deposit";
 import { NotificationRepository } from "@/repositories/NotificationRepository";
 import { TransactionRepository } from "@/repositories/TransactionRepository";
 import { VirtualAccountRepository } from "@/repositories/VirtualAccountRepository";
-import { PaymentRepository } from "@/repositories/PaymentRepository";
-import { WalletService } from "../WalletService";
+import { WalletRepository } from "@/repositories/WalletRepository";
+import { DepositRepository } from "@/repositories/DepositRepository";
 import { WebhookProcessResult } from "@/services/WebhookService";
 import { AppError } from "@/middlewares/errorHandler";
 import { HTTP_STATUS, ERROR_CODES } from "@/utils/constants";
 import logger from "@/logger";
 import { generateReference } from "@/utils/helpers";
+import mongoose from "mongoose";
 
 /**
- * SAVEHAVEN WEBHOOK SERVICE
+ * SAVEHAVEN WEBHOOK SERVICE (REFACTORED)
  * Handles business logic for SaveHaven webhook events
- * 
+ *
+ * ✅ NEW ARCHITECTURE:
+ * - NO Payment model usage
+ * - Transaction is single source of truth
+ * - Deposit model for audit trail only
+ * - Atomic operations with sessions
+ *
  * Responsibilities:
  * 1. Process wallet funding (Inwards transfers)
  * 2. Process withdrawal success/failure (Outwards transfers)
  * 3. Handle unsolicited payments
- * 4. Update Payment/Transaction records
+ * 4. Update Transaction records
  * 5. Credit/debit wallets
  * 6. Send notifications
  */
 export class SaveHavenWebhookService {
-  private walletService: WalletService;
   private notificationRepository: NotificationRepository;
   private transactionRepository: TransactionRepository;
   private virtualAccountRepository: VirtualAccountRepository;
-  private paymentRepository: PaymentRepository;
+  private walletRepository: WalletRepository;
+  private depositRepository: DepositRepository;
 
   constructor() {
-    this.walletService = new WalletService();
     this.notificationRepository = new NotificationRepository();
     this.transactionRepository = new TransactionRepository();
     this.virtualAccountRepository = new VirtualAccountRepository();
-    this.paymentRepository = new PaymentRepository();
+    this.walletRepository = new WalletRepository();
+    this.depositRepository = new DepositRepository();
   }
 
   /**
@@ -94,18 +102,22 @@ export class SaveHavenWebhookService {
 
   /**
    * Handle wallet funding (Inwards transfers)
-   * 
-   * Flow:
+   *
+   * ✅ NEW FLOW (No Payment Model):
    * 1. Find user by virtual account
-   * 2. Create or update Payment record
-   * 3. Credit wallet if successful
-   * 4. Send notification
+   * 2. Create Deposit record (audit trail)
+   * 3. Create Transaction record (user-facing)
+   * 4. Credit wallet if successful
+   * 5. Send notification
    */
   private async handleWalletFunding(
     webhookData: WebhookProcessResult
   ): Promise<void> {
     const { providerTransactionId, providerReference, status, metadata } =
       webhookData;
+
+    const session = await mongoose.startSession();
+    session.startTransaction();
 
     try {
       logger.info("SaveHaven: Processing wallet funding", {
@@ -125,6 +137,7 @@ export class SaveHavenWebhookService {
       });
 
       if (!virtualAccount) {
+        await session.abortTransaction();
         logger.error("SaveHaven: Virtual account not found", {
           accountNumber: metadata.creditAccountNumber,
           providerTransactionId,
@@ -145,109 +158,161 @@ export class SaveHavenWebhookService {
       });
 
       // ===
-      // STEP 2: Find or create Payment record
+      // STEP 2: Check if deposit already processed (idempotency by providerReference)
       // ===
-      let payment = await this.paymentRepository.findByProviderReference(
-        providerReference,
-        "saveHaven"
-      );
+      const existingTransaction = await Transaction.findOne({
+        providerReference: providerReference,
+        provider: "saveHaven",
+        type: "wallet_funding",
+      });
 
-      if (!payment) {
-        // Create new payment record (unsolicited payment)
-        logger.info("SaveHaven: Creating new payment record", {
-          userId,
-          providerTransactionId,
+      if (existingTransaction) {
+        await session.abortTransaction();
+        logger.info("SaveHaven: Deposit already processed", {
+          transactionId: existingTransaction._id,
+          providerReference,
         });
+        return;
+      }
 
-        payment = await this.paymentRepository.createPayment({
-          userId: userId,
-          reference: generateReference("DEP"),
-          providerReference: providerReference,
-          providerTransactionId: providerTransactionId,
-          amount: metadata.amount,
-          amountPaid: metadata.netAmount,
-          type: "deposit",
-          status: status,
-          meta: {
-            provider: "saveHaven",
-            unsolicited: true,
-            virtualAccount: {
-              accountNumber: metadata.creditAccountNumber,
-              accountName: metadata.creditAccountName,
-              bankName: virtualAccount.bankName,
-              provider: "saveHaven",
-            },
-            webhookData: metadata,
-            fees: metadata.fees,
-            vat: metadata.vat,
-            stampDuty: metadata.stampDuty,
-            netAmount: metadata.netAmount,
-          },
-        } as any);
+      // ===
+      // STEP 3: Get wallet and capture balance
+      // ===
+      const wallet = await this.walletRepository.findByUserId(userId);
+      if (!wallet) {
+        await session.abortTransaction();
+        throw new AppError(
+          "Wallet not found",
+          HTTP_STATUS.NOT_FOUND,
+          ERROR_CODES.RESOURCE_NOT_FOUND
+        );
+      }
 
-        logger.info("SaveHaven: Payment record created", {
-          paymentId: payment._id,
-          reference: payment.reference,
-          userId,
-        });
-      } else {
-        // Update existing payment
-        logger.info("SaveHaven: Updating existing payment", {
-          paymentId: payment._id,
-          providerTransactionId,
-        });
+      const balanceBefore = wallet.balance;
+      const balanceAfter =
+        status === "success"
+          ? balanceBefore + metadata.netAmount
+          : balanceBefore;
 
-        payment = await this.paymentRepository.updatePaymentStatus(
-          payment.id.toString(),
-          status,
+      // ===
+      // STEP 4: Create Deposit record (audit trail only)
+      // ===
+      const depositReference = generateReference("DEP");
+      const deposit = await Deposit.create(
+        [
           {
-            providerTransactionId: providerTransactionId,
-            amountPaid: metadata.netAmount,
+            userId: userId,
+            walletId: wallet._id,
+            reference: depositReference,
+            provider: "saveHaven",
+            amount: metadata.netAmount,
+            status: status === "success" ? "success" : "failed",
             meta: {
-              ...payment.meta,
               webhookData: metadata,
+              providerReference: providerReference,
+              providerTransactionId: providerTransactionId,
+              virtualAccountId: virtualAccount._id,
               fees: metadata.fees,
               vat: metadata.vat,
               stampDuty: metadata.stampDuty,
+              grossAmount: metadata.amount,
               netAmount: metadata.netAmount,
-              updatedAt: new Date(),
+              unsolicited: true,
+              creditAccountNumber: metadata.creditAccountNumber,
+              creditAccountName: metadata.creditAccountName,
+              debitAccountNumber: metadata.debitAccountNumber,
+              debitAccountName: metadata.debitAccountName,
+              responseMessage: metadata.responseMessage,
             },
-          } as any
-        );
+          },
+        ],
+        { session }
+      );
 
-        logger.info("SaveHaven: Payment record updated", {
-          paymentId: payment?.id || "",
-          status,
-        });
-      }
-
-      if (!payment) {
-        throw new AppError(
-          "Failed to update payment record",
-          HTTP_STATUS.INTERNAL_SERVER_ERROR,
-          ERROR_CODES.DATABASE_ERROR
-        );
-      }
+      logger.info("SaveHaven: Deposit record created", {
+        depositId: deposit[0]._id,
+        reference: depositReference,
+        userId,
+      });
 
       // ===
-      // STEP 3: Process based on status
+      // STEP 5: Create Transaction record (user-facing)
+      // ===
+      const transactionReference = generateReference("TXN");
+      const transaction = await Transaction.create(
+        [
+          {
+            walletId: wallet._id,
+            sourceId: userId,
+            reference: transactionReference,
+            providerReference: providerReference,
+            idempotencyKey: providerReference, // Use provider reference as idempotency key
+            transactableType: "Deposit",
+            transactableId: deposit[0]._id,
+            amount: metadata.netAmount,
+            direction: "CREDIT",
+            type: "wallet_funding",
+            provider: "saveHaven",
+            status: status === "success" ? "success" : "failed",
+            purpose: "deposit",
+            balanceBefore,
+            balanceAfter,
+            initiatedBy: userId,
+            initiatedByType: "system", // Webhook-initiated
+            meta: {
+              depositId: deposit[0]._id,
+              depositReference: depositReference,
+              provider: "saveHaven",
+              virtualAccount: {
+                accountNumber: metadata.creditAccountNumber,
+                accountName: metadata.creditAccountName,
+                bankName: virtualAccount.bankName,
+              },
+              fees: metadata.fees,
+              vat: metadata.vat,
+              stampDuty: metadata.stampDuty,
+              grossAmount: metadata.amount,
+              netAmount: metadata.netAmount,
+              providerTransactionId: providerTransactionId,
+              debitAccountNumber: metadata.debitAccountNumber,
+              debitAccountName: metadata.debitAccountName,
+              responseMessage: metadata.responseMessage,
+            },
+          },
+        ],
+        { session }
+      );
+
+      logger.info("SaveHaven: Transaction record created", {
+        transactionId: transaction[0]._id,
+        reference: transactionReference,
+        userId,
+      });
+
+      // ===
+      // STEP 6: Credit wallet if successful
       // ===
       if (status === "success") {
-        // Credit user wallet with net amount (after fees)
-        await this.walletService.creditWallet(
-          userId.toString(),
-          metadata.netAmount,
-          `Wallet funding via SaveHaven - ${payment.reference}`,
-          "main"
+        await Wallet.findByIdAndUpdate(
+          wallet._id,
+          { $inc: { balance: metadata.netAmount } },
+          { session }
         );
 
         logger.info("SaveHaven: Wallet credited", {
           userId: userId.toString(),
           amount: metadata.netAmount,
-          reference: payment.reference,
+          reference: transactionReference,
         });
+      }
 
-        // Send success notification
+      // Commit all changes atomically
+      await session.commitTransaction();
+
+      // ===
+      // STEP 7: Send notification (outside session)
+      // ===
+      if (status === "success") {
         await this.notificationRepository.create({
           type: "payment_success",
           notifiableType: "User",
@@ -255,26 +320,20 @@ export class SaveHavenWebhookService {
           data: {
             transactionType: "Wallet Funding",
             amount: metadata.netAmount,
-            reference: payment.reference,
+            reference: transactionReference,
             provider: "SaveHaven",
             fees: metadata.fees,
+            balance: balanceAfter,
           },
         });
 
         logger.info("SaveHaven: Wallet funded successfully", {
           userId: userId.toString(),
           amount: metadata.netAmount,
-          reference: payment.reference,
+          reference: transactionReference,
           providerTransactionId,
         });
       } else if (status === "reversed") {
-        // Handle reversal
-        logger.warn("SaveHaven: Payment reversed", {
-          providerTransactionId,
-          reference: payment.reference,
-        });
-
-        // Send reversal notification
         await this.notificationRepository.create({
           type: "payment_reversed",
           notifiableType: "User",
@@ -282,13 +341,17 @@ export class SaveHavenWebhookService {
           data: {
             transactionType: "Wallet Funding",
             amount: metadata.netAmount,
-            reference: payment.reference,
+            reference: transactionReference,
             provider: "SaveHaven",
             reason: metadata.responseMessage,
           },
         });
+
+        logger.info("SaveHaven: Payment reversed", {
+          reference: transactionReference,
+          reason: metadata.responseMessage,
+        });
       } else if (status === "failed") {
-        // Send failure notification
         await this.notificationRepository.create({
           type: "payment_failed",
           notifiableType: "User",
@@ -296,37 +359,37 @@ export class SaveHavenWebhookService {
           data: {
             transactionType: "Wallet Funding",
             amount: metadata.amount,
-            reference: payment.reference,
+            reference: transactionReference,
             provider: "SaveHaven",
             reason: metadata.responseMessage,
           },
         });
 
         logger.info("SaveHaven: Payment failed", {
-          providerTransactionId,
-          reference: payment.reference,
+          reference: transactionReference,
           reason: metadata.responseMessage,
         });
       }
     } catch (error) {
+      await session.abortTransaction();
       logger.error("SaveHaven: Wallet funding error", {
         error,
         providerTransactionId,
       });
       throw error;
+    } finally {
+      session.endSession();
     }
   }
 
   /**
    * Handle withdrawal completion (Outwards transfers)
-   * 
-   * Flow:
-   * 1. Find Payment record by reference
-   * 2. Find Transaction record by reference
-   * 3. Update Payment status
-   * 4. Update Transaction status
-   * 5. Refund wallet if failed/reversed
-   * 6. Send notification
+   *
+   * ✅ NEW FLOW (No Payment Model):
+   * 1. Find Transaction record by reference
+   * 2. Update Transaction status
+   * 3. Refund wallet if failed/reversed
+   * 4. Send notification
    */
   private async handleWithdrawal(
     webhookData: WebhookProcessResult
@@ -340,7 +403,7 @@ export class SaveHavenWebhookService {
     } = webhookData;
 
     try {
-      logger.info("SaveHaven: Processing withdrawal", {
+      logger.info("SaveHaven: Processing withdrawal webhook", {
         reference,
         providerTransactionId,
         amount: metadata.amount,
@@ -348,164 +411,142 @@ export class SaveHavenWebhookService {
       });
 
       // ===
-      // STEP 1: Find Payment record by reference
+      // STEP 1: Find Transaction record by reference
       // ===
-      const payment = await this.paymentRepository.findOne({
+      const transaction = await this.transactionRepository.findOne({
         reference: reference,
-        type: "withdrawal",
-        "meta.provider": "saveHaven",
+        type: { $in: ["withdrawal", "bank_transfer"] },
+        provider: "saveHaven",
       });
 
-      if (!payment) {
-        logger.error("SaveHaven: Withdrawal payment not found", {
+      if (!transaction) {
+        logger.error("SaveHaven: Withdrawal transaction not found", {
           reference,
           providerTransactionId,
         });
         throw new AppError(
-          "Withdrawal payment not found",
+          "Withdrawal transaction not found",
           HTTP_STATUS.NOT_FOUND,
           ERROR_CODES.RESOURCE_NOT_FOUND
         );
       }
 
-      logger.info("SaveHaven: Found payment record", {
-        paymentId: payment._id,
+      logger.info("SaveHaven: Found transaction record", {
+        transactionId: transaction._id,
         reference,
-        userId: payment.userId,
+        userId: transaction.sourceId,
+        currentStatus: transaction.status,
       });
 
       // ===
-      // STEP 2: Check idempotency
+      // STEP 2: Check if already processed (idempotency)
       // ===
-      if (payment.status === "success" || payment.status === "failed") {
+      if (transaction.status === "success" || transaction.status === "failed") {
         logger.info("SaveHaven: Withdrawal already processed", {
-          paymentId: payment._id,
-          currentStatus: payment.status,
+          transactionId: transaction._id,
+          currentStatus: transaction.status,
           webhookStatus: status,
         });
         return;
       }
 
       // ===
-      // STEP 3: Find Transaction Record
+      // STEP 3: Map status and update Transaction
       // ===
-      const transaction = await this.transactionRepository.findOne({
-        reference: reference,
-        type: { $in: ["withdrawal", "bank_transfer"] },
-      });
+      const transactionStatus = this.mapPaymentStatusToTransaction(status);
 
-      if (!transaction) {
-        logger.warn("SaveHaven: Withdrawal Transaction not found", {
-          reference,
-        });
-      } else {
-        logger.info("SaveHaven: Found Withdrawal Transaction record", {
-          transactionId: transaction._id,
-          reference,
-        });
-      }
-
-      // ===
-      // STEP 4: Update Payment Record
-      // ===
-      const updatedPayment = await this.paymentRepository.updatePaymentStatus(
-        payment.id.toString(),
-        status,
-        {
+      await this.transactionRepository.update(transaction.id.toString(), {
+        status: transactionStatus,
+        providerReference: providerTransactionId,
+        meta: {
+          ...transaction.meta,
           providerTransactionId: providerTransactionId,
-          providerReference: providerReference,
-          meta: {
-            ...payment.meta,
-            webhookData: metadata,
-            fees: metadata.fees,
-            vat: metadata.vat,
-            stampDuty: metadata.stampDuty,
-            updatedAt: new Date(),
-          },
-        } as any
-      );
+          webhookData: metadata,
+          fees: metadata.fees,
+          vat: metadata.vat,
+          stampDuty: metadata.stampDuty,
+          responseMessage: metadata.responseMessage,
+          completedAt: new Date(),
+        },
+      });
 
-      logger.info("SaveHaven: Payment updated", {
-        paymentId: payment._id,
-        status,
+      logger.info("SaveHaven: Transaction updated", {
+        transactionId: transaction._id,
+        status: transactionStatus,
       });
 
       // ===
-      // STEP 5: Update Transaction Record
+      // STEP 4: Handle refund if failed/reversed
       // ===
-      if (transaction) {
-        const transactionStatus = this.mapPaymentStatusToTransaction(status);
-        
-        await this.transactionRepository.update(transaction.id.toString(), {
-          status: transactionStatus,
-          providerReference: providerTransactionId,
-          meta: {
-            ...transaction.meta,
-            providerTransactionId: providerTransactionId,
-            webhookData: metadata,
-            fees: metadata.fees,
-            updatedAt: new Date(),
-          },
-        });
+      if (status === "failed" || status === "reversed") {
+        const session = await mongoose.startSession();
+        session.startTransaction();
 
-        logger.info("SaveHaven: Transaction updated", {
-          transactionId: transaction._id,
-          status: transactionStatus,
-        });
+        try {
+          // Credit wallet back
+          await Wallet.findByIdAndUpdate(
+            transaction.walletId,
+            { $inc: { balance: transaction.amount } },
+            { session }
+          );
+
+          await session.commitTransaction();
+
+          logger.info(`SaveHaven: Wallet refunded for ${status} withdrawal`, {
+            userId: transaction.sourceId?.toString(),
+            amount: transaction.amount,
+            reference,
+          });
+        } catch (refundError) {
+          await session.abortTransaction();
+          logger.error("SaveHaven: Refund failed", {
+            error: refundError,
+            transactionId: transaction._id,
+          });
+          throw refundError;
+        } finally {
+          session.endSession();
+        }
       }
 
       // ===
-      // STEP 6: Handle based on status
+      // STEP 5: Send notification
       // ===
-      const userId = transaction?.sourceId || payment.userId;
-      const amount = transaction?.amount || payment.amount;
+      const userId = transaction.sourceId;
+      const amount = transaction.amount;
+      const transactionType =
+        transaction.type === "bank_transfer" ? "Bank Transfer" : "Withdrawal";
 
       if (status === "success") {
-        // Send success notification
         await this.notificationRepository.create({
           type: "withdrawal_completed",
           notifiableType: "User",
           notifiableId: userId,
           data: {
-            transactionType: transaction?.type === "bank_transfer" ? "Bank Transfer" : "Withdrawal",
-            amount: amount,
-            reference: reference,
+            transactionType,
+            amount,
+            reference,
             provider: "SaveHaven",
-            accountNumber: payment.meta?.accountNumber,
-            bankName: payment.meta?.bankName,
+            accountNumber: transaction.meta?.accountNumber,
+            bankName: transaction.meta?.bankName,
           },
         });
 
         logger.info("SaveHaven: Withdrawal completed successfully", {
-          reference: reference,
-          amount: amount,
+          reference,
+          amount,
           providerTransactionId,
         });
       } else if (status === "failed" || status === "reversed") {
-        // Refund user wallet
-        await this.walletService.creditWallet(
-          userId.toString(),
-          amount,
-          `Withdrawal ${status} - ${reference} (SaveHaven)`,
-          "main"
-        );
-
-        logger.info(`SaveHaven: Wallet refunded for ${status} withdrawal`, {
-          userId: userId.toString(),
-          amount: amount,
-          reference,
-        });
-
-        // Send failure/reversal notification
         await this.notificationRepository.create({
           type:
             status === "reversed" ? "withdrawal_reversed" : "withdrawal_failed",
           notifiableType: "User",
           notifiableId: userId,
           data: {
-            transactionType: transaction?.type === "bank_transfer" ? "Bank Transfer" : "Withdrawal",
-            amount: amount,
-            reference: reference,
+            transactionType,
+            amount,
+            reference,
             provider: "SaveHaven",
             reason: metadata.responseMessage,
             refunded: true,
@@ -513,8 +554,8 @@ export class SaveHavenWebhookService {
         });
 
         logger.info(`SaveHaven: Withdrawal ${status} and refunded`, {
-          reference: reference,
-          amount: amount,
+          reference,
+          amount,
           providerTransactionId,
         });
       }
@@ -530,19 +571,20 @@ export class SaveHavenWebhookService {
 
   /**
    * Check if transaction has already been processed (idempotency)
+   * Now checks Transaction model instead of Payment
    */
   private async checkIdempotency(
     providerTransactionId?: string
   ): Promise<boolean> {
     if (!providerTransactionId) return false;
 
-    const existingPayment =
-      await this.paymentRepository.findByProviderTransactionId(
-        providerTransactionId,
-        "saveHaven"
-      );
+    // Check if Transaction with this providerTransactionId exists
+    const existingTransaction = await this.transactionRepository.findOne({
+      "meta.providerTransactionId": providerTransactionId,
+      provider: "saveHaven",
+    });
 
-    return !!existingPayment;
+    return !!existingTransaction;
   }
 
   /**

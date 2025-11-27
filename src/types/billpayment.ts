@@ -146,61 +146,6 @@ export interface UtilityPaymentData {
   };
 }
 
-// export interface FlightBookingData {
-//   userId: string;
-//   flightOffer: any;
-//   travelers: Array<{
-//     id: string;
-//     dateOfBirth: string;
-//     gender: "MALE" | "FEMALE";
-//     name: {
-//       firstName: string;
-//       lastName: string;
-//     };
-//     contact: {
-//       emailAddress: string;
-//       phones: Array<{
-//         deviceType: "MOBILE" | "LANDLINE";
-//         countryCallingCode: string;
-//         number: string;
-//       }>;
-//     };
-//     documents?: Array<{
-//       documentType: "PASSPORT" | "IDENTITY_CARD";
-//       number: string;
-//       expiryDate: string;
-//       issuanceCountry: string;
-//       nationality: string;
-//       holder: boolean;
-//     }>;
-//   }>;
-//   reference: string;
-// }
-
-// export interface HotelBookingData {
-//   userId: string;
-//   offerId: string;
-//   guests: Array<{
-//     name: {
-//       title: string;
-//       firstName: string;
-//       lastName: string;
-//     };
-//     contact: {
-//       phone: string;
-//       email: string;
-//     };
-//   }>;
-//   payments: Array<{
-//     method: "CREDIT_CARD";
-//     card: {
-//       vendorCode: string;
-//       cardNumber: string;
-//       expiryDate: string;
-//     };
-//   }>;
-//   reference: string;
-// }
 
 export interface FlightSearchParams {
   originLocationCode: string;

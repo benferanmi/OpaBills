@@ -6,13 +6,20 @@ export interface IDeposit extends Document {
   reference: string;
   provider: string;
   amount: number;
-  status: "pending" | "success" | "failed" | "approved" | "declined";
-  approvedAt?: Date;
-  approvedBy?: string;
-  declinedAt?: Date;
-  declinedBy?: string;
-  declineReason?: string;
-  meta?: any;
+  status: "success" | "failed";
+  meta?: {
+    webhookData?: any;
+    providerReference?: string;
+    providerTransactionId?: string;
+    virtualAccountId?: Types.ObjectId;
+    fees?: number;
+    vat?: number;
+    stampDuty?: number;
+    grossAmount?: number;
+    netAmount?: number;
+    unsolicited?: boolean;
+    [key: string]: any;
+  };
   createdAt: Date;
   updatedAt: Date;
 }
@@ -40,6 +47,7 @@ const depositSchema = new Schema<IDeposit>(
     provider: {
       type: String,
       required: true,
+      enum: ["monnify", "flutterwave", "saveHaven"],
       index: true,
     },
     amount: {
@@ -48,24 +56,9 @@ const depositSchema = new Schema<IDeposit>(
     },
     status: {
       type: String,
-      enum: ["pending", "success", "failed", "approved", "declined"],
-      default: "pending",
+      enum: ["success", "failed"],
+      required: true,
       index: true,
-    },
-    approvedAt: {
-      type: Date,
-    },
-    approvedBy: {
-      type: String,
-    },
-    declinedAt: {
-      type: Date,
-    },
-    declinedBy: {
-      type: String,
-    },
-    declineReason: {
-      type: String,
     },
     meta: Schema.Types.Mixed,
   },
@@ -77,5 +70,6 @@ const depositSchema = new Schema<IDeposit>(
 // Indexes
 depositSchema.index({ status: 1, createdAt: -1 });
 depositSchema.index({ userId: 1, status: 1 });
+depositSchema.index({ provider: 1, createdAt: -1 });
 
 export const Deposit = mongoose.model<IDeposit>("Deposit", depositSchema);

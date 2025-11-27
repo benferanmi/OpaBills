@@ -2,7 +2,6 @@ import { Response, NextFunction } from "express";
 import { AuthRequest } from "@/middlewares/auth";
 import { WalletService } from "@/services/client/WalletService";
 import { PaymentService } from "@/services/client/PaymentService";
-import { VirtualAccountService } from "@/services/client/VirtualAccountService";
 import { WithdrawalService } from "@/services/client/WithdrawalService";
 import { sendSuccessResponse } from "@/utils/helpers";
 import { DepositService } from "@/services/client/DepositService";
@@ -10,13 +9,11 @@ import { DepositService } from "@/services/client/DepositService";
 export class WalletController {
   private walletService: WalletService;
   private paymentService: PaymentService;
-  private virtualAccountService: VirtualAccountService;
   private withdrawalService: WithdrawalService;
   private depositService: DepositService;
   constructor() {
     this.walletService = new WalletService();
     this.paymentService = new PaymentService();
-    this.virtualAccountService = new VirtualAccountService();
     this.withdrawalService = new WithdrawalService();
     this.depositService = new DepositService();
   }
@@ -115,32 +112,7 @@ export class WalletController {
     } catch (error) {
       next(error);
     }
-  };
-
-  getLedgerEntries = async (
-    req: AuthRequest,
-    res: Response,
-    next: NextFunction
-  ) => {
-    try {
-      const userId = req.user!.id;
-      const { type, startDate, endDate, page = 1, limit = 20 } = req.query;
-      const result = await this.walletService.getLedgerEntries(
-        userId,
-        { type, startDate, endDate },
-        Number(page),
-        Number(limit)
-      );
-      return sendSuccessResponse(
-        res,
-        result,
-        "Ledger entries retrieved successfully"
-      );
-    } catch (error) {
-      next(error);
-    }
-  };
-
+  }
   getBalanceHistory = async (
     req: AuthRequest,
     res: Response,

@@ -1,5 +1,4 @@
 import { WalletRepository } from "@/repositories/WalletRepository";
-import { LedgerRepository } from "@/repositories/LedgerRepository";
 import { NotificationRepository } from "@/repositories/NotificationRepository";
 import { TransactionRepository } from "@/repositories/TransactionRepository";
 import { UserRepository } from "@/repositories/UserRepository";
@@ -33,7 +32,6 @@ interface ValidationResponse {
 
 export class IdentityVerificationService {
   private walletRepository: WalletRepository;
-  private ledgerRepository: LedgerRepository;
   private cacheService: CacheService;
   private transactionRepository: TransactionRepository;
   private userRepository: UserRepository;
@@ -44,7 +42,6 @@ export class IdentityVerificationService {
 
   constructor() {
     this.walletRepository = new WalletRepository();
-    this.ledgerRepository = new LedgerRepository();
     this.cacheService = new CacheService();
     this.transactionRepository = new TransactionRepository();
     this.userRepository = new UserRepository();

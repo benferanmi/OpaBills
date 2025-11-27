@@ -164,10 +164,6 @@ export const USER_STATUS = {
   SUSPENDED: "suspended",
 } as const;
 
-export const LEDGER_TYPE = {
-  DEBIT: "debit",
-  CREDIT: "credit",
-} as const;
 
 export const TRANSACTION_TYPES = {
   AIRTIME: "airtime",

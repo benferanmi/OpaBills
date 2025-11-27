@@ -1,17 +1,17 @@
+import { TransactionRepository } from "@/repositories/TransactionRepository";
 import { UserRepository } from "@/repositories/UserRepository";
 import { WalletRepository } from "@/repositories/WalletRepository";
-import { LedgerRepository } from "@/repositories/LedgerRepository";
 import { generateReference } from "@/utils/helpers";
 
 export class UserManagementService {
   private userRepository: UserRepository;
   private walletRepository: WalletRepository;
-  private ledgerRepository: LedgerRepository;
+  private transactionRepository: TransactionRepository;
 
   constructor() {
     this.userRepository = new UserRepository();
     this.walletRepository = new WalletRepository();
-    this.ledgerRepository = new LedgerRepository();
+    this.transactionRepository = new TransactionRepository();
   }
 
   async listUsers(page: number = 1, limit: number = 20, filters: any = {}) {
@@ -186,16 +186,19 @@ export class UserManagementService {
         ? wallet.bonusBalance
         : wallet.commissionBalance;
 
-    // Create ledger entry
-    await this.ledgerRepository.createLedgerEntry({
-      userId: wallet.userId,
+    await this.transactionRepository.create({
       walletId: wallet.id,
-      type: "credit",
+      sourceId: wallet.userId,
+      reference,
       amount,
+      direction: "CREDIT",
+      type: "admin_credit",
+      status: "success",
+      purpose: remark || "Admin credit",
+      remark,
       balanceBefore,
       balanceAfter,
-      reference,
-      description: remark || "Admin credit",
+      initiatedByType: "admin",
       meta: { walletType: type },
     });
 
@@ -259,16 +262,19 @@ export class UserManagementService {
         ? wallet.bonusBalance
         : wallet.commissionBalance;
 
-    // Create ledger entry
-    await this.ledgerRepository.createLedgerEntry({
-      userId: wallet.userId,
+    await this.transactionRepository.create({
       walletId: wallet.id,
-      type: "debit",
+      sourceId: wallet.userId,
+      reference,
       amount,
+      direction: "DEBIT",
+      type: "admin_debit",
+      status: "success",
+      purpose: remark || "Admin debit",
+      remark,
       balanceBefore: currentBalance,
       balanceAfter,
-      reference,
-      description: remark || "Admin debit",
+      initiatedByType: "admin",
       meta: { walletType: type },
     });
 
