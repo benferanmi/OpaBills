@@ -10,6 +10,7 @@ import { IUser } from "@/models/core/User";
 import { ServiceRepository } from "@/repositories/ServiceRepository";
 import logger from "@/logger";
 import { NotificationService } from "./NotificationService";
+import { TransactionMapper } from "@/utils/TransactionMapper";
 
 interface BettingData {
   userId: string;
@@ -180,7 +181,7 @@ export class BillPaymentService {
       }
 
       return {
-        result: this.sanitizeTransaction(result),
+        result: TransactionMapper.toDTO(result),
         providerStatus: providerResponse.status,
         pending: status === "pending",
       };
@@ -345,18 +346,6 @@ export class BillPaymentService {
     return isValid && networkMatches;
   }
 
-  async getAirtimeHistory(
-    userId: string,
-    page: number = 1,
-    limit: number = 10
-  ) {
-    return this.transactionRepository.findWithPagination(
-      { sourceId: userId, type: "airtime" },
-      page,
-      limit
-    );
-  }
-
   // INTERNATIONAL AIRTIME METHODS
 
   async getInternationalAirtimeCountries() {
@@ -507,7 +496,7 @@ export class BillPaymentService {
       }
 
       return {
-        result: this.sanitizeTransaction(result),
+        result: TransactionMapper.toDTO(result),
         providerStatus: providerResponse.status,
         pending: status === "pending",
       };
@@ -528,18 +517,6 @@ export class BillPaymentService {
       );
       throw error;
     }
-  }
-
-  async getInternationalAirtimeHistory(
-    userId: string,
-    page: number = 1,
-    limit: number = 10
-  ) {
-    return this.transactionRepository.findWithPagination(
-      { sourceId: userId, type: "internationalAirtime" },
-      page,
-      limit
-    );
   }
 
   // DATA METHODS
@@ -688,7 +665,7 @@ export class BillPaymentService {
       }
 
       return {
-        result: this.sanitizeTransaction(result),
+        result: TransactionMapper.toDTO(result),
         providerStatus: providerResponse.status,
         pending: status === "pending",
       };
@@ -717,14 +694,6 @@ export class BillPaymentService {
 
   async getData() {
     return this.providerService.getProductsByServiceTypeCode("data");
-  }
-
-  async getDataHistory(userId: string, page: number = 1, limit: number = 10) {
-    return this.transactionRepository.findWithPagination(
-      { sourceId: userId, type: "data" },
-      page,
-      limit
-    );
   }
 
   // INTERNATIONAL DATA METHODS
@@ -871,7 +840,7 @@ export class BillPaymentService {
       }
 
       return {
-        result: this.sanitizeTransaction(result),
+        result: TransactionMapper.toDTO(result),
         providerStatus: providerResponse.status,
         pending: status === "pending",
       };
@@ -893,19 +862,6 @@ export class BillPaymentService {
       throw error;
     }
   }
-
-  async getInternationalDataHistory(
-    userId: string,
-    page: number = 1,
-    limit: number = 10
-  ) {
-    return this.transactionRepository.findWithPagination(
-      { sourceId: userId, type: "internationalData" },
-      page,
-      limit
-    );
-  }
-
   // CABLE TV METHODS
   async purchaseCableTv(data: {
     userId: string;
@@ -1046,7 +1002,7 @@ export class BillPaymentService {
       }
 
       return {
-        result: this.sanitizeTransaction(result),
+        result: TransactionMapper.toDTO(result),
         providerStatus: providerResponse.status,
         status,
         pending: status === "pending",
@@ -1080,18 +1036,6 @@ export class BillPaymentService {
 
   async verifyCableSmartCard(smartCardNumber: string, serviceCode: string) {
     return this.providerService.verifySmartCard(smartCardNumber, serviceCode);
-  }
-
-  async getCableTvHistory(
-    userId: string,
-    page: number = 1,
-    limit: number = 10
-  ) {
-    return this.transactionRepository.findWithPagination(
-      { sourceId: userId, type: "cable_tv" },
-      page,
-      limit
-    );
   }
 
   // ELECTRICITY METHODS
@@ -1222,7 +1166,7 @@ export class BillPaymentService {
       }
 
       return {
-        result: this.sanitizeTransaction(result),
+        result: TransactionMapper.toDTO(result),
         status,
         providerStatus: providerResponse.status,
         token: providerResponse.token,
@@ -1264,18 +1208,6 @@ export class BillPaymentService {
       data.meterNumber,
       data.serviceCode,
       data.meterType
-    );
-  }
-
-  async getElectricityHistory(
-    userId: string,
-    page: number = 1,
-    limit: number = 10
-  ) {
-    return this.transactionRepository.findWithPagination(
-      { sourceId: userId, type: "electricity" },
-      page,
-      limit
     );
   }
 
@@ -1401,7 +1333,7 @@ export class BillPaymentService {
       }
 
       return {
-        result: this.sanitizeTransaction(result),
+        result: TransactionMapper.toDTO(result),
         providerStatus: providerResult.status,
         pending: status === "pending",
       };
@@ -1445,18 +1377,6 @@ export class BillPaymentService {
     );
     // Mock verification - implement actual provider verification if available
     return result;
-  }
-
-  async getBettingHistory(
-    userId: string,
-    page: number = 1,
-    limit: number = 10
-  ) {
-    return this.transactionRepository.findWithPagination(
-      { sourceId: userId, type: "betting" },
-      page,
-      limit
-    );
   }
 
   // E-PIN METHODS
@@ -1635,7 +1555,7 @@ export class BillPaymentService {
       }
 
       return {
-        result: this.sanitizeTransaction(result),
+        result: TransactionMapper.toDTO(result),
         status,
         providerStatus: providerResponse.status,
         pin: providerResponse.token,
@@ -1664,57 +1584,7 @@ export class BillPaymentService {
     return this.providerService.verifyJambProfile(data.number, data.type);
   }
 
-  async getEPinHistory(userId: string, page: number = 1, limit: number = 10) {
-    return this.transactionRepository.findWithPagination(
-      { sourceId: userId, type: "e_pin" },
-      page,
-      limit
-    );
-  }
-
   // GENERAL METHODS
-  async getBillPaymentTransactions(
-    userId: string,
-    filters: any = {},
-    page: number = 1,
-    limit: number = 10
-  ) {
-    const query: any = {
-      sourceId: userId,
-      type: {
-        $in: [
-          "airtime",
-          "data",
-          "cable_tv",
-          "electricity",
-          "betting",
-          "education",
-          "internationalAirtime",
-          "internationalData",
-        ],
-      },
-    };
-
-    if (filters.type) {
-      query.type = filters.type;
-    }
-
-    if (filters.status) {
-      query.status = filters.status;
-    }
-
-    if (filters.startDate || filters.endDate) {
-      query.createdAt = {};
-      if (filters.startDate) {
-        query.createdAt.$gte = new Date(filters.startDate);
-      }
-      if (filters.endDate) {
-        query.createdAt.$lte = new Date(filters.endDate);
-      }
-    }
-
-    return this.transactionRepository.findWithPagination(query, page, limit);
-  }
 
   private getNetworkCode(network: string | undefined): string {
     if (!network) {
@@ -1781,25 +1651,5 @@ export class BillPaymentService {
       );
       // Don't throw - this shouldn't break the transaction
     }
-  }
-
-  private sanitizeTransaction(transaction: any) {
-    return {
-      id: transaction._id || transaction.id,
-      reference: transaction.reference,
-      amount: transaction.amount,
-      direction: transaction.direction,
-      type: transaction.type,
-      status: transaction.status,
-      purpose: transaction.purpose,
-      provider: transaction.provider,
-      providerReference: transaction.providerReference,
-      remark: transaction.remark,
-      createdAt: transaction.createdAt,
-      updatedAt: transaction.updatedAt,
-      // Include meta tokens/pins if present
-      ...(transaction.meta?.token && { token: transaction.meta.token }),
-      ...(transaction.meta?.pin && { pin: transaction.meta.pin }),
-    };
   }
 }

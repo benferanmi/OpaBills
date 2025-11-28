@@ -62,7 +62,9 @@ export class SafeHavenWebhookProcessor {
     try {
       // Check required fields
       if (!payload || typeof payload !== "object") {
-        logger.error("SafeHaven webhook: Invalid payload structure", { payload });
+        logger.error("SafeHaven webhook: Invalid payload structure", {
+          payload,
+        });
         return false;
       }
 
@@ -106,10 +108,10 @@ export class SafeHavenWebhookProcessor {
     }
   }
 
-  /**
-   * Process SafeHaven webhook and extract transaction data
-   */
-  async process(payload: SafeHavenTransferWebhook): Promise<WebhookProcessResult> {
+  // Process SafeHaven webhook and extract transaction data
+  async process(
+    payload: SafeHavenTransferWebhook
+  ): Promise<WebhookProcessResult> {
     try {
       logger.info("SafeHaven webhook: Processing payload", {
         type: payload.type,
@@ -210,9 +212,12 @@ export class SafeHavenWebhookProcessor {
       case "Declined":
         return "failed";
       default:
-        logger.warn("SafeHaven webhook: Unknown status, defaulting to pending", {
-          safeHavenStatus,
-        });
+        logger.warn(
+          "SafeHaven webhook: Unknown status, defaulting to pending",
+          {
+            safeHavenStatus,
+          }
+        );
         return "pending";
     }
   }
@@ -229,19 +234,19 @@ export class SafeHavenWebhookProcessor {
       sessionId: data.sessionId,
       nameEnquiryReference: data.nameEnquiryReference,
       paymentReference: data.paymentReference,
-      
+
       // Account details
       creditAccountName: data.creditAccountName,
       creditAccountNumber: data.creditAccountNumber,
       debitAccountName: data.debitAccountName,
       debitAccountNumber: data.debitAccountNumber,
-      
+
       // Provider details
       provider: data.provider,
       providerChannel: data.providerChannel,
       providerChannelCode: data.providerChannelCode,
       destinationInstitutionCode: data.destinationInstitutionCode,
-      
+
       // Transaction details
       narration: data.narration,
       amount: data.amount,
@@ -249,21 +254,21 @@ export class SafeHavenWebhookProcessor {
       vat: data.vat,
       stampDuty: data.stampDuty,
       netAmount: data.amount - data.fees - data.vat - data.stampDuty,
-      
+
       // Response details
       responseCode: data.responseCode,
       responseMessage: data.responseMessage,
-      
+
       // Reversal info
       isReversed: data.isReversed,
       reversalReference: data.reversalReference,
-      
+
       // Timestamps
       createdAt: data.createdAt,
       updatedAt: data.updatedAt,
       approvedAt: data.approvedAt,
       declinedAt: data.declinedAt,
-      
+
       // Full webhook data for debugging
       webhookReceivedAt: new Date(),
     };

@@ -39,6 +39,5 @@ router.post(
   validateRequest(airtimePurchaseSchema),
   billPaymentController.purchaseAirtime
 );
-router.get("/history", billPaymentController.getAirtimeHistory);
 
 export default router;

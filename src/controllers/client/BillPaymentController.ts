@@ -124,40 +124,6 @@ export class BillPaymentController {
     }
   };
 
-  getBillPaymentTransactions = async (
-    req: AuthRequest,
-    res: Response,
-    next: NextFunction
-  ) => {
-    try {
-      const userId = req.user!.id;
-      const page = parseInt(req.query.page as string) || 1;
-      const limit = parseInt(req.query.limit as string) || 10;
-      const filters = {
-        type: req.query.type,
-        status: req.query.status,
-        startDate: req.query.startDate,
-        endDate: req.query.endDate,
-      };
-
-      const result = await this.billPaymentService.getBillPaymentTransactions(
-        userId,
-        filters,
-        page,
-        limit
-      );
-
-      return sendPaginatedResponse(
-        res,
-        result.data,
-        { total: result.total, page, limit },
-        "Bill payment transactions retrieved successfully"
-      );
-    } catch (error) {
-      next(error);
-    }
-  };
-
   // Airtime methods
   getAirtimeProviders = async (
     req: AuthRequest,
@@ -200,31 +166,6 @@ export class BillPaymentController {
         res,
         { isValid },
         "Phone and network verification completed"
-      );
-    } catch (error) {
-      next(error);
-    }
-  };
-
-  getAirtimeHistory = async (
-    req: AuthRequest,
-    res: Response,
-    next: NextFunction
-  ) => {
-    try {
-      const userId = req.user!.id;
-      const page = parseInt(req.query.page as string) || 1;
-      const limit = parseInt(req.query.limit as string) || 10;
-      const result = await this.billPaymentService.getAirtimeHistory(
-        userId,
-        page,
-        limit
-      );
-      return sendPaginatedResponse(
-        res,
-        result.data,
-        { total: result.total, page, limit },
-        "Airtime history retrieved"
       );
     } catch (error) {
       next(error);
@@ -325,32 +266,6 @@ export class BillPaymentController {
     }
   };
 
-  getInternationalAirtimeHistory = async (
-    req: AuthRequest,
-    res: Response,
-    next: NextFunction
-  ) => {
-    try {
-      const userId = req.user!.id;
-      const page = parseInt(req.query.page as string) || 1;
-      const limit = parseInt(req.query.limit as string) || 10;
-      const result =
-        await this.billPaymentService.getInternationalAirtimeHistory(
-          userId,
-          page,
-          limit
-        );
-      return sendPaginatedResponse(
-        res,
-        result.data,
-        { total: result.total, page, limit },
-        "International airtime history retrieved"
-      );
-    } catch (error) {
-      next(error);
-    }
-  };
-
   //Data methods
   getDataProducts = async (
     req: AuthRequest,
@@ -394,31 +309,6 @@ export class BillPaymentController {
     try {
       const data = await this.billPaymentService.getData();
       return sendSuccessResponse(res, data, "Data retrieved successfully");
-    } catch (error) {
-      next(error);
-    }
-  };
-
-  getDataHistory = async (
-    req: AuthRequest,
-    res: Response,
-    next: NextFunction
-  ) => {
-    try {
-      const userId = req.user!.id;
-      const page = parseInt(req.query.page as string) || 1;
-      const limit = parseInt(req.query.limit as string) || 10;
-      const result = await this.billPaymentService.getDataHistory(
-        userId,
-        page,
-        limit
-      );
-      return sendPaginatedResponse(
-        res,
-        result.data,
-        { total: result.total, page, limit },
-        "Data history retrieved"
-      );
     } catch (error) {
       next(error);
     }
@@ -506,31 +396,6 @@ export class BillPaymentController {
         result,
         "International data purchase initiated",
         HTTP_STATUS.CREATED
-      );
-    } catch (error) {
-      next(error);
-    }
-  };
-
-  getInternationalDataHistory = async (
-    req: AuthRequest,
-    res: Response,
-    next: NextFunction
-  ) => {
-    try {
-      const userId = req.user!.id;
-      const page = parseInt(req.query.page as string) || 1;
-      const limit = parseInt(req.query.limit as string) || 10;
-      const result = await this.billPaymentService.getInternationalDataHistory(
-        userId,
-        page,
-        limit
-      );
-      return sendPaginatedResponse(
-        res,
-        result.data,
-        { total: result.total, page, limit },
-        "International data history retrieved"
       );
     } catch (error) {
       next(error);
@@ -657,31 +522,6 @@ export class BillPaymentController {
     }
   };
 
-  getBettingHistory = async (
-    req: AuthRequest,
-    res: Response,
-    next: NextFunction
-  ) => {
-    try {
-      const userId = req.user!.id;
-      const page = parseInt(req.query.page as string) || 1;
-      const limit = parseInt(req.query.limit as string) || 10;
-      const result = await this.billPaymentService.getBettingHistory(
-        userId,
-        page,
-        limit
-      );
-      return sendPaginatedResponse(
-        res,
-        result.data,
-        { total: result.total, page, limit },
-        "Betting history retrieved"
-      );
-    } catch (error) {
-      next(error);
-    }
-  };
-
   // E-Pin methods
   getEPinServices = async (
     req: AuthRequest,
@@ -765,31 +605,6 @@ export class BillPaymentController {
     }
   };
 
-  getEPinHistory = async (
-    req: AuthRequest,
-    res: Response,
-    next: NextFunction
-  ) => {
-    try {
-      const userId = req.user!.id;
-      const page = parseInt(req.query.page as string) || 1;
-      const limit = parseInt(req.query.limit as string) || 10;
-      const result = await this.billPaymentService.getEPinHistory(
-        userId,
-        page,
-        limit
-      );
-      return sendPaginatedResponse(
-        res,
-        result.data,
-        { total: result.total, page, limit },
-        "E-Pin history retrieved"
-      );
-    } catch (error) {
-      next(error);
-    }
-  };
-
   // Electricity methods
   getElectricityProviders = async (
     req: AuthRequest,
@@ -824,31 +639,6 @@ export class BillPaymentController {
         res,
         result,
         "Meter number verified successfully"
-      );
-    } catch (error) {
-      next(error);
-    }
-  };
-
-  getElectricityHistory = async (
-    req: AuthRequest,
-    res: Response,
-    next: NextFunction
-  ) => {
-    try {
-      const userId = req.user!.id;
-      const page = parseInt(req.query.page as string) || 1;
-      const limit = parseInt(req.query.limit as string) || 10;
-      const result = await this.billPaymentService.getElectricityHistory(
-        userId,
-        page,
-        limit
-      );
-      return sendPaginatedResponse(
-        res,
-        result.data,
-        { total: result.total, page, limit },
-        "Electricity history retrieved"
       );
     } catch (error) {
       next(error);

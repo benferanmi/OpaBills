@@ -257,7 +257,7 @@ export class WalletController {
     try {
       const userId = req.user!.id;
       const search = req.query.search as string;
-      console.log(search)
+      console.log(search);
       const result = await this.walletService.getBeneficiaries(userId, search);
       return sendSuccessResponse(
         res,
@@ -275,8 +275,9 @@ export class WalletController {
     next: NextFunction
   ) => {
     try {
+      const userId = req.user!.id;
       const search = req.params.search;
-      const result = await this.walletService.searchBeneficiaries(search);
+      const result = await this.walletService.searchBeneficiaries(userId, search);
       return sendSuccessResponse(
         res,
         result,

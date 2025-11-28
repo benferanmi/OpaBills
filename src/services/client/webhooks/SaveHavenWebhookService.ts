@@ -46,10 +46,8 @@ export class SaveHavenWebhookService {
     this.depositRepository = new DepositRepository();
   }
 
-  /**
-   * Main entry point for processing SaveHaven webhooks
-   * Routes to appropriate handler based on transferType
-   */
+  // Main entry point for processing SaveHaven webhooks
+  // Routes to appropriate handler based on transferType
   async processWebhook(webhookData: WebhookProcessResult): Promise<void> {
     const { providerTransactionId, metadata } = webhookData;
 
@@ -60,25 +58,44 @@ export class SaveHavenWebhookService {
         status: webhookData.status,
       });
 
-      // ===
-      // STEP 1: Check Idempotency
-      // Prevent duplicate processing
-      // ===
-      const isDuplicate = await this.checkIdempotency(providerTransactionId);
-      if (isDuplicate) {
-        logger.info("SaveHaven webhook: Duplicate transaction, skipping", {
-          providerTransactionId,
-        });
-        return;
-      }
-
-      // ===
-      // STEP 2: Route based on transfer type
-      // Inwards = wallet funding, Outwards = withdrawal
-      // ===
+      // Route based on transfer type with appropriate idempotency checks
       if (metadata.transferType === "Inwards") {
+        // For Inwards: Check if already processed (prevent duplicate credits)
+        const isDuplicate = await this.checkIdempotencyForInwards(
+          providerTransactionId,
+          webhookData.providerReference
+        );
+
+        if (isDuplicate) {
+          logger.info(
+            "SaveHaven webhook: Inwards transaction already processed, skipping",
+            {
+              providerTransactionId,
+              providerReference: webhookData.providerReference,
+            }
+          );
+          return;
+        }
+
         await this.handleWalletFunding(webhookData);
       } else if (metadata.transferType === "Outwards") {
+        // For Outwards: Check if transaction is already in final state or processed
+        const isDuplicate = await this.checkIdempotencyForOutwards(
+          webhookData.reference,
+          providerTransactionId
+        );
+
+        if (isDuplicate) {
+          logger.info(
+            "SaveHaven webhook: Outwards transaction already processed, skipping",
+            {
+              providerTransactionId,
+              reference: webhookData.reference,
+            }
+          );
+          return;
+        }
+
         await this.handleWithdrawal(webhookData);
       } else {
         logger.warn("SaveHaven webhook: Unknown transfer type", {
@@ -157,11 +174,12 @@ export class SaveHavenWebhookService {
         accountNumber: metadata.creditAccountNumber,
       });
 
-      // ===
       // STEP 2: Check if deposit already processed (idempotency by providerReference)
-      // ===
       const existingTransaction = await Transaction.findOne({
-        providerReference: providerReference,
+        $or: [
+          { providerReference: providerTransactionId },
+          { idempotencyKey: providerReference },
+        ],
         provider: "saveHaven",
         type: "wallet_funding",
       });
@@ -402,6 +420,7 @@ export class SaveHavenWebhookService {
       metadata,
     } = webhookData;
 
+    console.log(" using using");
     try {
       logger.info("SaveHaven: Processing withdrawal webhook", {
         reference,
@@ -410,14 +429,21 @@ export class SaveHavenWebhookService {
         status,
       });
 
-      // ===
       // STEP 1: Find Transaction record by reference
-      // ===
-      const transaction = await this.transactionRepository.findOne({
+      let transaction = await this.transactionRepository.findOne({
         reference: reference,
         type: { $in: ["withdrawal", "bank_transfer"] },
         provider: "saveHaven",
       });
+
+      // Fallback: try by providerReference
+      if (!transaction) {
+        transaction = await this.transactionRepository.findOne({
+          providerReference: providerTransactionId,
+          type: { $in: ["withdrawal", "bank_transfer"] },
+          provider: "saveHaven",
+        });
+      }
 
       if (!transaction) {
         logger.error("SaveHaven: Withdrawal transaction not found", {
@@ -569,27 +595,145 @@ export class SaveHavenWebhookService {
     }
   }
 
-  /**
-   * Check if transaction has already been processed (idempotency)
-   * Now checks Transaction model instead of Payment
-   */
-  private async checkIdempotency(
-    providerTransactionId?: string
+  private async checkIdempotencyForInwards(
+    providerTransactionId: string | undefined,
+    providerReference: string
   ): Promise<boolean> {
-    if (!providerTransactionId) return false;
+    if (!providerTransactionId && !providerReference) {
+      logger.warn("SaveHaven: Cannot check idempotency - missing identifiers");
+      return false;
+    }
 
-    // Check if Transaction with this providerTransactionId exists
-    const existingTransaction = await this.transactionRepository.findOne({
-      "meta.providerTransactionId": providerTransactionId,
+    const query: any = {
       provider: "saveHaven",
-    });
+      type: "wallet_funding",
+    };
 
-    return !!existingTransaction;
+    // Build OR condition dynamically based on available identifiers
+    const orConditions: any[] = [];
+
+    if (providerReference) {
+      orConditions.push({ providerReference: providerReference });
+    }
+
+    if (providerTransactionId) {
+      orConditions.push({
+        "meta.safeHavenTransactionId": providerTransactionId,
+      });
+    }
+
+    if (orConditions.length > 0) {
+      query.$or = orConditions;
+    }
+
+    const existingTransaction = await this.transactionRepository.findOne(query);
+
+    if (existingTransaction) {
+      logger.info("SaveHaven: Inwards transaction already exists (duplicate)", {
+        providerTransactionId,
+        providerReference,
+        existingTransactionId: existingTransaction._id,
+        existingReference: existingTransaction.reference,
+        status: existingTransaction.status,
+        createdAt: existingTransaction.createdAt,
+      });
+      return true;
+    }
+
+    return false;
   }
 
-  /**
-   * Map payment status to transaction status
-   */
+  private async checkIdempotencyForOutwards(
+    reference: string,
+    providerTransactionId: string | undefined
+  ): Promise<boolean> {
+    if (!reference && !providerTransactionId) {
+      logger.warn("SaveHaven: Cannot check idempotency - missing identifiers");
+      return false;
+    }
+
+    const query: any = {
+      type: { $in: ["withdrawal", "bank_transfer"] },
+      provider: "saveHaven",
+    };
+
+    // Build OR condition dynamically
+    const orConditions: any[] = [];
+
+    if (reference) {
+      orConditions.push({ reference: reference });
+    }
+
+    if (providerTransactionId) {
+      orConditions.push(
+        { providerReference: providerTransactionId },
+        { "meta.transferId": providerTransactionId }
+      );
+    }
+
+    if (orConditions.length > 0) {
+      query.$or = orConditions;
+    }
+
+    const existingTransaction = await this.transactionRepository.findOne(query);
+
+    if (!existingTransaction) {
+      logger.warn("SaveHaven: Outwards transaction not found", {
+        reference,
+        providerTransactionId,
+      });
+      return false; // Transaction doesn't exist - shouldn't happen but allow processing
+    }
+
+    // Check if webhook has already been processed
+    const finalStatuses = ["success", "failed", "reversed"];
+    const isInFinalState = finalStatuses.includes(existingTransaction.status);
+    const hasWebhookData = existingTransaction.meta?.webhookData !== undefined;
+
+    if (isInFinalState) {
+      logger.info(
+        "SaveHaven: Outwards transaction in final state (duplicate webhook)",
+        {
+          providerTransactionId,
+          reference,
+          transactionId: existingTransaction._id,
+          status: existingTransaction.status,
+          updatedAt: existingTransaction.updatedAt,
+        }
+      );
+      return true;
+    }
+
+    if (hasWebhookData) {
+      logger.info(
+        "SaveHaven: Outwards transaction already has webhook data (duplicate)",
+        {
+          providerTransactionId,
+          reference,
+          transactionId: existingTransaction._id,
+          status: existingTransaction.status,
+          webhookReceivedAt:
+            existingTransaction.meta?.webhookData?.webhookReceivedAt,
+        }
+      );
+      return true;
+    }
+
+    // Transaction exists but hasn't been updated by webhook yet
+    logger.info(
+      "SaveHaven: Outwards transaction ready for webhook processing",
+      {
+        providerTransactionId,
+        reference,
+        transactionId: existingTransaction._id,
+        currentStatus: existingTransaction.status,
+      }
+    );
+
+    return false;
+  }
+
+  // Map payment status to transaction status
   private mapPaymentStatusToTransaction(
     paymentStatus: string
   ): "pending" | "processing" | "success" | "failed" | "reversed" {

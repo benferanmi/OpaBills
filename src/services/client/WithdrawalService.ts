@@ -242,6 +242,21 @@ export class WithdrawalService {
           },
         });
 
+        // 10. Update Transaction with provider response
+        await this.transactionRepository.update(transaction[0].id.toString(), {
+          providerReference: providerResult._id, 
+          status: "processing",
+          meta: {
+            ...transaction[0].meta,
+            transferId: providerResult._id, 
+            sessionId: providerResult.sessionId,
+            nameEnquiryReference: providerResult.nameEnquiryReference,
+            paymentReference: providerResult.paymentReference,
+            providerStatus: providerResult.status,
+            providerResponse: providerResult,
+          },
+        });
+
         // 11. Send notification for successful initiation
         await this.notificationRepository.create({
           type: "withdrawal_initiated",

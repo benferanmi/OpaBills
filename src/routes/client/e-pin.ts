@@ -32,6 +32,5 @@ router.post(
   walletLock,
   billPaymentController.purchaseEPin
 );
-router.get("/history", billPaymentController.getEPinHistory);
 
 export default router;

@@ -18,7 +18,6 @@ router.use(serviceCheck("data"));
 
 // Get data services by type (SME, GIFTING, DIRECT)
 router.get("/providers", billPaymentController.getDataProviders);
-router.get("/history", billPaymentController.getDataHistory);
 router.post("/verify", billPaymentController.verifyPhone);
 
 router.get("/", billPaymentController.getData);

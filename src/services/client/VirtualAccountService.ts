@@ -59,7 +59,6 @@ export class VirtualAccountService {
     const cacheKey = `${CACHE_KEYS.IDENTITY_VALIDATION}:${data.identityId}`;
     const cachedData = await this.cacheService.get(cacheKey);
 
-    console.log(cachedData);
 
     if (!cachedData) {
       throw new AppError(

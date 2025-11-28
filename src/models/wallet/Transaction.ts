@@ -46,9 +46,14 @@ export interface ITransaction extends Document {
 
 const TransactionSchema = new Schema<ITransaction>(
   {
-    walletId: { type: Schema.Types.ObjectId, ref: "Wallet" },
-    sourceId: { type: Schema.Types.ObjectId, ref: "User" },
-    recipientId: { type: Schema.Types.ObjectId, ref: "User" },
+    walletId: { type: Schema.Types.ObjectId, ref: "Wallet", required: true },
+    sourceId: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+      index: true,
+    },
+    recipientId: { type: Schema.Types.ObjectId, ref: "User", index: true },
     transactableType: { type: String },
     transactableId: { type: Schema.Types.ObjectId },
     reference: { type: String, required: true, unique: true },

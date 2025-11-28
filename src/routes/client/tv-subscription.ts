@@ -22,6 +22,5 @@ router.get('/', billPaymentController.getTvProviders);
 router.get('/:providerId', billPaymentController.getTvPackages);
 router.post('/verify', validateRequest(verifySmartCardNumberSchema), billPaymentController.verifySmartCardNumber);
 router.post('/', rateLimiter(10, 60000), checkAndVerifyPin, walletLock, validateRequest(cableTvSchema), billPaymentController.purchaseCableTv);
-// router.get('/history', billPaymentController.getTvHistory);
 
 export default router;

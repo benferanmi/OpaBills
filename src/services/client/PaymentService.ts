@@ -54,10 +54,7 @@ export class PaymentService {
     return result;
   }
 
-  /**
-   * Initialize payment by creating virtual account
-   * NO Payment model created - only VirtualAccount
-   */
+  // Initialize payment by creating virtual account
   async initializePayment(data: InitializePaymentDTO): Promise<any> {
     const reference = generateReference("VACCT");
     const provider = data.provider || "saveHaven";
@@ -91,47 +88,7 @@ export class PaymentService {
       let accountType: "permanent" | "temporary" = "temporary";
 
       switch (provider) {
-        case "monnify":
-          const monnifyAccount = await this.monnifyService.createVirtualAccount(
-            {
-              email: user.email,
-              reference: reference,
-              firstname: user.firstname,
-              lastname: user.lastname,
-              bvn: user.bvn,
-            }
-          );
-
-          // Monnify returns multiple accounts, pick the first one
-          const primaryAccount = monnifyAccount.accounts[0];
-          accountType = "permanent"; // Monnify accounts are permanent
-
-          // Save virtual account to database
-          await this.virtualAccountRepository.create({
-            userId: user._id,
-            accountNumber: primaryAccount.accountNumber,
-            accountName: monnifyAccount.accountName,
-            bankName: primaryAccount.bankName,
-            bankCode: primaryAccount.bankCode,
-            provider: "monnify",
-            accountReference: monnifyAccount.accountReference,
-            type: accountType,
-            isActive: true,
-            isPrimary: true,
-            meta: {
-              allAccounts: monnifyAccount.accounts,
-            },
-          } as any);
-
-          virtualAccountData = {
-            account_number: primaryAccount.accountNumber,
-            bank_name: primaryAccount.bankName,
-            account_name: monnifyAccount.accountName,
-            accounts: monnifyAccount.accounts,
-            type: accountType,
-          };
-          break;
-
+        // monnify does not support temporary accounts
         case "flutterwave":
           const flutterwaveAccount =
             await this.flutterwaveService.createVirtualAccount({
@@ -237,7 +194,7 @@ export class PaymentService {
           bankName: virtualAccountData.bank_name,
           accountName: virtualAccountData.account_name,
           expiresAt: virtualAccountData.expires_at,
-          accounts: virtualAccountData.accounts,
+          // accounts: virtualAccountData.accounts,
           type: virtualAccountData.type,
         },
       };
@@ -251,11 +208,8 @@ export class PaymentService {
     }
   }
 
-  /**
-   * Verify payment (manual verification by user)
-   * Creates: Deposit (audit) + Transaction (user-facing) + Credits Wallet
-   * NO Payment model involved
-   */
+  // Verify payment (manual verification by user)
+  // Creates: Deposit (audit) + Transaction (user-facing) + Credits Wallet
   async verifyPayment(reference: string): Promise<any> {
     const session = await mongoose.startSession();
     session.startTransaction();

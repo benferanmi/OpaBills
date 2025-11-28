@@ -33,6 +33,5 @@ router.post(
   walletLock,
   billPaymentController.purchaseElectricity
 );
-// router.get('/history', billPaymentController.getElectricityHistory);
 
 export default router;

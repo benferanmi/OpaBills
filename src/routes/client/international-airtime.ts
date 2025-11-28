@@ -38,6 +38,5 @@ router.post(
   walletLock,
   billPaymentController.purchaseInternationalAirtime
 );
-router.get("/history", billPaymentController.getInternationalAirtimeHistory);
 
 export default router;

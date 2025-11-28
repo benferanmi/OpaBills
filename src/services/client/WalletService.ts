@@ -16,6 +16,7 @@ import logger from "@/logger";
 import { Transaction } from "@/models/wallet/Transaction";
 import mongoose from "mongoose";
 import { Wallet } from "@/models/wallet/Wallet";
+import { TransactionMapper } from "@/utils/TransactionMapper";
 
 export class WalletService {
   private walletRepository: WalletRepository;
@@ -345,7 +346,17 @@ export class WalletService {
     page: number = 1,
     limit: number = 20
   ): Promise<any> {
-    const query: any = { sourceId: userId };
+    const wallet = await this.walletRepository.findByUserId(userId);
+
+    if (!wallet) {
+      throw new AppError(
+        "Wallet not found",
+        HTTP_STATUS.NOT_FOUND,
+        ERROR_CODES.NOT_FOUND
+      );
+    }
+
+    const query: any = { walletId: wallet._id };
 
     if (filters.type) {
       query.type = filters.type;
@@ -353,6 +364,10 @@ export class WalletService {
 
     if (filters.status) {
       query.status = filters.status;
+    }
+
+    if (filters.direction) {
+      query.direction = filters.direction;
     }
 
     if (filters.startDate || filters.endDate) {
@@ -365,7 +380,18 @@ export class WalletService {
       }
     }
 
-    return this.transactionRepository.findWithFilters(query, page, limit);
+    const result = await this.transactionRepository.findWithFilters(
+      query,
+      page,
+      limit
+    );
+
+    return TransactionMapper.toPaginatedDTO(
+      result.data,
+      result.total,
+      page,
+      limit
+    );
   }
 
   async getBalanceHistory(
@@ -738,23 +764,33 @@ export class WalletService {
     return filteredBeneficiaries;
   }
 
-  async searchBeneficiaries(query: string): Promise<any> {
-    const users = await this.userRepository.find({
-      $or: [
-        { username: new RegExp(query, "i") },
-        { email: new RegExp(query, "i") },
-        { firstname: new RegExp(query, "i") },
-        { lastname: new RegExp(query, "i") },
-      ],
+  async searchBeneficiaries(userId: string, query?: string): Promise<any> {
+    if (!query || !query.trim()) {
+      return this.getBeneficiaries(userId, "");
+    }
+
+    const cleanQuery = query.trim().toLowerCase();
+
+    const user = await this.userRepository.findOne({
       status: "active",
+      $or: [
+        { username: cleanQuery },
+        { email: cleanQuery },
+        { phone: cleanQuery },
+      ],
     });
 
-    return users.slice(0, 10).map((user) => ({
-      id: user._id,
-      username: user.username,
-      email: user.email,
-      firstname: user.firstname,
-      lastname: user.lastname,
-    }));
+    if (!user) return [];
+
+    return [
+      {
+        id: user._id,
+        username: user.username,
+        email: user.email,
+        firstname: user.firstname,
+        lastname: user.lastname,
+        phone: user.phone,
+      },
+    ];
   }
 }

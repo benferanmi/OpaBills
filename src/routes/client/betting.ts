@@ -27,6 +27,5 @@ router.post(
   walletLock,
   billPaymentController.fundBetting
 );
-router.get("/history", billPaymentController.getBettingHistory);
 
 export default router;

@@ -33,6 +33,7 @@ router.get("/balance-history", walletController.getBalanceHistory);
 router.get("/transactions", walletController.getWalletTransactions);
 
 // Wallet funding
+// TODO check the flow and ensure that the temporary account aint being saved
 router.post(
   "/fund",
   //   rateLimiter(5, 60000),

@@ -33,6 +33,5 @@ router.post(
   walletLock,
   billPaymentController.purchaseInternationalData
 );
-router.get("/history", billPaymentController.getInternationalDataHistory);
 
 export default router;

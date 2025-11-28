@@ -1,6 +1,8 @@
 import { TransactionRepository } from "@/repositories/TransactionRepository";
+import { WalletRepository } from "@/repositories/WalletRepository";
 import { AppError } from "@/middlewares/errorHandler";
 import { HTTP_STATUS, ERROR_CODES } from "@/utils/constants";
+import { TransactionMapper } from "@/utils/TransactionMapper";
 
 export interface TransactionFilters {
   type?: string;
@@ -17,9 +19,11 @@ export interface TransactionFilters {
 
 export class TransactionService {
   private transactionRepository: TransactionRepository;
+  private walletRepository: WalletRepository;
 
   constructor() {
     this.transactionRepository = new TransactionRepository();
+    this.walletRepository = new WalletRepository();
   }
 
   async getUserTransactions(
@@ -28,39 +32,42 @@ export class TransactionService {
     page: number = 1,
     limit: number = 20
   ): Promise<any> {
-    const query: any = { sourceId: userId };
+    const wallet = await this.walletRepository.findByUserId(userId);
 
-    // Type filter
+    if (!wallet) {
+      throw new AppError(
+        "Wallet not found",
+        HTTP_STATUS.NOT_FOUND,
+        ERROR_CODES.NOT_FOUND
+      );
+    }
+
+    const query: any = { walletId: wallet._id };
+
     if (filters.type) {
       query.type = filters.type;
     }
 
-    // Status filter
     if (filters.status) {
       query.status = filters.status;
     }
 
-    // Provider filter
     if (filters.provider) {
       query.provider = filters.provider;
     }
 
-    // Direction filter
     if (filters.direction) {
       query.direction = filters.direction;
     }
 
-    // Purpose filter
     if (filters.purpose) {
       query.purpose = filters.purpose;
     }
 
-    // Reference filter (partial match)
     if (filters.reference) {
       query.reference = { $regex: filters.reference, $options: "i" };
     }
 
-    // Date range filter
     if (filters.startDate || filters.endDate) {
       query.createdAt = {};
       if (filters.startDate) {
@@ -74,7 +81,6 @@ export class TransactionService {
       }
     }
 
-    // Price range filter
     if (filters.startPrice !== undefined || filters.endPrice !== undefined) {
       query.amount = {};
       if (filters.startPrice !== undefined) {
@@ -85,7 +91,18 @@ export class TransactionService {
       }
     }
 
-    return this.transactionRepository.findWithFilters(query, page, limit);
+    const result = await this.transactionRepository.findWithFilters(
+      query,
+      page,
+      limit
+    );
+
+    return TransactionMapper.toPaginatedDTO(
+      result.data,
+      result.total,
+      page,
+      limit
+    );
   }
 
   async getTransaction(reference: string, userId: string): Promise<any> {
@@ -101,8 +118,9 @@ export class TransactionService {
       );
     }
 
-    // Verify ownership
-    if (transaction.sourceId?.toString() !== userId) {
+    const wallet = await this.walletRepository.findByUserId(userId);
+
+    if (!wallet || transaction.walletId?.toString() !== wallet.id.toString()) {
       throw new AppError(
         "Unauthorized access to transaction",
         HTTP_STATUS.FORBIDDEN,
@@ -110,16 +128,25 @@ export class TransactionService {
       );
     }
 
-    return transaction;
+    return TransactionMapper.toDTO(transaction);
   }
 
   async exportTransactions(
     userId: string,
     filters: TransactionFilters = {}
   ): Promise<string> {
-    const query: any = { sourceId: userId };
+    const wallet = await this.walletRepository.findByUserId(userId);
 
-    // Apply same filters as getUserTransactions
+    if (!wallet) {
+      throw new AppError(
+        "Wallet not found",
+        HTTP_STATUS.NOT_FOUND,
+        ERROR_CODES.NOT_FOUND
+      );
+    }
+
+    const query: any = { walletId: wallet._id };
+
     if (filters.type) query.type = filters.type;
     if (filters.status) query.status = filters.status;
     if (filters.provider) query.provider = filters.provider;
@@ -144,32 +171,32 @@ export class TransactionService {
       10000
     );
 
-    // Generate CSV
+    const sanitizedData = TransactionMapper.toDTOList(result.data);
+
     const headers = [
       "Reference",
       "Type",
       "Direction",
-      "Purpose",
-      "Provider",
+      "Description",
       "Amount",
       "Status",
-      "Remark",
+      "Balance Before",
+      "Balance After",
       "Date",
     ];
 
-    const rows = result.data.map((t: any) => [
+    const rows = sanitizedData.map((t: any) => [
       t.reference,
       t.type || "",
       t.direction || "",
-      t.purpose || "",
-      t.provider || "",
+      t.description || "",
       t.amount,
       t.status,
-      t.remark || "",
+      t.balanceBefore || "",
+      t.balanceAfter || "",
       new Date(t.createdAt).toISOString(),
     ]);
 
-    // Escape CSV values that contain commas or quotes
     const escapeCsvValue = (value: any): string => {
       const strValue = String(value);
       if (
@@ -203,8 +230,9 @@ export class TransactionService {
       );
     }
 
-    // Verify ownership
-    if (transaction.sourceId?.toString() !== userId) {
+    const wallet = await this.walletRepository.findByUserId(userId);
+
+    if (!wallet || transaction.walletId?.toString() !== wallet.id.toString()) {
       throw new AppError(
         "Unauthorized access to transaction",
         HTTP_STATUS.FORBIDDEN,
@@ -221,19 +249,20 @@ export class TransactionService {
       );
     }
 
+    const sanitized = TransactionMapper.toDTO(transaction);
+
     return {
-      receiptNumber: `RCP-${transaction.reference}`,
-      reference: transaction.reference,
-      providerReference: transaction.providerReference,
-      amount: transaction.amount,
-      direction: transaction.direction,
-      type: transaction.type,
-      purpose: transaction.purpose,
-      provider: transaction.provider,
-      status: transaction.status,
-      remark: transaction.remark,
-      meta: transaction.meta,
-      transactionDate: transaction.createdAt,
+      receiptNumber: `RCP-${sanitized.reference}`,
+      reference: sanitized.reference,
+      amount: sanitized.amount,
+      direction: sanitized.direction,
+      type: sanitized.type,
+      status: sanitized.status,
+      description: sanitized.description,
+      balanceBefore: sanitized.balanceBefore,
+      balanceAfter: sanitized.balanceAfter,
+      metadata: sanitized.metadata,
+      transactionDate: sanitized.createdAt,
       generatedAt: new Date(),
     };
   }
