@@ -1,3 +1,5 @@
+// utils/mappers/TransactionMapper.ts
+
 import {
   TransactionResponseDTO,
   TransactionListResponseDTO,
@@ -14,6 +16,7 @@ export class TransactionMapper {
       direction: transaction.direction,
       type: transaction.type,
       status: transaction.status,
+      purpose: transaction.purpose,
       description: this.generateDescription(transaction),
       balanceBefore: transaction.balanceBefore,
       balanceAfter: transaction.balanceAfter,
@@ -23,12 +26,12 @@ export class TransactionMapper {
     };
   }
 
-  // Handle array of transactions
+  // Handle list of transactions
   static toDTOList(transactions: any[]): TransactionResponseDTO[] {
     return transactions.map((t) => this.toDTO(t));
   }
 
-  // Handle paginated transactions
+  // Handle paginated list of transactions
   static toPaginatedDTO(
     data: any[],
     total: number,
@@ -111,6 +114,11 @@ export class TransactionMapper {
     const meta = transaction.meta || {};
     const sanitized: TransactionMetadata = {};
 
+    // Always include provider from transaction level (not meta)
+    if (transaction.provider) {
+      sanitized.provider = transaction.provider;
+    }
+
     switch (transaction.type) {
       case "wallet_transfer":
         if (transaction.direction === "DEBIT") {
@@ -119,6 +127,10 @@ export class TransactionMapper {
           sanitized.recipientId = meta.recipientId;
         } else {
           sanitized.senderName = meta.senderInfo || "Transfer received";
+          sanitized.senderId = meta.senderId;
+        }
+        if (meta.transferId) {
+          sanitized.transferId = meta.transferId;
         }
         if (transaction.remark) {
           sanitized.remark = transaction.remark;
@@ -130,21 +142,39 @@ export class TransactionMapper {
         if (meta.accountNumber) {
           sanitized.accountNumber = this.maskAccountNumber(meta.accountNumber);
         }
-        sanitized.bankName = meta.bankName;
-        sanitized.provider = transaction.provider;
         if (meta.accountName) {
-          sanitized.recipientName = meta.accountName;
+          sanitized.accountName = meta.accountName;
+        }
+        sanitized.bankName = meta.bankName;
+        sanitized.bankCode = meta.bankCode;
+
+        // Include fees for withdrawals
+        if (meta.fees) sanitized.fees = meta.fees;
+        if (meta.vat) sanitized.vat = meta.vat;
+        if (meta.responseMessage) {
+          sanitized.responseMessage = meta.responseMessage;
         }
         break;
 
       case "wallet_funding":
       case "deposit":
-        sanitized.provider = transaction.provider;
         if (meta.virtualAccount?.accountNumber) {
           sanitized.accountNumber = meta.virtualAccount.accountNumber;
         }
+        if (meta.virtualAccount?.accountName) {
+          sanitized.accountName = meta.virtualAccount.accountName;
+        }
         if (meta.virtualAccount?.bankName) {
           sanitized.bankName = meta.virtualAccount.bankName;
+        }
+
+        // Include deposit fees
+        if (meta.fees) sanitized.fees = meta.fees;
+        if (meta.vat) sanitized.vat = meta.vat;
+        if (meta.grossAmount) sanitized.grossAmount = meta.grossAmount;
+        if (meta.netAmount) sanitized.netAmount = meta.netAmount;
+        if (meta.responseMessage) {
+          sanitized.responseMessage = meta.responseMessage;
         }
         break;
 
@@ -154,9 +184,12 @@ export class TransactionMapper {
           sanitized.phone = this.maskPhone(meta.phone);
         }
         sanitized.serviceName = meta.serviceName;
+        sanitized.serviceCode = meta.serviceCode;
         sanitized.network = meta.network;
+        sanitized.logo = meta.logo;
+
         if (meta.countryCode) {
-          sanitized.provider = meta.countryCode;
+          sanitized.countryCode = meta.countryCode;
         }
         break;
 
@@ -166,9 +199,12 @@ export class TransactionMapper {
           sanitized.phone = this.maskPhone(meta.phone);
         }
         sanitized.serviceName = meta.serviceName;
+        sanitized.serviceCode = meta.serviceCode;
         sanitized.productName = meta.productName;
+        sanitized.logo = meta.logo;
+
         if (meta.countryCode) {
-          sanitized.provider = meta.countryCode;
+          sanitized.countryCode = meta.countryCode;
         }
         break;
 
@@ -178,6 +214,9 @@ export class TransactionMapper {
         }
         sanitized.meterType = meta.meterType;
         sanitized.serviceName = meta.serviceName;
+        sanitized.serviceCode = meta.serviceCode;
+        sanitized.logo = meta.logo;
+
         // Keep token - user needs it
         if (meta.token) {
           sanitized.token = meta.token;
@@ -191,23 +230,32 @@ export class TransactionMapper {
           );
         }
         sanitized.serviceName = meta.serviceName;
+        sanitized.serviceCode = meta.serviceCode;
         sanitized.productName = meta.productName;
         sanitized.subscriptionType = meta.subscriptionType;
+        sanitized.logo = meta.logo;
         break;
 
       case "betting":
         if (meta.customerId) {
           sanitized.customerId = meta.customerId;
         }
-        sanitized.serviceName = meta.serviceCode;
-        sanitized.provider = transaction.provider;
+        sanitized.serviceName = meta.serviceCode || meta.serviceName;
+        sanitized.serviceCode = meta.serviceCode;
+        sanitized.logo = meta.logo;
         break;
 
       case "e_pin":
         sanitized.serviceName = meta.serviceName;
+        sanitized.serviceCode = meta.serviceCode;
         sanitized.productName = meta.productName;
+        sanitized.logo = meta.logo;
+
         if (meta.profileId) {
           sanitized.profileId = meta.profileId;
+        }
+        if (meta.phone) {
+          sanitized.phone = this.maskPhone(meta.phone);
         }
         // Keep pin - user needs it (but only include if present)
         if (meta.pin) {
@@ -221,12 +269,15 @@ export class TransactionMapper {
           sanitized.remark = transaction.remark;
         }
         if (meta.originalReference) {
-          sanitized.providerReference = meta.originalReference;
+          sanitized.originalReference = meta.originalReference;
+        }
+        if (meta.reason) {
+          sanitized.reason = meta.reason;
         }
         break;
     }
 
-    // Add general fields if available
+    // Add general fields if available and not already set
     if (transaction.remark && !sanitized.remark) {
       sanitized.remark = transaction.remark;
     }
@@ -235,11 +286,11 @@ export class TransactionMapper {
       sanitized.providerReference = transaction.providerReference;
     }
 
+    // Return undefined if no metadata was added
     return Object.keys(sanitized).length > 0 ? sanitized : undefined;
   }
 
-  // Mask account number - first four digits
-
+  // Mask account number - show only last 4 digits
   private static maskAccountNumber(accountNumber: string): string {
     if (!accountNumber || accountNumber.length < 4) {
       return "****";
@@ -247,8 +298,7 @@ export class TransactionMapper {
     return "****" + accountNumber.slice(-4);
   }
 
-  // Mask phone number -  first 4 and last 2 digits
-
+  // Mask phone number - show first 4 and last 2 digits
   private static maskPhone(phone: string): string {
     if (!phone || phone.length < 6) {
       return "****";
